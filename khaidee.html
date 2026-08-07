@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>KhaiDee ຂາຍດີ — ຊື້ຂາຍອອນລາຍ</title>
+<style>
+:root{
+  --maroon:#7A1E2B; --maroon-dark:#5A1420; --gold:#D4A94C; --gold-light:#F1DFAE;
+  --cream:#FBF6EC; --ink:#2B1B14; --ink-soft:#7A6A5D; --line:#EADFCB;
+  --ok:#3C7A4B; --warn:#C97A2B; --danger:#B23A3A; --white:#fff;
+  --r-lg:18px; --r-md:12px; --r-sm:8px;
+  --shadow:0 6px 20px rgba(122,30,43,.10);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+body{margin:0; padding:0;}
+body{
+  font-family:'Noto Sans Lao','Noto Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  background:var(--cream); color:var(--ink);
+  padding-bottom:74px;
+}
+img{max-width:100%; display:block;}
+button{font-family:inherit; cursor:pointer;}
+.stamp{
+  display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:10px;
+  color:var(--maroon); border:1.5px solid var(--maroon); border-radius:999px; padding:2px 8px;
+  letter-spacing:.5px; transform:rotate(-4deg); background:rgba(122,30,43,.05);
+}
+
+/* ---------- HEADER ---------- */
+header.top{
+  position:sticky; top:0; z-index:40; background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));
+  padding:12px 14px 10px; color:#fff;
+}
+.brandrow{display:flex; align-items:center; gap:10px;}
+.brand-logo{width:38px; height:38px; border-radius:10px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:18px; overflow:hidden;}
+.brand-logo img{width:100%; height:100%; object-fit:cover;}
+.brand-name{font-size:19px; font-weight:800; letter-spacing:.3px;}
+.brand-sub{font-size:10.5px; opacity:.85; margin-top:-2px;}
+.lang-switch{margin-left:auto; display:flex; background:rgba(255,255,255,.15); border-radius:999px; padding:2px;}
+.lang-switch button{background:none; border:none; color:#fff; font-size:11px; padding:5px 9px; border-radius:999px; opacity:.7;}
+.lang-switch button.active{background:var(--gold); color:var(--maroon-dark); opacity:1; font-weight:700;}
+.searchbar{margin-top:10px; display:flex; align-items:center; gap:8px; background:#fff; border-radius:999px; padding:9px 14px;}
+.searchbar input{border:none; outline:none; flex:1; font-size:14px; color:var(--ink); background:transparent;}
+.searchbar svg{flex-shrink:0;}
+
+/* ---------- CATEGORY CHIPS ---------- */
+.catrow{display:flex; gap:10px; overflow-x:auto; padding:14px; scrollbar-width:none;}
+.catrow::-webkit-scrollbar{display:none;}
+.catchip{flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:6px; width:64px;}
+.catchip .ico{width:52px; height:52px; border-radius:16px; background:#fff; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:24px; box-shadow:var(--shadow);}
+.catchip.active .ico{background:var(--gold-light); border-color:var(--gold);}
+.catchip span{font-size:10.5px; text-align:center; color:var(--ink-soft); line-height:1.2;}
+
+/* ---------- BANNER ---------- */
+.banner{margin:0 14px 16px; border-radius:var(--r-lg); background:linear-gradient(120deg,var(--gold-light),#fff 70%); border:1px solid var(--gold); padding:16px; position:relative; overflow:hidden;}
+.banner h2{margin:0 0 4px; font-size:17px; color:var(--maroon-dark);}
+.banner p{margin:0; font-size:12px; color:var(--ink-soft);}
+.banner::after{content:"ຂາຍດີ"; position:absolute; right:-6px; bottom:-14px; font-size:52px; font-weight:900; color:rgba(122,30,43,.06);}
+
+/* ---------- PRODUCT GRID ---------- */
+.section-title{display:flex; align-items:center; justify-content:space-between; padding:0 14px; margin:6px 0 10px;}
+.section-title h3{font-size:15px; margin:0; display:flex; align-items:center; gap:8px;}
+.grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:0 14px 20px;}
+.card{background:#fff; border-radius:var(--r-md); overflow:hidden; box-shadow:var(--shadow); border:1px solid var(--line); position:relative;}
+.card .imgwrap{aspect-ratio:1/1; background:var(--gold-light); position:relative; overflow:hidden;}
+.card .imgwrap img{width:100%; height:100%; object-fit:cover;}
+.card .badge-featured{position:absolute; top:6px; left:6px;}
+.card .body{padding:9px 10px 11px;}
+.card .name{font-size:12.5px; font-weight:600; line-height:1.3; min-height:32px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;}
+.card .price-row{display:flex; align-items:baseline; gap:6px; margin-top:6px;}
+.card .price{color:var(--maroon); font-weight:800; font-size:14.5px;}
+.card .compare{font-size:11px; color:var(--ink-soft); text-decoration:line-through;}
+.card .meta{display:flex; justify-content:space-between; align-items:center; margin-top:4px; font-size:10.5px; color:var(--ink-soft);}
+.addbtn{position:absolute; right:8px; bottom:8px; width:28px; height:28px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:16px; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(122,30,43,.4);}
+
+/* ---------- BOTTOM NAV ---------- */
+nav.bottom{position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); display:flex; z-index:50; padding:6px 0 8px; box-shadow:0 -4px 16px rgba(0,0,0,.06);}
+nav.bottom button{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; color:var(--ink-soft); font-size:10px; padding:4px 0; position:relative;}
+nav.bottom button.active{color:var(--maroon);}
+nav.bottom .icon{font-size:19px;}
+.cart-count{position:absolute; top:-2px; right:22%; background:var(--danger); color:#fff; font-size:9px; font-weight:700; border-radius:999px; min-width:15px; height:15px; display:flex; align-items:center; justify-content:center; padding:0 3px;}
+
+/* ---------- MODAL / POPUP ---------- */
+.overlay{position:fixed; inset:0; background:rgba(30,15,10,.5); z-index:100; display:none; align-items:flex-end; justify-content:center;}
+.overlay.show{display:flex;}
+.overlay.center{align-items:center; padding:16px;}
+.sheet{background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; max-height:90vh; overflow-y:auto; animation:slideup .25s ease;}
+.overlay.center .sheet{border-radius:20px; max-height:85vh;}
+@keyframes slideup{from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+.sheet-handle{width:40px; height:4px; background:var(--line); border-radius:99px; margin:10px auto 4px;}
+.sheet-header{display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--line);}
+.sheet-header h3{margin:0; font-size:15.5px;}
+.closex{background:var(--cream); border:none; width:30px; height:30px; border-radius:999px; font-size:15px; color:var(--ink-soft);}
+.sheet-body{padding:16px;}
+
+/* ---------- FORMS ---------- */
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; font-weight:600;}
+.field input, .field select, .field textarea{
+  width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:var(--r-sm);
+  font-size:14px; outline:none; background:#fdfcf9; font-family:inherit;
+}
+.field input:focus, .field select:focus, .field textarea:focus{border-color:var(--maroon);}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.btn{display:block; width:100%; text-align:center; padding:13px; border-radius:999px; border:none; font-weight:700; font-size:14.5px;}
+.btn-primary{background:var(--maroon); color:#fff;}
+.btn-gold{background:var(--gold); color:var(--maroon-dark);}
+.btn-ghost{background:#fff; border:1.5px solid var(--maroon); color:var(--maroon);}
+.btn-sm{padding:7px 12px; font-size:12px; border-radius:8px; width:auto; display:inline-block;}
+.btn-danger{background:var(--danger); color:#fff;}
+.hint{font-size:11px; color:var(--ink-soft); margin-top:6px;}
+.err{background:#FBEAEA; color:var(--danger); padding:9px 12px; border-radius:8px; font-size:12.5px; margin-bottom:12px;}
+.ok{background:#E9F5EC; color:var(--ok); padding:9px 12px; border-radius:8px; font-size:12.5px; margin-bottom:12px;}
+
+/* ---------- CART ---------- */
+.cart-item{display:flex; gap:10px; padding:12px 0; border-bottom:1px solid var(--line);}
+.cart-item img{width:60px; height:60px; border-radius:10px; object-fit:cover; background:var(--gold-light);}
+.cart-item .info{flex:1;}
+.cart-item .name{font-size:13px; font-weight:600;}
+.cart-item .price{color:var(--maroon); font-weight:700; font-size:13px; margin-top:4px;}
+.qtybox{display:flex; align-items:center; gap:8px; margin-top:6px;}
+.qtybox button{width:24px; height:24px; border-radius:6px; border:1px solid var(--line); background:#fff;}
+.qtybox span{font-size:13px; min-width:18px; text-align:center;}
+.sumrow{display:flex; justify-content:space-between; font-size:13px; padding:6px 0; color:var(--ink-soft);}
+.sumrow.total{font-size:16px; font-weight:800; color:var(--ink); border-top:1px dashed var(--line); padding-top:10px; margin-top:6px;}
+
+/* ---------- CAROUSEL / DETAIL ---------- */
+.detail-img{width:100%; aspect-ratio:1/1; background:var(--gold-light); border-radius:14px; overflow:hidden;}
+.detail-img img{width:100%; height:100%; object-fit:cover;}
+.qty-select{display:flex; align-items:center; gap:14px; justify-content:center; margin:14px 0;}
+.qty-select button{width:36px; height:36px; border-radius:999px; border:1.5px solid var(--maroon); background:#fff; color:var(--maroon); font-size:18px;}
+.qty-select span{font-size:18px; font-weight:700; min-width:26px; text-align:center;}
+
+/* ---------- CARRIER / RADIO CARDS ---------- */
+.optcard{display:flex; align-items:center; gap:10px; border:1.5px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; margin-bottom:9px;}
+.optcard.selected{border-color:var(--maroon); background:rgba(122,30,43,.04);}
+.optcard .ico{font-size:20px;}
+.optcard .t{flex:1; font-size:13px; font-weight:600;}
+.optcard .p{font-size:12.5px; color:var(--maroon); font-weight:700;}
+
+/* ---------- PROFILE / LIST ROWS ---------- */
+.listrow{display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); background:#fff;}
+.listrow .ico{font-size:18px; width:22px; text-align:center;}
+.listrow .t{flex:1; font-size:13.5px; font-weight:600;}
+.listrow .arrow{color:var(--ink-soft);}
+.profile-hero{background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); color:#fff; padding:26px 18px 34px; border-radius:0 0 24px 24px;}
+.walletcard{background:#fff; margin:-22px 14px 14px; border-radius:16px; box-shadow:var(--shadow); padding:16px; display:flex; align-items:center; justify-content:space-between;}
+
+/* ---------- ADMIN ---------- */
+#adminApp{display:none; min-height:100vh; background:var(--cream);}
+.admin-header{background:var(--maroon-dark); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:30;}
+.admin-header h2{margin:0; font-size:15px; flex:1;}
+.admin-tabs{display:flex; gap:0; overflow-x:auto; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:52px; z-index:29;}
+.admin-tabs button{flex-shrink:0; padding:11px 14px; background:none; border:none; font-size:12.5px; color:var(--ink-soft); font-weight:600; border-bottom:2.5px solid transparent;}
+.admin-tabs button.active{color:var(--maroon); border-color:var(--maroon);}
+.admin-body{padding:14px;}
+.stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
+.stat-card{background:#fff; border-radius:14px; padding:14px; box-shadow:var(--shadow);}
+.stat-card .n{font-size:20px; font-weight:800; color:var(--maroon);}
+.stat-card .l{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+.admin-list-item{background:#fff; border-radius:12px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow);}
+.admin-list-item .top{display:flex; justify-content:space-between; align-items:center;}
+.admin-list-item .title{font-weight:700; font-size:13.5px;}
+.status-pill{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px;}
+.status-pending{background:#FCEFD9; color:var(--warn);}
+.status-paid, .status-approved{background:#E2F1E5; color:var(--ok);}
+.status-shipping, .status-packing{background:#E1EAF7; color:#2E5FA3;}
+.status-delivered{background:#E2F1E5; color:var(--ok);}
+.status-cancelled, .status-rejected{background:#FBE7E7; color:var(--danger);}
+.chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
+.chiprow button{font-size:10.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
+.fab{position:fixed; right:16px; bottom:80px; width:50px; height:50px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:22px; box-shadow:0 6px 16px rgba(122,30,43,.4); z-index:20;}
+
+.hidden{display:none !important;}
+.empty{text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:13px;}
+.loader{text-align:center; padding:30px; color:var(--ink-soft); font-size:13px;}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ CUSTOMER APP ============================================================ -->
+<div id="customerApp">
+
+<header class="top">
+  <div class="brandrow">
+    <div class="brand-logo" id="brandLogo">ຂ</div>
+    <div>
+      <div class="brand-name" id="siteName">KhaiDee ຂາຍດີ</div>
+      <div class="brand-sub" data-i18n="tagline">ຂາຍດີ ຊື້ງ່າຍ ໄດ້ໄວ</div>
+    </div>
+    <div class="lang-switch">
+      <button data-lang="lo" class="active">ລາວ</button>
+      <button data-lang="th">ไทย</button>
+      <button data-lang="en">EN</button>
+    </div>
+  </div>
+  <div class="searchbar">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input id="searchInput" placeholder="ຄົ້ນຫາສິນຄ້າ..." data-i18n-ph="search_ph">
+  </div>
+</header>
+
+<div id="catrow" class="catrow"></div>
+
+<div class="banner">
+  <h2 data-i18n="banner_title">🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ</h2>
+  <p data-i18n="banner_sub">ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ</p>
+</div>
+
+<div class="section-title"><h3 id="productSectionTitle">🛍️ ສິນຄ້າທັງໝົດ</h3></div>
+<div id="productGrid" class="grid"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+
+<nav class="bottom">
+  <button class="navbtn active" data-page="home"><span class="icon">🏠</span><span data-i18n="nav_home">ໜ້າຫຼັກ</span></button>
+  <button class="navbtn" data-page="categories"><span class="icon">📂</span><span data-i18n="nav_cat">ໝວດໝູ່</span></button>
+  <button class="navbtn" data-page="cart"><span class="icon">🛒</span><span id="cartCountWrap" style="position:relative;"><span data-i18n="nav_cart">ກະຕ່າ</span><span class="cart-count hidden" id="cartCount">0</span></span></button>
+  <button class="navbtn" data-page="orders"><span class="icon">📦</span><span data-i18n="nav_orders">ຄຳສັ່ງຊື້</span></button>
+  <button class="navbtn" data-page="account"><span class="icon">👤</span><span data-i18n="nav_account">ບັນຊີ</span></button>
+</nav>
+
+</div>
+
+<!-- ============================================================ MODALS ============================================================ -->
+
+<!-- Product Detail -->
+<div class="overlay" id="modalProduct"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 data-i18n="product_detail">ລາຍລະອຽດສິນຄ້າ</h3><button class="closex" onclick="closeModal('modalProduct')">✕</button></div>
+  <div class="sheet-body" id="productDetailBody"></div>
+</div></div>
+
+<!-- Cart -->
+<div class="overlay" id="modalCart"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 data-i18n="nav_cart">ກະຕ່າ</h3><button class="closex" onclick="closeModal('modalCart')">✕</button></div>
+  <div class="sheet-body" id="cartBody"></div>
+</div></div>
+
+<!-- Checkout -->
+<div class="overlay" id="modalCheckout"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 data-i18n="checkout">ຢືນຢັນການສັ່ງຊື້</h3><button class="closex" onclick="closeModal('modalCheckout')">✕</button></div>
+  <div class="sheet-body" id="checkoutBody"></div>
+</div></div>
+
+<!-- Login/Register -->
+<div class="overlay" id="modalAuth"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 id="authTitle">ເຂົ້າສູ່ລະບົບ</h3><button class="closex" onclick="closeModal('modalAuth')">✕</button></div>
+  <div class="sheet-body" id="authBody"></div>
+</div></div>
+
+<!-- Account / Order / Wallet detail sheets -->
+<div class="overlay" id="modalOrders"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 data-i18n="nav_orders">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</h3><button class="closex" onclick="closeModal('modalOrders')">✕</button></div>
+  <div class="sheet-body" id="ordersBody"></div>
+</div></div>
+
+<div class="overlay" id="modalWallet"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 data-i18n="wallet">ກະເປົາເງິນ</h3><button class="closex" onclick="closeModal('modalWallet')">✕</button></div>
+  <div class="sheet-body" id="walletBody"></div>
+</div></div>
+
+<div class="overlay" id="modalAddress"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3 data-i18n="address">ທີ່ຢູ່ຈັດສົ່ງ</h3><button class="closex" onclick="closeModal('modalAddress')">✕</button></div>
+  <div class="sheet-body" id="addressBody"></div>
+</div></div>
+
+<!-- Admin password gate -->
+<div class="overlay center" id="modalAdminGate"><div class="sheet">
+  <div class="sheet-header"><h3>🔒 ຜູ້ດູແລລະບົບ</h3><button class="closex" onclick="closeModal('modalAdminGate')">✕</button></div>
+  <div class="sheet-body">
+    <div id="adminGateErr"></div>
+    <div class="field"><label>ລະຫັດຜ່ານແອດມິນ</label><input type="password" id="adminPassInput" placeholder="••••••••"></div>
+    <button class="btn btn-primary" onclick="tryAdminLogin()">ເຂົ້າສູ່ລະບົບແອດມິນ</button>
+  </div>
+</div></div>
+
+<!-- ============================================================ ADMIN APP (real page navigation) ============================================================ -->
+<div id="adminApp">
+  <div class="admin-header">
+    <button onclick="exitAdmin()" style="background:none;border:none;color:#fff;font-size:16px;">←</button>
+    <h2>ແອດມິນ KhaiDee</h2>
+    <button onclick="logoutAdmin()" style="background:none;border:none;color:#fff;font-size:12px;">ອອກ</button>
+  </div>
+  <div class="admin-tabs" id="adminTabs">
+    <button data-tab="dashboard" class="active">📊 ພາບລວມ</button>
+    <button data-tab="orders">📦 ອໍເດີ</button>
+    <button data-tab="products">🛍️ ສິນຄ້າ</button>
+    <button data-tab="categories">📂 ໝວດໝູ່</button>
+    <button data-tab="customers">👥 ລູກຄ້າ</button>
+    <button data-tab="topups">💰 ເຕີມເງິນ</button>
+    <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
+    <button data-tab="coupons">🎟️ ຄູປອງ</button>
+    <button data-tab="settings">⚙️ ຕັ້ງຄ່າ</button>
+  </div>
+  <div class="admin-body" id="adminBody"></div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — Supabase connection
+   ============================================================ */
+const SUPABASE_URL = 'https://fzxetdumhymqkfisefnq.supabase.co';
+// Using the project's anon key. This key is DESIGNED to be public/client-side —
+// it only grants what your Row Level Security policies + RPC functions allow.
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6eGV0ZHVtaHltcWtmaXNlZm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjA4OTUsImV4cCI6MjEwMTY5Njg5NX0.07r-mPOPD93_chRlmxIX7LfKU6U51TV0CUjCv2eZFhc';
+const WHATSAPP_FALLBACK = '8562054966168';
+
+const REST = SUPABASE_URL + '/rest/v1';
+function sbHeaders(extra){
+  return Object.assign({
+    'apikey': SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+    'Content-Type': 'application/json'
+  }, extra||{});
+}
+async function sbSelect(table, query){
+  const r = await fetch(`${REST}/${table}?${query||'select=*'}`, {headers: sbHeaders()});
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbRPC(fn, body){
+  const r = await fetch(`${REST}/rpc/${fn}`, {method:'POST', headers: sbHeaders(), body: JSON.stringify(body||{})});
+  const data = await r.json().catch(()=>null);
+  if(!r.ok){
+    const msg = (data && (data.message||data.hint)) || 'error';
+    throw new Error(msg);
+  }
+  return data;
+}
+async function sbUpload(bucket, path, file){
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    method:'POST',
+    headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY},
+    body:file
+  });
+  if(!r.ok) throw new Error(await r.text());
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+/* ============================================================ i18n ============================================================ */
+const I18N = {
+  lo:{tagline:'ຂາຍດີ ຊື້ງ່າຍ ໄດ້ໄວ', search_ph:'ຄົ້ນຫາສິນຄ້າ...', banner_title:'🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ', banner_sub:'ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ',
+    nav_home:'ໜ້າຫຼັກ', nav_cat:'ໝວດໝູ່', nav_cart:'ກະຕ່າ', nav_orders:'ຄຳສັ່ງຊື້', nav_account:'ບັນຊີ',
+    product_detail:'ລາຍລະອຽດສິນຄ້າ', checkout:'ຢືນຢັນການສັ່ງຊື້', wallet:'ກະເປົາເງິນ', address:'ທີ່ຢູ່ຈັດສົ່ງ'},
+  th:{tagline:'ขายดี ซื้อง่าย ได้ไว', search_ph:'ค้นหาสินค้า...', banner_title:'🔥 โปรโมชั่นประจำวัน', banner_sub:'สั่งเลย ส่งทั่ว สปป ลาว',
+    nav_home:'หน้าหลัก', nav_cat:'หมวดหมู่', nav_cart:'ตะกร้า', nav_orders:'คำสั่งซื้อ', nav_account:'บัญชี',
+    product_detail:'รายละเอียดสินค้า', checkout:'ยืนยันการสั่งซื้อ', wallet:'กระเป๋าเงิน', address:'ที่อยู่จัดส่ง'},
+  en:{tagline:'Sell well, shop easy', search_ph:'Search products...', banner_title:'🔥 Daily Promotions', banner_sub:'Order now, delivered across Laos',
+    nav_home:'Home', nav_cat:'Categories', nav_cart:'Cart', nav_orders:'Orders', nav_account:'Account',
+    product_detail:'Product Detail', checkout:'Checkout', wallet:'Wallet', address:'Shipping Address'}
+};
+let LANG = 'lo';
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k = el.getAttribute('data-i18n');
+    if(I18N[LANG][k]) el.textContent = I18N[LANG][k];
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const k = el.getAttribute('data-i18n-ph');
+    if(I18N[LANG][k]) el.placeholder = I18N[LANG][k];
+  });
+}
+function nameFor(obj){ // pick localized name from a product/category row
+  if(LANG==='th' && obj.name_th) return obj.name_th;
+  if(LANG==='en' && obj.name_en) return obj.name_en;
+  return obj.name_lo;
+}
+document.querySelectorAll('.lang-switch button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('.lang-switch button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); LANG = b.dataset.lang; applyI18n(); renderProducts();
+  };
+});
+
+/* ============================================================ STATE ============================================================ */
+let STATE = {
+  products: [], categories: [], carriers: [], settings: {},
+  activeCategory: null, cart: JSON.parse(localStorage.getItem('kd_cart')||'[]'),
+  customer: JSON.parse(localStorage.getItem('kd_customer')||'null'),
+  gearTaps: 0, gearTapTimer: null, adminPassword: null
+};
+function saveCart(){ localStorage.setItem('kd_cart', JSON.stringify(STATE.cart)); updateCartBadge(); }
+function saveCustomer(){ localStorage.setItem('kd_customer', JSON.stringify(STATE.customer)); }
+
+function fmtMoney(n){ return (STATE.settings.currency||'₭') + ' ' + Number(n||0).toLocaleString('en-US'); }
+
+/* ============================================================ MODALS ============================================================ */
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.overlay').forEach(ov=>{
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('show'); });
+});
+
+/* ============================================================ INITIAL LOAD ============================================================ */
+async function loadSettings(){
+  try{
+    const rows = await sbSelect('site_settings_public', 'select=*');
+    rows.forEach(r=> STATE.settings[r.key] = r.value);
+    document.getElementById('siteName').textContent = STATE.settings.site_name || 'KhaiDee ຂາຍດີ';
+    if(STATE.settings.logo_url){ document.getElementById('brandLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`; }
+    if(STATE.settings.theme_primary){ document.documentElement.style.setProperty('--maroon', STATE.settings.theme_primary); }
+    if(STATE.settings.theme_accent){ document.documentElement.style.setProperty('--gold', STATE.settings.theme_accent); }
+  }catch(e){ console.warn('settings load failed', e); }
+}
+async function loadCategories(){
+  STATE.categories = await sbSelect('categories', 'select=*&order=sort_order.asc');
+  const wrap = document.getElementById('catrow');
+  wrap.innerHTML = `<div class="catchip ${!STATE.activeCategory?'active':''}" onclick="filterCategory(null)"><div class="ico">🗂️</div><span>ທັງໝົດ</span></div>` +
+    STATE.categories.map(c=>`<div class="catchip ${STATE.activeCategory===c.id?'active':''}" onclick="filterCategory(${c.id})"><div class="ico">${c.icon||'🛍️'}</div><span>${nameFor(c)}</span></div>`).join('');
+}
+function filterCategory(id){
+  STATE.activeCategory = id;
+  document.querySelectorAll('.catchip').forEach((el,i)=>el.classList.toggle('active', (id===null && i===0) ));
+  loadCategories(); renderProducts();
+}
+async function loadProducts(){
+  STATE.products = await sbSelect('products', 'select=*&order=created_at.desc');
+}
+async function loadCarriers(){
+  STATE.carriers = await sbSelect('shipping_carriers', 'select=*&order=sort_order.asc');
+}
+function renderProducts(){
+  let list = STATE.products;
+  if(STATE.activeCategory) list = list.filter(p=>p.category_id===STATE.activeCategory);
+  const q = (document.getElementById('searchInput').value||'').trim().toLowerCase();
+  if(q) list = list.filter(p=> (p.name_lo||'').toLowerCase().includes(q) || (p.name_th||'').toLowerCase().includes(q) || (p.name_en||'').toLowerCase().includes(q));
+  const grid = document.getElementById('productGrid');
+  if(!list.length){ grid.innerHTML = '<div class="empty">ບໍ່ພົບສິນຄ້າ 🔍</div>'; return; }
+  grid.innerHTML = list.map(p=>`
+    <div class="card" onclick="openProduct(${p.id})">
+      <div class="imgwrap">
+        ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+        <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+      </div>
+      <div class="body">
+        <div class="name">${nameFor(p)}</div>
+        <div class="price-row"><span class="price">${fmtMoney(p.price)}</span>${p.compare_price?`<span class="compare">${fmtMoney(p.compare_price)}</span>`:''}</div>
+        <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
+      </div>
+      <button class="addbtn" onclick="event.stopPropagation(); quickAdd(${p.id})">+</button>
+    </div>`).join('');
+}
+document.getElementById('searchInput').addEventListener('input', renderProducts);
+
+/* ============================================================ PRODUCT DETAIL ============================================================ */
+let detailQty = 1;
+function openProduct(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  detailQty = 1;
+  document.getElementById('productDetailBody').innerHTML = `
+    <div class="detail-img"><img src="${(p.images&&p.images[0])||'https://placehold.co/400x400/F1DFAE/7A1E2B?text=KhaiDee'}"></div>
+    <h2 style="font-size:16px;margin:14px 0 4px;">${nameFor(p)}</h2>
+    <div class="price" style="font-size:20px;">${fmtMoney(p.price)} ${p.compare_price?`<span class="compare" style="font-size:13px;">${fmtMoney(p.compare_price)}</span>`:''}</div>
+    <div class="meta" style="margin:8px 0 14px;">ຄົງເຫຼືອ ${p.stock} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
+    <p style="font-size:13px; color:var(--ink-soft); line-height:1.6;">${p.description||''}</p>
+    <div class="qty-select">
+      <button onclick="changeDetailQty(-1)">−</button><span id="detailQtyLabel">1</span><button onclick="changeDetailQty(1)">+</button>
+    </div>
+    <button class="btn btn-primary" onclick="addToCart(${p.id}, detailQty); closeModal('modalProduct')">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>`;
+  openModal('modalProduct');
+}
+function changeDetailQty(d){ detailQty = Math.max(1, detailQty+d); document.getElementById('detailQtyLabel').textContent = detailQty; }
+function quickAdd(id){ addToCart(id, 1); pulseCart(); }
+function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
+
+/* ============================================================ CART ============================================================ */
+function addToCart(id, qty){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  const existing = STATE.cart.find(i=>i.product_id===id);
+  if(existing) existing.qty += qty;
+  else STATE.cart.push({product_id:id, name:nameFor(p), price:p.price, qty, image:(p.images&&p.images[0])||''});
+  saveCart();
+}
+function updateCartBadge(){
+  const count = STATE.cart.reduce((s,i)=>s+i.qty,0);
+  const el = document.getElementById('cartCount');
+  el.textContent = count; el.classList.toggle('hidden', count===0);
+}
+function renderCart(){
+  if(!STATE.cart.length){ document.getElementById('cartBody').innerHTML = '<div class="empty">ກະຕ່າຂອງທ່ານຍັງວ່າງເປົ່າ 🛒</div>'; return; }
+  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  document.getElementById('cartBody').innerHTML = STATE.cart.map((i,idx)=>`
+    <div class="cart-item">
+      <img src="${i.image||'https://placehold.co/60x60/F1DFAE/7A1E2B?text=KD'}">
+      <div class="info">
+        <div class="name">${i.name}</div>
+        <div class="price">${fmtMoney(i.price)}</div>
+        <div class="qtybox">
+          <button onclick="cartQty(${idx},-1)">−</button><span>${i.qty}</span><button onclick="cartQty(${idx},1)">+</button>
+          <button onclick="cartRemove(${idx})" style="margin-left:auto; color:var(--danger); border:none; background:none; font-size:12px;">ລຶບ</button>
+        </div>
+      </div>
+    </div>`).join('') +
+    `<div class="sumrow total"><span>ລວມທັງໝົດ</span><span>${fmtMoney(subtotal)}</span></div>
+     <button class="btn btn-primary" style="margin-top:14px;" onclick="closeModal('modalCart'); startCheckout();">ສັ່ງຊື້ ➜</button>`;
+}
+function cartQty(idx,d){ STATE.cart[idx].qty=Math.max(1,STATE.cart[idx].qty+d); saveCart(); renderCart(); }
+function cartRemove(idx){ STATE.cart.splice(idx,1); saveCart(); renderCart(); }
+
+/* ============================================================ AUTH ============================================================ */
+function requireLogin(next){
+  if(STATE.customer){ next(); return; }
+  showAuth('login', next);
+}
+function showAuth(mode, onSuccess){
+  document.getElementById('authTitle').textContent = mode==='login' ? 'ເຂົ້າສູ່ລະບົບ' : 'ສະໝັກສະມາຊິກ';
+  const body = document.getElementById('authBody');
+  if(mode==='login'){
+    body.innerHTML = `
+      <div id="authErr"></div>
+      <div class="field"><label>ເບີໂທ ຫຼື ອີເມວ</label><input id="loginId" placeholder="020XXXXXXXX ຫຼື email@example.com"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="loginPw"></div>
+      <button class="btn btn-primary" onclick="doLogin()">ເຂົ້າສູ່ລະບົບ</button>
+      <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີບັນຊີ? <a href="#" onclick="event.preventDefault(); showAuth('register', arguments)">ສະໝັກເລີຍ</a></div>`;
+    body.querySelector('a').onclick = (e)=>{ e.preventDefault(); showAuth('register', onSuccess); };
+    body.dataset.onsuccess = 'set';
+    window.__authSuccess = onSuccess;
+  }else{
+    body.innerHTML = `
+      <div id="authErr"></div>
+      <div class="field"><label>ຊື່ ແລະ ນາມສະກຸນ</label><input id="regName"></div>
+      <div class="field"><label>ເບີໂທ (ສປປ ລາວ)</label><input id="regPhone" placeholder="020XXXXXXXX"></div>
+      <div class="field"><label>ອີເມວ</label><input type="email" id="regEmail"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="regPw"></div>
+      <button class="btn btn-primary" onclick="doRegister()">ສະໝັກສະມາຊິກ</button>
+      <div class="hint" style="text-align:center; margin-top:12px;">ມີບັນຊີແລ້ວ? <a href="#" onclick="event.preventDefault();">ເຂົ້າສູ່ລະບົບ</a></div>`;
+    body.querySelector('a').onclick = (e)=>{ e.preventDefault(); showAuth('login', onSuccess); };
+    window.__authSuccess = onSuccess;
+  }
+  openModal('modalAuth');
+}
+async function doLogin(){
+  const id = document.getElementById('loginId').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  try{
+    const c = await sbRPC('customer_login', {p_identifier:id, p_password:pw});
+    STATE.customer = c; saveCustomer(); closeModal('modalAuth');
+    renderAccount();
+    if(window.__authSuccess) window.__authSuccess();
+  }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ເບີ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>`; }
+}
+async function doRegister(){
+  const name = document.getElementById('regName').value.trim();
+  const phone = document.getElementById('regPhone').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const pw = document.getElementById('regPw').value;
+  if(!name||!phone||!email||pw.length<6){ document.getElementById('authErr').innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
+  try{
+    const c = await sbRPC('customer_register', {p_phone:phone, p_email:email, p_password:pw, p_full_name:name});
+    STATE.customer = c; saveCustomer(); closeModal('modalAuth');
+    renderAccount();
+    if(window.__authSuccess) window.__authSuccess();
+  }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ເບີໂທ ຫຼື ອີເມວນີ້ຖືກໃຊ້ແລ້ວ</div>`; }
+}
+function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); }
+
+/* ============================================================ CHECKOUT ============================================================ */
+let checkoutState = {address:null, carrier:null, coupon:null, discount:0};
+function startCheckout(){
+  if(!STATE.cart.length) return;
+  requireLogin(()=>{
+    checkoutState = {address:null, carrier:STATE.carriers[0]||null, coupon:null, discount:0};
+    renderCheckout();
+    openModal('modalCheckout');
+  });
+}
+function renderCheckout(){
+  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const shipping = checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0;
+  const total = subtotal + shipping - checkoutState.discount;
+  document.getElementById('checkoutBody').innerHTML = `
+    <div class="field">
+      <label>📍 ທີ່ຢູ່ຈັດສົ່ງ</label>
+      <div class="optcard selected" style="cursor:pointer" onclick="openModal('modalAddress'); renderAddressForm();">
+        <div class="ico">🏠</div>
+        <div class="t">${checkoutState.address ? `${checkoutState.address.recipient_name} — ${checkoutState.address.village}, ${checkoutState.address.district}, ${checkoutState.address.province}` : 'ແຕະເພື່ອເພີ່ມທີ່ຢູ່'}</div>
+        <div class="arrow">›</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>🚚 ບໍລິສັດຂົນສົ່ງ</label>
+      ${STATE.carriers.map(c=>`
+        <div class="optcard ${checkoutState.carrier&&checkoutState.carrier.id===c.id?'selected':''}" onclick="selectCarrier(${c.id})">
+          <div class="ico">${c.logo}</div><div class="t">${c.name}</div><div class="p">${fmtMoney(c.base_fee)}</div>
+        </div>`).join('')}
+    </div>
+    <div class="field">
+      <label>🎟️ ລະຫັດຄູປອງ (ຖ້າມີ)</label>
+      <div style="display:flex; gap:8px;">
+        <input id="couponCode" placeholder="ໃສ່ລະຫັດ" style="flex:1; padding:11px 12px; border:1.5px solid var(--line); border-radius:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="applyCoupon()">ໃຊ້</button>
+      </div>
+      <div id="couponMsg"></div>
+    </div>
+    <div class="field">
+      <label>💳 ວິທີຊຳລະເງິນ</label>
+      <select id="paymentMethod"><option value="transfer">ໂອນຜ່ານທະນາຄານ / BCEL One</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
+    </div>
+    <div class="sumrow"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(subtotal)}</span></div>
+    <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${fmtMoney(shipping)}</span></div>
+    ${checkoutState.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(checkoutState.discount)}</span></div>`:''}
+    <div class="sumrow total"><span>ຍອດຊຳລະ</span><span>${fmtMoney(total)}</span></div>
+    <button class="btn btn-primary" style="margin-top:10px;" onclick="submitOrder()">✅ ຢືນຢັນສັ່ງຊື້</button>`;
+}
+function selectCarrier(id){ checkoutState.carrier = STATE.carriers.find(c=>c.id===id); renderCheckout(); }
+async function applyCoupon(){
+  const code = document.getElementById('couponCode').value.trim();
+  if(!code) return;
+  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  try{
+    const res = await sbRPC('coupon_validate', {p_code:code, p_subtotal:subtotal});
+    checkoutState.coupon = code; checkoutState.discount = Number(res.discount);
+    renderCheckout();
+  }catch(e){ document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
+}
+async function submitOrder(){
+  if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
+  const payment = document.getElementById('paymentMethod').value;
+  const shipping = checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0;
+  try{
+    const res = await sbRPC('order_create', {
+      p_customer_id: STATE.customer.id,
+      p_items: STATE.cart.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty})),
+      p_address: checkoutState.address,
+      p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
+      p_shipping_fee: shipping,
+      p_payment_method: payment,
+      p_coupon_code: checkoutState.coupon
+    });
+    STATE.cart = []; saveCart();
+    closeModal('modalCheckout');
+    notifyWhatsApp(res.order_number, res.total);
+    alert(`ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
+    loadProducts().then(renderProducts);
+  }catch(e){ alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message); }
+}
+function notifyWhatsApp(orderNumber, total){
+  const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
+  const msg = encodeURIComponent(`🛍️ ອໍເດີໃໝ່ KhaiDee\nເລກທີ: ${orderNumber}\nຍອດລວມ: ${fmtMoney(total)}\nລູກຄ້າ: ${STATE.customer.full_name} (${STATE.customer.phone})`);
+  window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+}
+
+/* ============================================================ ADDRESS ============================================================ */
+const LAOS_PROVINCES = ['ນະຄອນຫຼວງວຽງຈັນ','ຜົ້ງສາລີ','ຫຼວງນໍ້າທາ','ບໍ່ແກ້ວ','ອຸດົມໄຊ','ໄຊຍະບູລີ','ຫຼວງພະບາງ','ຫົວພັນ','ຊຽງຂວາງ','ວຽງຈັນ','ບໍລິຄຳໄຊ','ຄຳມ່ວນ','ສະຫວັນນະເຂດ','ສາລະວັນ','ເຊກອງ','ຈຳປາສັກ','ອັດຕະປື','ໄຊສົມບູນ'];
+function renderAddressForm(){
+  const a = checkoutState.address || {};
+  document.getElementById('addressBody').innerHTML = `
+    <div class="field"><label>ຊື່ຜູ້ຮັບ</label><input id="addrName" value="${a.recipient_name||STATE.customer?.full_name||''}"></div>
+    <div class="field"><label>ເບີໂທ</label><input id="addrPhone" value="${a.phone||STATE.customer?.phone||''}"></div>
+    <div class="field"><label>ແຂວງ</label><select id="addrProvince">${LAOS_PROVINCES.map(p=>`<option ${a.province===p?'selected':''}>${p}</option>`).join('')}</select></div>
+    <div class="row2">
+      <div class="field"><label>ເມືອງ</label><input id="addrDistrict" value="${a.district||''}"></div>
+      <div class="field"><label>ບ້ານ</label><input id="addrVillage" value="${a.village||''}"></div>
+    </div>
+    <div class="field"><label>ລາຍລະອຽດເພີ່ມເຕີມ</label><textarea id="addrDetail" rows="2">${a.detail||''}</textarea></div>
+    <button class="btn btn-primary" onclick="saveAddress()">ບັນທຶກທີ່ຢູ່</button>`;
+}
+function saveAddress(){
+  checkoutState.address = {
+    recipient_name: document.getElementById('addrName').value.trim(),
+    phone: document.getElementById('addrPhone').value.trim(),
+    province: document.getElementById('addrProvince').value,
+    district: document.getElementById('addrDistrict').value.trim(),
+    village: document.getElementById('addrVillage').value.trim(),
+    detail: document.getElementById('addrDetail').value.trim()
+  };
+  closeModal('modalAddress'); renderCheckout();
+}
+
+/* ============================================================ ORDERS HISTORY ============================================================ */
+async function showOrders(){
+  requireLogin(async ()=>{
+    document.getElementById('ordersBody').innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+    openModal('modalOrders');
+    const list = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
+    if(!list.length){ document.getElementById('ordersBody').innerHTML = '<div class="empty">ຍັງບໍ່ມີຄຳສັ່ງຊື້</div>'; return; }
+    document.getElementById('ordersBody').innerHTML = list.map(o=>`
+      <div class="admin-list-item">
+        <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${o.status}</span></div>
+        <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
+        <div style="margin-top:6px; font-size:12.5px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
+        <div style="margin-top:6px; font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</div>
+      </div>`).join('');
+  });
+}
+
+/* ============================================================ WALLET ============================================================ */
+async function showWallet(){
+  requireLogin(async ()=>{
+    openModal('modalWallet');
+    const list = await sbRPC('wallet_list', {p_customer_id: STATE.customer.id});
+    document.getElementById('walletBody').innerHTML = `
+      <div class="walletcard" style="margin:0 0 16px;">
+        <div><div class="hint">ຍອດເງິນຄົງເຫຼືອ</div><div style="font-size:22px; font-weight:800; color:var(--maroon);">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
+        <button class="btn btn-gold btn-sm" onclick="showTopupForm()">➕ ເຕີມເງິນ</button>
+      </div>
+      <div id="topupFormWrap"></div>
+      <h4 style="font-size:13px;">ປະຫວັດທຸລະກຳ</h4>
+      ${list.length? list.map(t=>`
+        <div class="admin-list-item">
+          <div class="top"><span class="title">${t.type==='topup'?'➕ ເຕີມເງິນ':'➖ ຫັກເງິນ'}</span><span class="status-pill status-${t.status}">${t.status}</span></div>
+          <div class="hint">${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+          <div style="margin-top:4px; font-weight:700;">${fmtMoney(t.amount)}</div>
+        </div>`).join('') : '<div class="empty">ຍັງບໍ່ມີປະຫວັດ</div>'}`;
+  });
+}
+function showTopupForm(){
+  document.getElementById('topupFormWrap').innerHTML = `
+    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000"></div>
+    <div class="field"><label>ອັບໂຫລດສະລິບໂອນເງິນ</label><input type="file" id="topupSlip" accept="image/*"></div>
+    <button class="btn btn-primary" onclick="submitTopup()">ສົ່ງຄຳຂໍເຕີມເງິນ</button>
+    <div class="hint">ແອດມິນຈະກວດສອບ ແລະ ອະນຸມັດພາຍໃນບໍ່ດົນ</div>`;
+}
+async function submitTopup(){
+  const amount = Number(document.getElementById('topupAmount').value);
+  const file = document.getElementById('topupSlip').files[0];
+  if(!amount || amount<=0){ alert('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
+  let slipUrl = null;
+  try{
+    if(file){ slipUrl = await sbUpload('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, file); }
+    await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
+    alert('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
+    showWallet();
+  }catch(e){ alert('ຜິດພາດ: ' + e.message); }
+}
+
+/* ============================================================ ACCOUNT PAGE ============================================================ */
+function renderAccount(){
+  const grid = document.getElementById('productGrid');
+  const sectionTitle = document.getElementById('productSectionTitle');
+  sectionTitle.textContent = '👤 ບັນຊີຂອງຂ້ອຍ';
+  if(!STATE.customer){
+    grid.style.display='block';
+    grid.innerHTML = `<div style="padding:30px 10px; text-align:center;">
+      <div style="font-size:40px;">👤</div>
+      <p style="color:var(--ink-soft); font-size:13px; margin:10px 0 18px;">ເຂົ້າສູ່ລະບົບເພື່ອສັ່ງຊື້ ແລະ ຈັດການບັນຊີ</p>
+      <button class="btn btn-primary" style="max-width:240px; margin:0 auto;" onclick="showAuth('login')">ເຂົ້າສູ່ລະບົບ / ສະໝັກ</button>
+    </div>`;
+    return;
+  }
+  grid.style.display='block';
+  grid.innerHTML = `
+    <div class="profile-hero" style="margin:-10px -14px 0; border-radius:0 0 20px 20px;">
+      <div style="font-size:15px; font-weight:700;">${STATE.customer.full_name}</div>
+      <div style="font-size:11.5px; opacity:.85;">${STATE.customer.phone} • ${STATE.customer.email}</div>
+    </div>
+    <div class="walletcard">
+      <div><div class="hint">ກະເປົາເງິນ</div><div style="font-weight:800; color:var(--maroon); font-size:16px;">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
+      <button class="btn btn-gold btn-sm" onclick="showWallet()">ຈັດການ</button>
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow);">
+      <div class="listrow" onclick="showOrders()"><span class="ico">📦</span><span class="t">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="openModal('modalAddress'); checkoutState.address=checkoutState.address||{}; renderAddressForm();"><span class="ico">📍</span><span class="t">ທີ່ຢູ່ຈັດສົ່ງ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="showChangePassword()"><span class="ico">🔒</span><span class="t">ປ່ຽນລະຫັດຜ່ານ</span><span class="arrow">›</span></div>
+      <div class="listrow" id="gearRow" onclick="tapGear()"><span class="ico">⚙️</span><span class="t">ຕັ້ງຄ່າ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="logout()"><span class="ico">🚪</span><span class="t" style="color:var(--danger);">ອອກຈາກລະບົບ</span></div>
+    </div>`;
+}
+function showChangePassword(){
+  document.getElementById('authTitle').textContent = 'ປ່ຽນລະຫັດຜ່ານ';
+  document.getElementById('authBody').innerHTML = `
+    <div id="authErr"></div>
+    <div class="field"><label>ລະຫັດຜ່ານເກົ່າ</label><input type="password" id="oldPw"></div>
+    <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" id="newPw"></div>
+    <button class="btn btn-primary" onclick="doChangePassword()">ບັນທຶກ</button>`;
+  openModal('modalAuth');
+}
+async function doChangePassword(){
+  try{
+    await sbRPC('customer_change_password', {p_customer_id:STATE.customer.id, p_old:document.getElementById('oldPw').value, p_new:document.getElementById('newPw').value});
+    closeModal('modalAuth'); alert('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
+  }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ລະຫັດຜ່ານເກົ່າບໍ່ຖືກຕ້ອງ</div>`; }
+}
+
+/* ---- hidden admin trigger: triple-tap the gear row ---- */
+function tapGear(){
+  STATE.gearTaps++;
+  clearTimeout(STATE.gearTapTimer);
+  STATE.gearTapTimer = setTimeout(()=>{ STATE.gearTaps=0; }, 900);
+  if(STATE.gearTaps>=3){
+    STATE.gearTaps=0;
+    document.getElementById('adminGateErr').innerHTML='';
+    document.getElementById('adminPassInput').value='';
+    openModal('modalAdminGate');
+  }
+}
+
+/* ============================================================ NAVIGATION ============================================================ */
+document.querySelectorAll('.navbtn').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const page = btn.dataset.page;
+    if(page==='home'){ document.getElementById('productSectionTitle').textContent='🛍️ ສິນຄ້າທັງໝົດ'; document.getElementById('productGrid').style.display='grid'; renderProducts(); }
+    else if(page==='categories'){ document.getElementById('productSectionTitle').textContent='📂 ໝວດໝູ່ທັງໝົດ'; document.getElementById('productGrid').style.display='grid'; renderProducts(); }
+    else if(page==='cart'){ renderCart(); openModal('modalCart'); }
+    else if(page==='orders'){ showOrders(); }
+    else if(page==='account'){ renderAccount(); }
+  };
+});
+
+/* ============================================================ ADMIN PANEL ============================================================ */
+function tryAdminLogin(){
+  const pw = document.getElementById('adminPassInput').value;
+  sbRPC('admin_verify', {p_password: pw}).then(ok=>{
+    if(!ok){ document.getElementById('adminGateErr').innerHTML = '<div class="err">ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>'; return; }
+    STATE.adminPassword = pw;
+    closeModal('modalAdminGate');
+    document.getElementById('customerApp').style.display='none';
+    document.querySelectorAll('nav.bottom').forEach(n=>n.style.display='none');
+    document.getElementById('adminApp').style.display='block';
+    switchAdminTab('dashboard');
+  }).catch(()=>{ document.getElementById('adminGateErr').innerHTML = '<div class="err">ເກີດຂໍ້ຜິດພາດ</div>'; });
+}
+function exitAdmin(){
+  document.getElementById('adminApp').style.display='none';
+  document.getElementById('customerApp').style.display='block';
+}
+function logoutAdmin(){ STATE.adminPassword=null; exitAdmin(); }
+document.querySelectorAll('#adminTabs button').forEach(b=> b.onclick = ()=> switchAdminTab(b.dataset.tab));
+function switchAdminTab(tab){
+  document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
+    categories:renderAdminCategories, customers:renderAdminCustomers, topups:renderAdminTopups,
+    carriers:renderAdminCarriers, coupons:renderAdminCoupons, settings:renderAdminSettings};
+  (renderers[tab]||function(){})();
+}
+async function renderAdminDashboard(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const d = await sbRPC('admin_dashboard', {p_password: STATE.adminPassword});
+  body.innerHTML = `<div class="stat-grid">
+    <div class="stat-card"><div class="n">${d.total_orders}</div><div class="l">ອໍເດີທັງໝົດ</div></div>
+    <div class="stat-card"><div class="n">${fmtMoney(d.total_revenue)}</div><div class="l">ຍອດຂາຍລວມ</div></div>
+    <div class="stat-card"><div class="n">${d.total_customers}</div><div class="l">ລູກຄ້າທັງໝົດ</div></div>
+    <div class="stat-card"><div class="n">${d.pending_orders}</div><div class="l">ອໍເດີລໍຖ້າ</div></div>
+    <div class="stat-card"><div class="n">${d.pending_topups}</div><div class="l">ຄຳຂໍເຕີມເງິນ</div></div>
+    <div class="stat-card"><div class="n">${d.low_stock}</div><div class="l">ສິນຄ້າໃກ້ໝົດ</div></div>
+  </div>
+  <div class="hint">ເຄັດລັບ: ແຕະໄອຄອນ ⚙️ ໃນໜ້າບັນຊີ 3 ຄັ້ງຕິດກັນ ເພື່ອກັບເຂົ້າໜ້ານີ້ໄດ້ທຸກເທື່ອ.</div>`;
+}
+async function renderAdminOrders(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const list = await sbRPC('admin_list_orders', {p_password: STATE.adminPassword});
+  const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
+  body.innerHTML = list.map(o=>`
+    <div class="admin-list-item">
+      <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${o.status}</span></div>
+      <div class="hint">${o.customer_name||'-'} • ${o.customer_phone||'-'}</div>
+      <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
+      <div style="font-size:12.5px; margin-top:6px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
+      <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
+      <div class="chiprow">${statuses.map(s=>`<button onclick="adminSetOrderStatus(${o.id},'${s}')">${s}</button>`).join('')}</div>
+    </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີ</div>';
+}
+async function adminSetOrderStatus(id, status){
+  await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status});
+  renderAdminOrders();
+}
+async function renderAdminProducts(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  await loadProducts();
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditProduct(null)">➕ ເພີ່ມສິນຄ້າໃໝ່</button>` +
+    STATE.products.map(p=>`
+      <div class="admin-list-item">
+        <div class="top"><span class="title">${p.name_lo}</span><span class="hint">${p.is_active?'ເປີດ':'ປິດ'}</span></div>
+        <div class="hint">${fmtMoney(p.price)} • ຄົງເຫຼືອ ${p.stock} • ຂາຍ ${p.sold_count}</div>
+        <div class="chiprow"><button onclick="adminEditProduct(${p.id})">✏️ ແກ້ໄຂ</button><button onclick="adminDeleteProduct(${p.id})" style="color:var(--danger);">🗑️ ລຶບ</button></div>
+      </div>`).join('');
+  document.querySelectorAll('.fab').forEach(f=>f.remove());
+}
+function adminEditProduct(id){
+  const p = id ? STATE.products.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂສິນຄ້າ':'ເພີ່ມສິນຄ້າ'}</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ໝວດໝູ່</label><select id="pCat">${STATE.categories.map(c=>`<option value="${c.id}" ${p.category_id===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
+    <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
+    <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
+    <div class="field"><label>ຊື່ (English)</label><input id="pNameEn" value="${p.name_en||''}"></div>
+    <div class="field"><label>ຄຳອະທິບາຍ</label><textarea id="pDesc" rows="3">${p.description||''}</textarea></div>
+    <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
+    <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
+    <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
+    <div class="field"><label>ຮູບພາບ (URL, ຄັ້ນລະ 1 ແຖວ)</label><textarea id="pImages" rows="2">${(p.images||[]).join('\\n')}</textarea></div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px;"><input type="checkbox" id="pFeatured" ${p.is_featured?'checked':''}> ສິນຄ້າແນະນຳ (ຂາຍດີ)</label>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px;"><input type="checkbox" id="pActive" ${p.is_active!==false?'checked':''}> ເປີດຂາຍ</label>
+    <button class="btn btn-primary" style="margin-top:14px;" id="pSaveBtn">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  overlay.querySelector('#pSaveBtn').onclick = async ()=>{
+    const payload = {
+      id: id||undefined, category_id: Number(document.getElementById('pCat').value),
+      name_lo: document.getElementById('pNameLo').value, name_th: document.getElementById('pNameTh').value,
+      name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
+      price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
+      stock: Number(document.getElementById('pStock').value),
+      images: document.getElementById('pImages').value.split('\\n').map(s=>s.trim()).filter(Boolean),
+      is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
+    };
+    await sbRPC('admin_upsert_product', {p_password:STATE.adminPassword, p_product:payload});
+    overlay.remove(); renderAdminProducts();
+  };
+}
+async function adminDeleteProduct(id){
+  if(!confirm('ລຶບສິນຄ້ານີ້?')) return;
+  await sbRPC('admin_delete_product', {p_password:STATE.adminPassword, p_product_id:id});
+  renderAdminProducts();
+}
+async function renderAdminCategories(){
+  const body = document.getElementById('adminBody');
+  await loadCategories();
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCategory(null)">➕ ເພີ່ມໝວດໝູ່</button>` +
+    STATE.categories.map(c=>`<div class="admin-list-item"><div class="top"><span class="title">${c.icon} ${c.name_lo}</span></div>
+    <div class="chiprow"><button onclick="adminEditCategory(${c.id})">✏️ ແກ້ໄຂ</button></div></div>`).join('');
+}
+function adminEditCategory(id){
+  const c = id ? STATE.categories.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂໝວດໝູ່':'ເພີ່ມໝວດໝູ່'}</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ໄອຄອນ (emoji)</label><input id="cIcon" value="${c.icon||'🛍️'}"></div>
+    <div class="field"><label>ຊື່ (ລາວ)</label><input id="cNameLo" value="${c.name_lo||''}"></div>
+    <div class="field"><label>ຊື່ (ໄທ)</label><input id="cNameTh" value="${c.name_th||''}"></div>
+    <div class="field"><label>ຊື່ (English)</label><input id="cNameEn" value="${c.name_en||''}"></div>
+    <div class="field"><label>ລຳດັບ</label><input type="number" id="cSort" value="${c.sort_order||0}"></div>
+    <button class="btn btn-primary" id="cSaveBtn">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  overlay.querySelector('#cSaveBtn').onclick = async ()=>{
+    await sbRPC('admin_upsert_category', {p_password:STATE.adminPassword, p_category:{
+      id:id||undefined, icon:document.getElementById('cIcon').value, name_lo:document.getElementById('cNameLo').value,
+      name_th:document.getElementById('cNameTh').value, name_en:document.getElementById('cNameEn').value,
+      sort_order:Number(document.getElementById('cSort').value)
+    }});
+    overlay.remove(); renderAdminCategories();
+  };
+}
+async function renderAdminCustomers(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const list = await sbRPC('admin_list_customers', {p_password: STATE.adminPassword});
+  body.innerHTML = list.map(c=>`
+    <div class="admin-list-item">
+      <div class="top"><span class="title">${c.full_name}</span>${c.is_blocked?'<span class="status-pill status-cancelled">ບລັອກ</span>':''}</div>
+      <div class="hint">${c.phone} • ${c.email}</div>
+      <div class="hint">ກະເປົາເງິນ: ${fmtMoney(c.wallet_balance)}</div>
+      <div class="chiprow">
+        <button onclick="adminEditCustomer('${c.id}')">✏️ ແກ້ໄຂ</button>
+        <button onclick="adminResetPw('${c.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>
+        <button onclick="adminAdjustWallet('${c.id}')">💰 ປັບຍອດເງິນ</button>
+      </div>
+    </div>`).join('');
+}
+function adminEditCustomer(id){
+  sbRPC('admin_list_customers', {p_password:STATE.adminPassword}).then(list=>{
+    const c = list.find(x=>x.id===id);
+    const overlay = document.createElement('div'); overlay.className='overlay show center';
+    overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ແກ້ໄຂລູກຄ້າ</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <div class="field"><label>ຊື່</label><input id="ecName" value="${c.full_name||''}"></div>
+      <div class="field"><label>ເບີໂທ</label><input id="ecPhone" value="${c.phone||''}"></div>
+      <div class="field"><label>ອີເມວ</label><input id="ecEmail" value="${c.email||''}"></div>
+      <label style="display:flex; gap:8px; font-size:13px;"><input type="checkbox" id="ecBlocked" ${c.is_blocked?'checked':''}> ບລັອກບັນຊີນີ້</label>
+      <button class="btn btn-primary" style="margin-top:12px;" id="ecSave">ບັນທຶກ</button>
+    </div></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+    overlay.querySelector('#ecSave').onclick=async()=>{
+      await sbRPC('admin_update_customer', {p_password:STATE.adminPassword, p_customer_id:id,
+        p_full_name:document.getElementById('ecName').value, p_phone:document.getElementById('ecPhone').value,
+        p_email:document.getElementById('ecEmail').value, p_is_blocked:document.getElementById('ecBlocked').checked});
+      overlay.remove(); renderAdminCustomers();
+    };
+  });
+}
+async function adminResetPw(id){
+  const pw = prompt('ຕັ້ງລະຫັດຜ່ານໃໝ່ໃຫ້ລູກຄ້າ (ຢ່າງໜ້ອຍ 6 ໂຕ):');
+  if(!pw || pw.length<6) return;
+  await sbRPC('admin_reset_customer_password', {p_password:STATE.adminPassword, p_customer_id:id, p_new_password:pw});
+  alert('ຣີເຊັດລະຫັດຜ່ານແລ້ວ ແຈ້ງລູກຄ້າໃຫ້ປ່ຽນລະຫັດຜ່ານໃໝ່ອີກຄັ້ງຫຼັງເຂົ້າສູ່ລະບົບ');
+}
+async function adminAdjustWallet(id){
+  const amt = prompt('ຈຳນວນເງິນ (ໃສ່ຕິດລົບເພື່ອຫັກເງິນ):');
+  if(!amt) return;
+  await sbRPC('admin_adjust_wallet', {p_password:STATE.adminPassword, p_customer_id:id, p_amount:Number(amt), p_note:'ປັບໂດຍແອດມິນ'});
+  renderAdminCustomers();
+}
+async function renderAdminTopups(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const list = await sbRPC('admin_list_topups', {p_password: STATE.adminPassword});
+  body.innerHTML = list.map(t=>`
+    <div class="admin-list-item">
+      <div class="top"><span class="title">${t.full_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${t.status}</span></div>
+      <div class="hint">${t.phone} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+      ${t.slip_url?`<img src="${t.slip_url}" style="max-width:140px; border-radius:8px; margin-top:8px;">`:''}
+      ${t.status==='pending'?`<div class="chiprow"><button onclick="adminApproveTopup(${t.id},true)">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+    </div>`).join('') || '<div class="empty">ບໍ່ມີຄຳຂໍເຕີມເງິນ</div>';
+}
+async function adminApproveTopup(id, approve){
+  await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve});
+  renderAdminTopups();
+}
+async function renderAdminCarriers(){
+  const body = document.getElementById('adminBody');
+  await loadCarriers();
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCarrier(null)">➕ ເພີ່ມບໍລິສັດຂົນສົ່ງ</button>` +
+    STATE.carriers.map(c=>`<div class="admin-list-item"><div class="top"><span class="title">${c.logo} ${c.name}</span><span>${fmtMoney(c.base_fee)}</span></div>
+    <div class="chiprow"><button onclick="adminEditCarrier(${c.id})">✏️ ແກ້ໄຂ</button></div></div>`).join('');
+}
+function adminEditCarrier(id){
+  const c = id ? STATE.carriers.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂ':'ເພີ່ມ'}ບໍລິສັດຂົນສົ່ງ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ໄອຄອນ (emoji)</label><input id="shIcon" value="${c.logo||'🚚'}"></div>
+    <div class="field"><label>ຊື່ບໍລິສັດ</label><input id="shName" value="${c.name||''}"></div>
+    <div class="field"><label>ຄ່າຂົນສົ່ງພື້ນຖານ</label><input type="number" id="shFee" value="${c.base_fee||0}"></div>
+    <button class="btn btn-primary" id="shSave">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  overlay.querySelector('#shSave').onclick=async()=>{
+    await sbRPC('admin_upsert_carrier', {p_password:STATE.adminPassword, p_carrier:{
+      id:id||undefined, logo:document.getElementById('shIcon').value, name:document.getElementById('shName').value,
+      base_fee:Number(document.getElementById('shFee').value)}});
+    overlay.remove(); renderAdminCarriers();
+  };
+}
+async function renderAdminCoupons(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCoupon()">➕ ສ້າງຄູປອງ</button>
+  <div class="hint">ຈັດການຄູປອງ (ລະຫັດ, ສ່ວນຫຼຸດ, ວັນໝົດອາຍຸ) — ໃສ່ລະຫັດແລ້ວກົດບັນທຶກ</div>`;
+}
+function adminEditCoupon(){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ສ້າງຄູປອງ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ລະຫັດຄູປອງ</label><input id="cpCode" placeholder="KHAIDEE10"></div>
+    <div class="field"><label>ປະເພດສ່ວນຫຼຸດ</label><select id="cpType"><option value="fixed">ຫຼຸດຈຳນວນເງິນ</option><option value="percent">ຫຼຸດເປັນ %</option></select></div>
+    <div class="field"><label>ມູນຄ່າສ່ວນຫຼຸດ</label><input type="number" id="cpValue"></div>
+    <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ</label><input type="number" id="cpMin" value="0"></div>
+    <div class="field"><label>ຈຳນວນຄັ້ງທີ່ໃຊ້ໄດ້</label><input type="number" id="cpLimit"></div>
+    <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cpExpire"></div>
+    <button class="btn btn-primary" id="cpSave">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  overlay.querySelector('#cpSave').onclick=async()=>{
+    await sbRPC('admin_upsert_coupon', {p_password:STATE.adminPassword, p_coupon:{
+      code:document.getElementById('cpCode').value, discount_type:document.getElementById('cpType').value,
+      discount_value:Number(document.getElementById('cpValue').value), min_order:Number(document.getElementById('cpMin').value)||0,
+      usage_limit:Number(document.getElementById('cpLimit').value)||null,
+      expires_at:document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
+      is_active:true}});
+    overlay.remove(); alert('ສ້າງຄູປອງແລ້ວ');
+  };
+}
+async function renderAdminSettings(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = `
+    <div class="field"><label>ຊື່ຮ້ານ</label><input id="stName" value="${STATE.settings.site_name||''}"></div>
+    <div class="field"><label>ໂລໂກ້ (URL)</label><input id="stLogo" value="${STATE.settings.logo_url||''}"></div>
+    <div class="field"><label>ອັບໂຫລດໂລໂກ້ໃໝ່</label><input type="file" id="stLogoFile" accept="image/*"></div>
+    <div class="row2">
+      <div class="field"><label>ສີຫຼັກ</label><input type="color" id="stPrimary" value="${STATE.settings.theme_primary||'#7A1E2B'}"></div>
+      <div class="field"><label>ສີເນັ້ນ</label><input type="color" id="stAccent" value="${STATE.settings.theme_accent||'#D4A94C'}"></div>
+    </div>
+    <div class="field"><label>ເບີ WhatsApp ຮັບການແຈ້ງເຕືອນອໍເດີ</label><input id="stWa" value="${STATE.settings.whatsapp_number||''}" placeholder="8562054966168"></div>
+    <button class="btn btn-primary" id="stSave">ບັນທຶກການຕັ້ງຄ່າ</button>
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
+    <h4 style="font-size:13px;">ປ່ຽນລະຫັດຜ່ານແອດມິນ</h4>
+    <div class="field"><label>ລະຫັດຜ່ານປັດຈຸບັນ</label><input type="password" id="apOld"></div>
+    <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" id="apNew"></div>
+    <button class="btn btn-ghost" id="apSave">ປ່ຽນລະຫັດຜ່ານແອດມິນ</button>`;
+  document.getElementById('stSave').onclick = async ()=>{
+    let logoUrl = document.getElementById('stLogo').value;
+    const file = document.getElementById('stLogoFile').files[0];
+    if(file){ logoUrl = await sbUpload('khaidee-products', `logo_${Date.now()}_${file.name}`, file); }
+    const updates = {
+      site_name: document.getElementById('stName').value, logo_url: logoUrl,
+      theme_primary: document.getElementById('stPrimary').value, theme_accent: document.getElementById('stAccent').value,
+      whatsapp_number: document.getElementById('stWa').value
+    };
+    for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
+    await loadSettings();
+    alert('ບັນທຶກແລ້ວ');
+  };
+  document.getElementById('apSave').onclick = async ()=>{
+    try{
+      await sbRPC('admin_change_password', {p_old:document.getElementById('apOld').value, p_new:document.getElementById('apNew').value});
+      STATE.adminPassword = document.getElementById('apNew').value;
+      alert('ປ່ຽນລະຫັດຜ່ານແອດມິນສຳເລັດ');
+    }catch(e){ alert('ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ'); }
+  };
+}
+
+/* ============================================================ BOOT ============================================================ */
+(async function init(){
+  applyI18n();
+  await loadSettings();
+  await Promise.all([loadCategories(), loadProducts(), loadCarriers()]);
+  renderProducts();
+  updateCartBadge();
+})();
+</script>
+</body>
+</html>
