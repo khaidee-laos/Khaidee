@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>KhaiDee ຂາຍດີ — ຊື້ຂາຍອອນລາຍ</title>
+<meta name="theme-color" content="#7A1E2B">
+<meta name="description" content="KhaiDee ຂາຍດີ — ຊື້ງ່າຍ ໄດ້ໄວ ສົ່ງທົ່ວ ສປປ ລາວ">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KhaiDee">
 <style>
 :root{
   --maroon:#7A1E2B; --maroon-dark:#5A1420; --gold:#D4A94C; --gold-light:#F1DFAE;
@@ -16,11 +24,55 @@
 body{margin:0; padding:0;}
 body{
   font-family:'Noto Sans Lao','Noto Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
-  background:var(--cream); color:var(--ink);
+  color:var(--ink);
   padding-bottom:74px;
+  /* subtle app-wide backdrop: soft gold glow top-right, maroon glow bottom-left, faint dot texture */
+  background-color:var(--cream);
+  background-image:
+    radial-gradient(circle at 100% 0%, rgba(212,169,76,.16), transparent 42%),
+    radial-gradient(circle at 0% 100%, rgba(122,30,43,.08), transparent 40%),
+    radial-gradient(rgba(122,30,43,.07) 1px, transparent 1px);
+  background-size:auto, auto, 16px 16px;
+  background-repeat:no-repeat, no-repeat, repeat;
+  background-attachment:fixed, fixed, fixed;
+  min-height:100vh;
 }
 img{max-width:100%; display:block;}
 button{font-family:inherit; cursor:pointer;}
+
+/* ---------- SPLASH SCREEN ---------- */
+#splashScreen{
+  position:fixed; inset:0; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(212,169,76,.35), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(212,169,76,.25), transparent 45%),
+    linear-gradient(150deg, var(--maroon) 0%, var(--maroon-dark) 65%, #3d0e17 100%);
+  transition:opacity .5s ease, visibility .5s ease;
+}
+#splashScreen.fade-out{opacity:0; visibility:hidden; pointer-events:none;}
+#splashScreen .splash-badge{
+  width:132px; height:132px; border-radius:30px; background:transparent;
+  display:flex; align-items:center; justify-content:center; font-size:44px; font-weight:900; color:var(--maroon);
+  box-shadow:0 14px 34px rgba(0,0,0,.4); overflow:hidden;
+  animation:splashPop .7s cubic-bezier(.2,1.4,.4,1) both;
+}
+#splashScreen .splash-badge img{width:100%; height:100%; object-fit:cover;}
+@keyframes splashPop{0%{transform:scale(.4) rotate(-8deg); opacity:0;} 100%{transform:scale(1) rotate(0); opacity:1;}}
+#splashScreen .splash-name-en{margin-top:22px; font-size:28px; font-weight:900; color:#fff; letter-spacing:.5px; animation:splashRise .6s ease .15s both;}
+#splashScreen .splash-name-lo{margin-top:2px; font-size:19px; font-weight:700; color:var(--gold); animation:splashRise .6s ease .25s both;}
+#splashScreen .splash-tag{margin-top:10px; font-size:12px; color:rgba(255,255,255,.75); animation:splashRise .6s ease .35s both;}
+@keyframes splashRise{from{transform:translateY(10px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+#splashScreen .splash-dots{margin-top:26px; display:flex; gap:6px; animation:splashRise .6s ease .45s both;}
+#splashScreen .splash-dots span{width:6px; height:6px; border-radius:99px; background:var(--gold); opacity:.4; animation:splashBlink 1.1s ease infinite;}
+#splashScreen .splash-dots span:nth-child(2){animation-delay:.15s;}
+#splashScreen .splash-dots span:nth-child(3){animation-delay:.3s;}
+@keyframes splashBlink{0%,100%{opacity:.3; transform:scale(1);} 50%{opacity:1; transform:scale(1.3);}}
+
+/* ---------- PAGE CONTAINERS / TOP BAR (non-home pages) ---------- */
+.page-topbar{
+  position:sticky; top:0; z-index:35; background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));
+  color:#fff; padding:16px 16px 14px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;
+}
 .stamp{
   display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:10px;
   color:var(--maroon); border:1.5px solid var(--maroon); border-radius:999px; padding:2px 8px;
@@ -179,37 +231,73 @@ nav.bottom .icon{font-size:19px;}
 </head>
 <body>
 
+<!-- ============================================================ SPLASH SCREEN ============================================================ -->
+<div id="splashScreen">
+  <div class="splash-badge" id="splashLogo"><img src="logo.png" alt="KhaiDee"></div>
+  <div class="splash-name-en">KhaiDee</div>
+  <div class="splash-name-lo">ຂາຍດີ</div>
+  <div class="splash-tag">ຊື້ງ່າຍ ໄດ້ໄວ ສົ່ງທົ່ວ ສປປ ລາວ</div>
+  <div class="splash-dots"><span></span><span></span><span></span></div>
+</div>
+
 <!-- ============================================================ CUSTOMER APP ============================================================ -->
 <div id="customerApp">
 
-<header class="top">
-  <div class="brandrow">
-    <div class="brand-logo" id="brandLogo">ຂ</div>
-    <div>
-      <div class="brand-name" id="siteName">KhaiDee ຂາຍດີ</div>
-      <div class="brand-sub" data-i18n="tagline">ຂາຍດີ ຊື້ງ່າຍ ໄດ້ໄວ</div>
+<!-- ---- PAGE: HOME (only page with the big sticky header/search/categories/banner) ---- -->
+<div id="pageHome" class="apppage">
+  <header class="top">
+    <div class="brandrow">
+      <div class="brand-logo" id="brandLogo"><img src="logo.png" alt="KhaiDee"></div>
+      <div>
+        <div class="brand-name" id="siteName">KhaiDee ຂາຍດີ</div>
+        <div class="brand-sub" data-i18n="tagline">ຂາຍດີ ຊື້ງ່າຍ ໄດ້ໄວ</div>
+      </div>
+      <div class="lang-switch">
+        <button data-lang="lo" class="active">ລາວ</button>
+        <button data-lang="th">ไทย</button>
+        <button data-lang="en">EN</button>
+      </div>
     </div>
-    <div class="lang-switch">
-      <button data-lang="lo" class="active">ລາວ</button>
-      <button data-lang="th">ไทย</button>
-      <button data-lang="en">EN</button>
+    <div class="searchbar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchInput" placeholder="ຄົ້ນຫາສິນຄ້າ..." data-i18n-ph="search_ph">
     </div>
-  </div>
-  <div class="searchbar">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input id="searchInput" placeholder="ຄົ້ນຫາສິນຄ້າ..." data-i18n-ph="search_ph">
-  </div>
-</header>
+  </header>
 
-<div id="catrow" class="catrow"></div>
+  <div id="catrow" class="catrow"></div>
 
-<div class="banner">
-  <h2 data-i18n="banner_title">🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ</h2>
-  <p data-i18n="banner_sub">ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ</p>
+  <div class="banner">
+    <h2 data-i18n="banner_title">🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ</h2>
+    <p data-i18n="banner_sub">ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ</p>
+  </div>
+
+  <div class="section-title"><h3 id="productSectionTitle">🛍️ ສິນຄ້າທັງໝົດ</h3></div>
+  <div id="productGrid" class="grid"><div class="loader">ກຳລັງໂຫລດ...</div></div>
 </div>
 
-<div class="section-title"><h3 id="productSectionTitle">🛍️ ສິນຄ້າທັງໝົດ</h3></div>
-<div id="productGrid" class="grid"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+<!-- ---- PAGE: CATEGORIES (own light top bar, no search/banner) ---- -->
+<div id="pageCategories" class="apppage hidden">
+  <div class="page-topbar">📂 <span data-i18n="nav_cat">ໝວດໝູ່</span></div>
+  <div id="catPageChips" class="catrow" style="padding:14px 14px 6px;"></div>
+  <div id="catPageGrid" class="grid"></div>
+</div>
+
+<!-- ---- PAGE: CART ---- -->
+<div id="pageCart" class="apppage hidden">
+  <div class="page-topbar">🛒 <span data-i18n="nav_cart">ກະຕ່າ</span></div>
+  <div id="cartBody" style="padding:14px;"></div>
+</div>
+
+<!-- ---- PAGE: ORDERS ---- -->
+<div id="pageOrders" class="apppage hidden">
+  <div class="page-topbar">📦 <span data-i18n="nav_orders">ຄຳສັ່ງຊື້</span></div>
+  <div id="ordersBody" style="padding:14px;"></div>
+</div>
+
+<!-- ---- PAGE: ACCOUNT ---- -->
+<div id="pageAccount" class="apppage hidden">
+  <div id="accountBody"></div>
+</div>
 
 <nav class="bottom">
   <button class="navbtn active" data-page="home"><span class="icon">🏠</span><span data-i18n="nav_home">ໜ້າຫຼັກ</span></button>
@@ -230,13 +318,6 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="productDetailBody"></div>
 </div></div>
 
-<!-- Cart -->
-<div class="overlay" id="modalCart"><div class="sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-header"><h3 data-i18n="nav_cart">ກະຕ່າ</h3><button class="closex" onclick="closeModal('modalCart')">✕</button></div>
-  <div class="sheet-body" id="cartBody"></div>
-</div></div>
-
 <!-- Checkout -->
 <div class="overlay" id="modalCheckout"><div class="sheet">
   <div class="sheet-handle"></div>
@@ -251,13 +332,7 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="authBody"></div>
 </div></div>
 
-<!-- Account / Order / Wallet detail sheets -->
-<div class="overlay" id="modalOrders"><div class="sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-header"><h3 data-i18n="nav_orders">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</h3><button class="closex" onclick="closeModal('modalOrders')">✕</button></div>
-  <div class="sheet-body" id="ordersBody"></div>
-</div></div>
-
+<!-- Wallet / Address detail sheets (contextual actions, stay as sheets) -->
 <div class="overlay" id="modalWallet"><div class="sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-header"><h3 data-i18n="wallet">ກະເປົາເງິນ</h3><button class="closex" onclick="closeModal('modalWallet')">✕</button></div>
@@ -410,13 +485,13 @@ async function loadSettings(){
 }
 async function loadCategories(){
   STATE.categories = await sbSelect('categories', 'select=*&order=sort_order.asc');
-  const wrap = document.getElementById('catrow');
-  wrap.innerHTML = `<div class="catchip ${!STATE.activeCategory?'active':''}" onclick="filterCategory(null)"><div class="ico">🗂️</div><span>ທັງໝົດ</span></div>` +
+  const chipsHtml = `<div class="catchip ${!STATE.activeCategory?'active':''}" onclick="filterCategory(null)"><div class="ico">🗂️</div><span>ທັງໝົດ</span></div>` +
     STATE.categories.map(c=>`<div class="catchip ${STATE.activeCategory===c.id?'active':''}" onclick="filterCategory(${c.id})"><div class="ico">${c.icon||'🛍️'}</div><span>${nameFor(c)}</span></div>`).join('');
+  // same chip set is mirrored on the Home page (catrow) and the Categories page (catPageChips)
+  ['catrow','catPageChips'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML = chipsHtml; });
 }
 function filterCategory(id){
   STATE.activeCategory = id;
-  document.querySelectorAll('.catchip').forEach((el,i)=>el.classList.toggle('active', (id===null && i===0) ));
   loadCategories(); renderProducts();
 }
 async function loadProducts(){
@@ -430,9 +505,7 @@ function renderProducts(){
   if(STATE.activeCategory) list = list.filter(p=>p.category_id===STATE.activeCategory);
   const q = (document.getElementById('searchInput').value||'').trim().toLowerCase();
   if(q) list = list.filter(p=> (p.name_lo||'').toLowerCase().includes(q) || (p.name_th||'').toLowerCase().includes(q) || (p.name_en||'').toLowerCase().includes(q));
-  const grid = document.getElementById('productGrid');
-  if(!list.length){ grid.innerHTML = '<div class="empty">ບໍ່ພົບສິນຄ້າ 🔍</div>'; return; }
-  grid.innerHTML = list.map(p=>`
+  const html = !list.length ? '<div class="empty">ບໍ່ພົບສິນຄ້າ 🔍</div>' : list.map(p=>`
     <div class="card" onclick="openProduct(${p.id})">
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
@@ -445,6 +518,8 @@ function renderProducts(){
       </div>
       <button class="addbtn" onclick="event.stopPropagation(); quickAdd(${p.id})">+</button>
     </div>`).join('');
+  // same product list is mirrored on the Home page (productGrid) and the Categories page (catPageGrid)
+  ['productGrid','catPageGrid'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML = html; });
 }
 document.getElementById('searchInput').addEventListener('input', renderProducts);
 
@@ -498,7 +573,7 @@ function renderCart(){
       </div>
     </div>`).join('') +
     `<div class="sumrow total"><span>ລວມທັງໝົດ</span><span>${fmtMoney(subtotal)}</span></div>
-     <button class="btn btn-primary" style="margin-top:14px;" onclick="closeModal('modalCart'); startCheckout();">ສັ່ງຊື້ ➜</button>`;
+     <button class="btn btn-primary" style="margin-top:14px;" onclick="startCheckout();">ສັ່ງຊື້ ➜</button>`;
 }
 function cartQty(idx,d){ STATE.cart[idx].qty=Math.max(1,STATE.cart[idx].qty+d); saveCart(); renderCart(); }
 function cartRemove(idx){ STATE.cart.splice(idx,1); saveCart(); renderCart(); }
@@ -676,8 +751,8 @@ function saveAddress(){
 /* ============================================================ ORDERS HISTORY ============================================================ */
 async function showOrders(){
   requireLogin(async ()=>{
+    goPage('orders');
     document.getElementById('ordersBody').innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
-    openModal('modalOrders');
     const list = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
     if(!list.length){ document.getElementById('ordersBody').innerHTML = '<div class="empty">ຍັງບໍ່ມີຄຳສັ່ງຊື້</div>'; return; }
     document.getElementById('ordersBody').innerHTML = list.map(o=>`
@@ -732,21 +807,18 @@ async function submitTopup(){
 
 /* ============================================================ ACCOUNT PAGE ============================================================ */
 function renderAccount(){
-  const grid = document.getElementById('productGrid');
-  const sectionTitle = document.getElementById('productSectionTitle');
-  sectionTitle.textContent = '👤 ບັນຊີຂອງຂ້ອຍ';
+  const body = document.getElementById('accountBody');
   if(!STATE.customer){
-    grid.style.display='block';
-    grid.innerHTML = `<div style="padding:30px 10px; text-align:center;">
+    body.innerHTML = `<div class="page-topbar">👤 <span data-i18n="nav_account">ບັນຊີ</span></div>
+    <div style="padding:30px 10px; text-align:center;">
       <div style="font-size:40px;">👤</div>
       <p style="color:var(--ink-soft); font-size:13px; margin:10px 0 18px;">ເຂົ້າສູ່ລະບົບເພື່ອສັ່ງຊື້ ແລະ ຈັດການບັນຊີ</p>
       <button class="btn btn-primary" style="max-width:240px; margin:0 auto;" onclick="showAuth('login')">ເຂົ້າສູ່ລະບົບ / ສະໝັກ</button>
     </div>`;
     return;
   }
-  grid.style.display='block';
-  grid.innerHTML = `
-    <div class="profile-hero" style="margin:-10px -14px 0; border-radius:0 0 20px 20px;">
+  body.innerHTML = `
+    <div class="profile-hero" style="border-radius:0 0 24px 24px;">
       <div style="font-size:15px; font-weight:700;">${STATE.customer.full_name}</div>
       <div style="font-size:11.5px; opacity:.85;">${STATE.customer.phone} • ${STATE.customer.email}</div>
     </div>
@@ -754,7 +826,7 @@ function renderAccount(){
       <div><div class="hint">ກະເປົາເງິນ</div><div style="font-weight:800; color:var(--maroon); font-size:16px;">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
       <button class="btn btn-gold btn-sm" onclick="showWallet()">ຈັດການ</button>
     </div>
-    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow);">
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px;">
       <div class="listrow" onclick="showOrders()"><span class="ico">📦</span><span class="t">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="openModal('modalAddress'); checkoutState.address=checkoutState.address||{}; renderAddressForm();"><span class="ico">📍</span><span class="t">ທີ່ຢູ່ຈັດສົ່ງ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="showChangePassword()"><span class="ico">🔒</span><span class="t">ປ່ຽນລະຫັດຜ່ານ</span><span class="arrow">›</span></div>
@@ -791,15 +863,22 @@ function tapGear(){
   }
 }
 
-/* ============================================================ NAVIGATION ============================================================ */
+/* ============================================================ NAVIGATION (real page switching, no popups) ============================================================ */
+const PAGE_IDS = {home:'pageHome', categories:'pageCategories', cart:'pageCart', orders:'pageOrders', account:'pageAccount'};
+function goPage(page){
+  Object.entries(PAGE_IDS).forEach(([key,id])=>{
+    document.getElementById(id).classList.toggle('hidden', key!==page);
+  });
+  document.querySelectorAll('.navbtn').forEach(b=> b.classList.toggle('active', b.dataset.page===page));
+  window.scrollTo({top:0, behavior:'instant'});
+}
 document.querySelectorAll('.navbtn').forEach(btn=>{
   btn.onclick = ()=>{
-    document.querySelectorAll('.navbtn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
     const page = btn.dataset.page;
-    if(page==='home'){ document.getElementById('productSectionTitle').textContent='🛍️ ສິນຄ້າທັງໝົດ'; document.getElementById('productGrid').style.display='grid'; renderProducts(); }
-    else if(page==='categories'){ document.getElementById('productSectionTitle').textContent='📂 ໝວດໝູ່ທັງໝົດ'; document.getElementById('productGrid').style.display='grid'; renderProducts(); }
-    else if(page==='cart'){ renderCart(); openModal('modalCart'); }
+    goPage(page);
+    if(page==='home'){ renderProducts(); }
+    else if(page==='categories'){ renderProducts(); }
+    else if(page==='cart'){ renderCart(); }
     else if(page==='orders'){ showOrders(); }
     else if(page==='account'){ renderAccount(); }
   };
@@ -1107,13 +1186,32 @@ async function renderAdminSettings(){
 }
 
 /* ============================================================ BOOT ============================================================ */
+function hideSplash(){
+  const splash = document.getElementById('splashScreen');
+  if(splash){ splash.classList.add('fade-out'); setTimeout(()=>splash.remove(), 550); }
+}
 (async function init(){
+  const splashStart = Date.now();
   applyI18n();
-  await loadSettings();
-  await Promise.all([loadCategories(), loadProducts(), loadCarriers()]);
-  renderProducts();
-  updateCartBadge();
+  try{
+    await loadSettings();
+    if(STATE.settings.logo_url){ document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`; }
+    await Promise.all([loadCategories(), loadProducts(), loadCarriers()]);
+    renderProducts();
+    updateCartBadge();
+  }catch(e){ console.warn('init failed', e); }
+  // keep the splash on screen for at least ~1.1s so the animation isn't a flicker,
+  // even if data loaded faster than that
+  const elapsed = Date.now() - splashStart;
+  setTimeout(hideSplash, Math.max(0, 1100 - elapsed));
 })();
+
+/* ---- PWA: register service worker so the app can be "Add to Home Screen"-installed ---- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline shell caching is a nice-to-have, ignore failures */ });
+  });
+}
 </script>
 </body>
 </html>
