@@ -230,7 +230,8 @@ nav.bottom .icon{font-size:19px;}
 /* ---------- CARRIER / RADIO CARDS ---------- */
 .optcard{display:flex; align-items:center; gap:10px; border:1.5px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; margin-bottom:9px;}
 .optcard.selected{border-color:var(--maroon); background:rgba(122,30,43,.04);}
-.optcard .ico{font-size:20px;}
+.optcard .ico{font-size:20px; width:32px; height:32px; flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden;}
+.optcard .ico img{width:100%; height:100%; object-fit:cover; border-radius:6px;}
 .optcard .t{flex:1; font-size:13px; font-weight:600;}
 .optcard .p{font-size:12.5px; color:var(--maroon); font-weight:700;}
 
@@ -1193,7 +1194,7 @@ function renderTransferProofStep(total){
       <label>🏦 ເລືອກທະນາຄານທີ່ຈະໂອນ</label>
       ${banks.map(b=>`
         <div class="optcard ${selectedId===b.id?'selected':''}" onclick="selectTransferBank(${b.id}, ${total})">
-          <div class="ico">${b.logo_emoji||'🏦'}</div>
+          <div class="ico">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">`:(b.logo_emoji||'🏦')}</div>
           <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
           <div class="arrow">›</div>
         </div>`).join('')}
@@ -2430,7 +2431,7 @@ async function renderAdminBanks(){
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditBank(null)">➕ ເພີ່ມທະນາຄານ</button>` +
     (!adminBanksList.length ? '<div class="empty">ຍັງບໍ່ມີທະນາຄານ</div>' : adminBanksList.map(b=>`
       <div class="tile" style="display:flex; align-items:center; gap:10px; padding:12px; margin-bottom:8px; cursor:pointer;" onclick="adminEditBank(${b.id})">
-        <div style="font-size:26px;">${b.logo_emoji||'🏦'}</div>
+        <div style="font-size:26px; width:38px; height:38px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:8px; overflow:hidden; background:${b.logo_url?'#fff':'transparent'}; border:${b.logo_url?'1px solid var(--line)':'none'};">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover;">`:(b.logo_emoji||'🏦')}</div>
         <div style="flex:1; min-width:0;">
           <div style="font-weight:800; font-size:13.5px;">${b.bank_name_en||b.bank_name} ${b.is_active?'<span style="color:var(--ok); font-size:11px;">● ເປີດໃຊ້ງານ</span>':'<span style="color:var(--ink-soft); font-size:11px;">● ປິດຢູ່</span>'}</div>
           <div class="hint" style="margin-top:2px;">${b.bank_name}</div>
@@ -2449,7 +2450,9 @@ function adminEditBank(id){
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂ':'ເພີ່ມ'}ທະນາຄານ</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="field"><label>ໄອຄອນ (emoji)</label><input id="bkIcon" value="${b.logo_emoji||'🏦'}"></div>
+    <div class="field"><label>ໄອຄອນ (emoji) — ໃຊ້ຖ້າບໍ່ມີຮູບໂລໂກ້</label><input id="bkIcon" value="${b.logo_emoji||'🏦'}"></div>
+    ${b.logo_url?`<img src="${b.logo_url}" style="width:56px; height:56px; object-fit:cover; border-radius:10px; margin:6px 0; border:1px solid var(--line); background:#fff;">`:''}
+    <div class="field"><label>ອັບໂຫລດຮູບໂລໂກ້ທະນາຄານ (ຖ້າມີ)</label><input type="file" id="bkLogoFile" accept="image/*"></div>
     <div class="field"><label>ຊື່ທະນາຄານ (ພາສາລາວ)</label><input id="bkName" value="${b.bank_name||''}"></div>
     <div class="field"><label>ຊື່ຫຍໍ້ (EN)</label><input id="bkNameEn" value="${b.bank_name_en||''}"></div>
     <div class="field"><label>ຊື່ບັນຊີ</label><input id="bkAccName" value="${b.account_name||''}" placeholder="ຊື່ເຈົ້າຂອງບັນຊີ"></div>
@@ -2471,6 +2474,9 @@ function adminEditBank(id){
       let qrUrl = b.qr_url || null;
       const file = document.getElementById('bkQrFile').files[0];
       if(file){ qrUrl = await sbUpload('khaidee-products', `bank_qr_${Date.now()}_${file.name}`, file); }
+      let logoUrl = b.logo_url || null;
+      const logoFile = document.getElementById('bkLogoFile').files[0];
+      if(logoFile){ logoUrl = await sbUpload('khaidee-products', `bank_logo_${Date.now()}_${logoFile.name}`, logoFile); }
       await sbRPC('admin_upsert_bank_account', {p_password:STATE.adminPassword, p_bank:{
         id:id||undefined,
         bank_name:document.getElementById('bkName').value,
@@ -2478,6 +2484,7 @@ function adminEditBank(id){
         account_name:document.getElementById('bkAccName').value,
         account_number:document.getElementById('bkAccNum').value,
         logo_emoji:document.getElementById('bkIcon').value,
+        logo_url:logoUrl,
         qr_url:qrUrl,
         sort_order:Number(document.getElementById('bkSort').value)||999,
         is_active:document.getElementById('bkActive').checked}});
