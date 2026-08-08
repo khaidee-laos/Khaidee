@@ -125,6 +125,7 @@ header.top{
 .card .compare{font-size:11px; color:var(--ink-soft); text-decoration:line-through;}
 .card .meta{display:flex; justify-content:space-between; align-items:center; margin-top:4px; font-size:10.5px; color:var(--ink-soft);}
 .addbtn{position:absolute; right:8px; bottom:8px; width:28px; height:28px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:16px; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(122,30,43,.4);}
+.card-heart{position:absolute; left:6px; top:6px; width:26px; height:26px; border-radius:999px; background:rgba(255,255,255,.85); border:none; font-size:13px; display:flex; align-items:center; justify-content:center;}
 
 /* ---------- BOTTOM NAV ---------- */
 nav.bottom{position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); display:flex; z-index:50; padding:6px 0 8px; box-shadow:0 -4px 16px rgba(0,0,0,.06);}
@@ -145,6 +146,7 @@ nav.bottom .icon{font-size:19px;}
 .sheet-header h3{margin:0; font-size:15.5px;}
 .closex{background:var(--cream); border:none; width:30px; height:30px; border-radius:999px; font-size:15px; color:var(--ink-soft);}
 .sheet-body{padding:16px;}
+#productDetailBody{margin:-16px -16px 0;} /* let the Shopee-style gallery bleed to the sheet's edges */
 
 /* ---------- FORMS ---------- */
 .field{margin-bottom:12px;}
@@ -184,6 +186,30 @@ nav.bottom .icon{font-size:19px;}
 .qty-select button{width:36px; height:36px; border-radius:999px; border:1.5px solid var(--maroon); background:#fff; color:var(--maroon); font-size:18px;}
 .qty-select span{font-size:18px; font-weight:700; min-width:26px; text-align:center;}
 
+/* ---- Shopee-style product detail page ---- */
+.pd-gallery{position:relative; width:100%; aspect-ratio:1/1; background:var(--gold-light); overflow:hidden;}
+.pd-gallery-track{display:flex; width:100%; height:100%; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;}
+.pd-gallery-track::-webkit-scrollbar{display:none;}
+.pd-gallery-slide{flex:0 0 100%; scroll-snap-align:center; width:100%; height:100%; position:relative;}
+.pd-gallery-slide img, .pd-gallery-slide video{width:100%; height:100%; object-fit:cover;}
+.pd-gallery-dots{position:absolute; bottom:10px; left:0; right:0; display:flex; justify-content:center; gap:5px;}
+.pd-gallery-dots span{width:6px; height:6px; border-radius:99px; background:rgba(255,255,255,.55);}
+.pd-gallery-dots span.active{background:#fff; width:16px; border-radius:99px;}
+.pd-heart{position:absolute; top:12px; right:12px; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; font-size:18px; z-index:3;}
+.pd-heart.liked{background:rgba(255,255,255,.9);}
+.pd-tabs{display:flex; border-bottom:1.5px solid var(--line); margin:16px 0 0;}
+.pd-tabs button{flex:1; padding:10px 0; font-size:13px; font-weight:700; color:var(--ink-soft); border-bottom:2.5px solid transparent; background:none;}
+.pd-tabs button.active{color:var(--maroon); border-color:var(--maroon);}
+.pd-storerow{display:flex; align-items:center; gap:10px; padding:12px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); margin:14px 0;}
+.pd-storerow .ico{width:34px; height:34px; border-radius:50%; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:16px;}
+.comment-item{padding:12px 0; border-bottom:1px solid var(--line);}
+.comment-item .who{font-size:12.5px; font-weight:700; color:var(--maroon);}
+.comment-item .txt{font-size:13px; margin-top:3px; line-height:1.5;}
+.comment-item .when{font-size:10.5px; color:var(--ink-soft); margin-top:3px;}
+.pd-related-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px;}
+.pd-sticky-bar{position:sticky; bottom:0; background:#fff; padding:10px 16px; display:flex; gap:10px; border-top:1px solid var(--line); margin:16px -16px -16px;}
+.pd-sticky-bar button{flex:1;}
+
 /* ---------- CARRIER / RADIO CARDS ---------- */
 .optcard{display:flex; align-items:center; gap:10px; border:1.5px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; margin-bottom:9px;}
 .optcard.selected{border-color:var(--maroon); background:rgba(122,30,43,.04);}
@@ -222,6 +248,7 @@ nav.bottom .icon{font-size:19px;}
 .status-cancelled, .status-rejected{background:#FBE7E7; color:var(--danger);}
 .chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
 .chiprow button{font-size:10.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
+.chiprow button.active{background:var(--maroon); color:#fff; border-color:var(--maroon); font-weight:700;}
 .fab{position:fixed; right:16px; bottom:80px; width:50px; height:50px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:22px; box-shadow:0 6px 16px rgba(122,30,43,.4); z-index:20;}
 
 .hidden{display:none !important;}
@@ -345,6 +372,20 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="addressBody"></div>
 </div></div>
 
+<!-- Normal settings (single-tap, everyday customer settings) -->
+<div class="overlay" id="modalSettings"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>⚙️ ຕັ້ງຄ່າ</h3><button class="closex" onclick="closeModal('modalSettings')">✕</button></div>
+  <div class="sheet-body" id="settingsBody"></div>
+</div></div>
+
+<!-- Contact admin -->
+<div class="overlay" id="modalContactAdmin"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>💬 ຕິດຕໍ່ແອດມິນ</h3><button class="closex" onclick="closeModal('modalContactAdmin')">✕</button></div>
+  <div class="sheet-body" id="contactAdminBody"></div>
+</div></div>
+
 <!-- Admin password gate -->
 <div class="overlay center" id="modalAdminGate"><div class="sheet">
   <div class="sheet-header"><h3>🔒 ຜູ້ດູແລລະບົບ</h3><button class="closex" onclick="closeModal('modalAdminGate')">✕</button></div>
@@ -446,11 +487,13 @@ function nameFor(obj){ // pick localized name from a product/category row
   if(LANG==='en' && obj.name_en) return obj.name_en;
   return obj.name_lo;
 }
+function setLang(lang){
+  LANG = lang;
+  document.querySelectorAll('.lang-switch button').forEach(x=>x.classList.toggle('active', x.dataset.lang===lang));
+  applyI18n(); renderProducts();
+}
 document.querySelectorAll('.lang-switch button').forEach(b=>{
-  b.onclick = ()=>{
-    document.querySelectorAll('.lang-switch button').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active'); LANG = b.dataset.lang; applyI18n(); renderProducts();
-  };
+  b.onclick = ()=> setLang(b.dataset.lang);
 });
 
 /* ============================================================ STATE ============================================================ */
@@ -458,8 +501,41 @@ let STATE = {
   products: [], categories: [], carriers: [], settings: {},
   activeCategory: null, cart: JSON.parse(localStorage.getItem('kd_cart')||'[]'),
   customer: JSON.parse(localStorage.getItem('kd_customer')||'null'),
+  favorites: JSON.parse(localStorage.getItem('kd_favorites')||'[]'),
   gearTaps: 0, gearTapTimer: null, adminPassword: null
 };
+function saveFavorites(){ localStorage.setItem('kd_favorites', JSON.stringify(STATE.favorites)); }
+function isFavorite(id){ return STATE.favorites.includes(id); }
+async function toggleFavorite(id, evt){
+  if(evt){ evt.stopPropagation(); }
+  const idx = STATE.favorites.indexOf(id);
+  if(idx>=0) STATE.favorites.splice(idx,1); else STATE.favorites.push(id);
+  saveFavorites();
+  renderProducts();
+  const heartEl = document.getElementById('pdHeart');
+  if(heartEl) heartEl.classList.toggle('liked', isFavorite(id));
+  // best-effort sync to the account too, so favorites carry across devices once logged in —
+  // silently ignored if the backend doesn't have this RPC yet (see Group F SQL notes)
+  if(STATE.customer){
+    try{ await sbRPC('favorite_toggle', {p_customer_id: STATE.customer.id, p_product_id: id}); }catch(e){ /* local favorites still work */ }
+  }
+}
+function showFavorites(){
+  const items = STATE.products.filter(p=>STATE.favorites.includes(p.id));
+  const overlay = document.createElement('div'); overlay.className='overlay show';
+  overlay.innerHTML = `<div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header"><h3>❤️ ສິນຄ້າທີ່ມັກ</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      ${!items.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າທີ່ມັກ 🤍</div>' : `<div class="grid">${items.map(p=>`
+        <div class="card" onclick="document.querySelector('.overlay.show [data-close]')?.click(); openProduct(${p.id})">
+          <div class="imgwrap"><img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy"></div>
+          <div class="body"><div class="name">${nameFor(p)}</div><div class="price-row"><span class="price">${fmtMoney(p.price)}</span></div></div>
+        </div>`).join('')}</div>`}
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+}
 function saveCart(){ localStorage.setItem('kd_cart', JSON.stringify(STATE.cart)); updateCartBadge(); }
 function saveCustomer(){ localStorage.setItem('kd_customer', JSON.stringify(STATE.customer)); }
 
@@ -510,6 +586,7 @@ function renderProducts(){
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
         <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+        <button class="card-heart ${isFavorite(p.id)?'liked':''}" onclick="toggleFavorite(${p.id}, event)">${isFavorite(p.id)?'❤️':'🤍'}</button>
       </div>
       <div class="body">
         <div class="name">${nameFor(p)}</div>
@@ -528,17 +605,98 @@ let detailQty = 1;
 function openProduct(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   detailQty = 1;
+  STATE.activeDetailTab = 'details';
+  const media = [];
+  (p.images||[]).forEach(url=> media.push({type:'image', url}));
+  if(p.video_url) media.push({type:'video', url:p.video_url});
+  if(!media.length) media.push({type:'image', url:'https://placehold.co/400x400/F1DFAE/7A1E2B?text=KhaiDee'});
+  const related = STATE.products.filter(x=>x.id!==p.id && x.category_id===p.category_id).slice(0,4);
   document.getElementById('productDetailBody').innerHTML = `
-    <div class="detail-img"><img src="${(p.images&&p.images[0])||'https://placehold.co/400x400/F1DFAE/7A1E2B?text=KhaiDee'}"></div>
-    <h2 style="font-size:16px;margin:14px 0 4px;">${nameFor(p)}</h2>
-    <div class="price" style="font-size:20px;">${fmtMoney(p.price)} ${p.compare_price?`<span class="compare" style="font-size:13px;">${fmtMoney(p.compare_price)}</span>`:''}</div>
-    <div class="meta" style="margin:8px 0 14px;">ຄົງເຫຼືອ ${p.stock} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
-    <p style="font-size:13px; color:var(--ink-soft); line-height:1.6;">${p.description||''}</p>
-    <div class="qty-select">
-      <button onclick="changeDetailQty(-1)">−</button><span id="detailQtyLabel">1</span><button onclick="changeDetailQty(1)">+</button>
+    <div class="pd-gallery">
+      <div class="pd-gallery-track" id="pdGalleryTrack" onscroll="onPdGalleryScroll()">
+        ${media.map(m=> m.type==='video'
+          ? `<div class="pd-gallery-slide"><video src="${m.url}" controls playsinline muted></video></div>`
+          : `<div class="pd-gallery-slide"><img src="${m.url}" loading="lazy"></div>`).join('')}
+      </div>
+      ${media.length>1?`<div class="pd-gallery-dots" id="pdGalleryDots">${media.map((_,i)=>`<span class="${i===0?'active':''}"></span>`).join('')}</div>`:''}
+      <button id="pdHeart" class="pd-heart ${isFavorite(p.id)?'liked':''}" onclick="toggleFavorite(${p.id})">${isFavorite(p.id)?'❤️':'🤍'}</button>
     </div>
-    <button class="btn btn-primary" onclick="addToCart(${p.id}, detailQty); closeModal('modalProduct')">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>`;
+    <div style="padding:14px 16px 0;">
+      <h2 style="font-size:16px;margin:0 0 4px;">${nameFor(p)}</h2>
+      <div class="price" style="font-size:20px;">${fmtMoney(p.price)} ${p.compare_price?`<span class="compare" style="font-size:13px;">${fmtMoney(p.compare_price)}</span>`:''}</div>
+      <div class="meta" style="margin:8px 0 0;">ຄົງເຫຼືອ ${p.stock} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
+
+      <div class="pd-storerow">
+        <div class="ico">🏪</div>
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700;">${STATE.settings.site_name||'KhaiDee ຂາຍດີ'}</div>
+          <div class="hint" style="margin:0;">ຮ້ານທາງການ • ຈັດສົ່ງທົ່ວ ສປປ ລາວ</div>
+        </div>
+      </div>
+
+      <div class="pd-tabs">
+        <button class="active" data-tab="details" onclick="switchPdTab('details')">ລາຍລະອຽດ</button>
+        <button data-tab="reviews" onclick="switchPdTab('reviews')">ຄວາມຄິດເຫັນ</button>
+      </div>
+      <div id="pdTabDetails">
+        <p style="font-size:13px; color:var(--ink-soft); line-height:1.6; margin:12px 0;">${p.description||'ບໍ່ມີລາຍລະອຽດເພີ່ມເຕີມ'}</p>
+      </div>
+      <div id="pdTabReviews" class="hidden">
+        <div id="pdCommentsList" style="margin:10px 0;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+        <div class="field"><textarea id="pdNewComment" rows="2" placeholder="${STATE.customer?'ຂຽນຄວາມຄິດເຫັນກ່ຽວກັບສິນຄ້ານີ້...':'ເຂົ້າສູ່ລະບົບກ່ອນເພື່ອຂຽນຄວາມຄິດເຫັນ'}" ${STATE.customer?'':'disabled'}></textarea></div>
+        <button class="btn btn-ghost btn-sm" onclick="submitComment(${p.id})" ${STATE.customer?'':'disabled'}>ສົ່ງຄວາມຄິດເຫັນ</button>
+      </div>
+
+      ${related.length?`<h4 style="font-size:13px; margin-top:20px;">ສິນຄ້າທີ່ກ່ຽວຂ້ອງ</h4>
+      <div class="pd-related-grid">${related.map(r=>`
+        <div class="card" onclick="openProduct(${r.id})">
+          <div class="imgwrap"><img src="${(r.images&&r.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy"></div>
+          <div class="body"><div class="name">${nameFor(r)}</div><div class="price-row"><span class="price">${fmtMoney(r.price)}</span></div></div>
+        </div>`).join('')}</div>`:''}
+    </div>
+
+    <div class="pd-sticky-bar">
+      <div class="qty-select" style="margin:0;">
+        <button onclick="changeDetailQty(-1)">−</button><span id="detailQtyLabel">1</span><button onclick="changeDetailQty(1)">+</button>
+      </div>
+      <button class="btn btn-primary" onclick="addToCart(${p.id}, detailQty); closeModal('modalProduct')">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
+    </div>`;
+  loadComments(p.id);
   openModal('modalProduct');
+}
+function onPdGalleryScroll(){
+  const track = document.getElementById('pdGalleryTrack');
+  const dotsWrap = document.getElementById('pdGalleryDots');
+  if(!track || !dotsWrap) return;
+  const idx = Math.round(track.scrollLeft / track.clientWidth);
+  dotsWrap.querySelectorAll('span').forEach((d,i)=> d.classList.toggle('active', i===idx));
+}
+function switchPdTab(tab){
+  STATE.activeDetailTab = tab;
+  document.querySelectorAll('.pd-tabs button').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('pdTabDetails').classList.toggle('hidden', tab!=='details');
+  document.getElementById('pdTabReviews').classList.toggle('hidden', tab!=='reviews');
+}
+/* ---- Comments (needs the product_comments table + RPCs — see Group F SQL notes) ---- */
+async function loadComments(productId){
+  const wrap = document.getElementById('pdCommentsList');
+  try{
+    const list = await sbRPC('comment_list', {p_product_id: productId});
+    wrap.innerHTML = !list.length ? '<div class="empty">ຍັງບໍ່ມີຄວາມຄິດເຫັນ ເປັນຄົນທຳອິດເລີຍ!</div>' :
+      list.map(c=>`<div class="comment-item"><div class="who">${c.customer_name||'ລູກຄ້າ'}</div><div class="txt">${c.comment}</div><div class="when">${new Date(c.created_at).toLocaleDateString('lo-LA')}</div></div>`).join('');
+  }catch(e){
+    wrap.innerHTML = '<div class="empty">ລະບົບຄວາມຄິດເຫັນຍັງບໍ່ພ້ອມໃຊ້ງານ</div>';
+  }
+}
+async function submitComment(productId){
+  if(!STATE.customer) return;
+  const text = document.getElementById('pdNewComment').value.trim();
+  if(!text) return;
+  try{
+    await sbRPC('comment_add', {p_customer_id: STATE.customer.id, p_product_id: productId, p_comment: text});
+    document.getElementById('pdNewComment').value = '';
+    loadComments(productId);
+  }catch(e){ alert('ສົ່ງຄວາມຄິດເຫັນບໍ່ສຳເລັດ: ' + e.message); }
 }
 function changeDetailQty(d){ detailQty = Math.max(1, detailQty+d); document.getElementById('detailQtyLabel').textContent = detailQty; }
 function quickAdd(id){ addToCart(id, 1); pulseCart(); }
@@ -636,18 +794,18 @@ async function doRegister(){
 function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); }
 
 /* ============================================================ CHECKOUT ============================================================ */
-let checkoutState = {address:null, carrier:null, coupon:null, discount:0};
+let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false};
 function startCheckout(){
   if(!STATE.cart.length) return;
   requireLogin(()=>{
-    checkoutState = {address:null, carrier:STATE.carriers[0]||null, coupon:null, discount:0};
+    checkoutState = {address:null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false};
     renderCheckout();
     openModal('modalCheckout');
   });
 }
 function renderCheckout(){
   const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
-  const shipping = checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0;
+  const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
   const total = subtotal + shipping - checkoutState.discount;
   document.getElementById('checkoutBody').innerHTML = `
     <div class="field">
@@ -678,10 +836,16 @@ function renderCheckout(){
       <select id="paymentMethod"><option value="transfer">ໂອນຜ່ານທະນາຄານ / BCEL One</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
     </div>
     <div class="sumrow"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(subtotal)}</span></div>
-    <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${fmtMoney(shipping)}</span></div>
+    <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${checkoutState.freeShipping?'🎁 ຟຣີ':fmtMoney(shipping)}</span></div>
     ${checkoutState.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(checkoutState.discount)}</span></div>`:''}
     <div class="sumrow total"><span>ຍອດຊຳລະ</span><span>${fmtMoney(total)}</span></div>
-    <button class="btn btn-primary" style="margin-top:10px;" onclick="submitOrder()">✅ ຢືນຢັນສັ່ງຊື້</button>`;
+    ${STATE.customer && Number(STATE.customer.wallet_balance||0) < total ? `<div class="hint" id="walletLowHint" style="display:none; color:var(--danger);">⚠️ ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ</div>`:''}
+    <button class="btn btn-primary" style="margin-top:10px;" id="submitOrderBtn" onclick="submitOrder()">✅ ຢືນຢັນສັ່ງຊື້</button>`;
+  const pmSelect = document.getElementById('paymentMethod');
+  const lowHint = document.getElementById('walletLowHint');
+  if(pmSelect && lowHint){
+    pmSelect.addEventListener('change', ()=>{ lowHint.style.display = pmSelect.value==='wallet' ? 'block' : 'none'; });
+  }
 }
 function selectCarrier(id){ checkoutState.carrier = STATE.carriers.find(c=>c.id===id); renderCheckout(); }
 async function applyCoupon(){
@@ -690,14 +854,26 @@ async function applyCoupon(){
   const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
   try{
     const res = await sbRPC('coupon_validate', {p_code:code, p_subtotal:subtotal});
-    checkoutState.coupon = code; checkoutState.discount = Number(res.discount);
+    checkoutState.coupon = code;
+    checkoutState.freeShipping = !!res.free_shipping;
+    checkoutState.discount = Number(res.discount||0);
     renderCheckout();
   }catch(e){ document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
 }
 async function submitOrder(){
   if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
   const payment = document.getElementById('paymentMethod').value;
-  const shipping = checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0;
+  const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
+  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const total = subtotal + shipping - (checkoutState.discount||0);
+  // block wallet checkout up-front when the balance can't cover the order — the RPC
+  // below should still re-check this server-side, this is just the friendly UX guard
+  if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
+    alert(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
+    return;
+  }
+  const btn = document.getElementById('submitOrderBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'ກຳລັງດຳເນີນການ...'; } // prevent double-submit / double-charge
   try{
     const res = await sbRPC('order_create', {
       p_customer_id: STATE.customer.id,
@@ -712,8 +888,13 @@ async function submitOrder(){
     closeModal('modalCheckout');
     notifyWhatsApp(res.order_number, res.total);
     alert(`ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
+    if(STATE.customer && res.wallet_balance!=null){ STATE.customer.wallet_balance = res.wallet_balance; saveCustomer(); }
     loadProducts().then(renderProducts);
-  }catch(e){ alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message); }
+  }catch(e){
+    alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '✅ ຢືນຢັນສັ່ງຊື້'; }
+  }
 }
 function notifyWhatsApp(orderNumber, total){
   const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
@@ -723,17 +904,33 @@ function notifyWhatsApp(orderNumber, total){
 
 /* ============================================================ ADDRESS ============================================================ */
 const LAOS_PROVINCES = ['ນະຄອນຫຼວງວຽງຈັນ','ຜົ້ງສາລີ','ຫຼວງນໍ້າທາ','ບໍ່ແກ້ວ','ອຸດົມໄຊ','ໄຊຍະບູລີ','ຫຼວງພະບາງ','ຫົວພັນ','ຊຽງຂວາງ','ວຽງຈັນ','ບໍລິຄຳໄຊ','ຄຳມ່ວນ','ສະຫວັນນະເຂດ','ສາລະວັນ','ເຊກອງ','ຈຳປາສັກ','ອັດຕະປື','ໄຊສົມບູນ'];
+// Official district (mueang) list per province, same index order as LAOS_PROVINCES above.
+// Source: Statoids / Wikipedia administrative divisions of Laos. District names are shown
+// in Latin transliteration (a reliable complete Lao-script list wasn't available) — the
+// customer can still add exact spelling/landmarks in "ລາຍລະອຽດເພີ່ມເຕີມ" below.
+const DISTRICTS_BY_PROVINCE = [["Chanthabuly", "Sikhottabong", "Xaysetha", "Sisattanak", "Naxaithong", "Xaythany", "Hadxaifong", "Sangthong", "Mayparkngum"], ["Phongsaly", "May", "Khua", "Samphanh", "Boon Neua", "Nhot Ou", "Boontai"], ["Namtha", "Sing", "Long", "Viengphoukha", "Nalae"], ["Houixai", "Tonpheung", "Meung", "Pha Oudom", "Paktha", "Nam You"], ["Xay", "La", "Namor", "Nga", "Beng", "Hoon", "Pakbeng"], ["Xayabury", "Khop", "Hongsa", "Ngeun", "Xienghone", "Phiang", "Parklai", "Kenethao", "Botene", "Thongmyxay"], ["Louangphrabang", "Xieng Ngeun", "Nan", "Park Ou", "Nambak", "Ngoi", "Pak Xeng", "Phonxay", "Chomphet", "Viengkham", "Phoukhoune"], ["Xamneua", "Xiengkhor", "Viengthong", "Viengxay", "Huameuang", "Xamtay", "Sop Bao", "Muang Et"], ["Pek", "Kham", "Nonghed", "Khoune", "Morkmay", "Phookood", "Phaxay"], ["Phonhong", "Thoulakhom", "Keo Oudom", "Kasy", "Vangvieng", "Feuang", "Xanakharm", "Mad", "Hinhurp", "Viengkham"], ["Paksane", "Thaphabath", "Pakkading", "Bolikhanh", "Khamkheuth", "Viengthong", "Xaychamphone"], ["Thakhek", "Mahaxay", "Nongbok", "Hinboon", "Nhommalath", "Bualapha", "Nakai", "Xebangfay", "Xaybuathong"], ["Khanthabouly", "Outhoomphone", "Atsaphangthong", "Phine", "Sepone", "Nong", "Thapangthong", "Songkhone", "Champhone", "Xonbuly", "Xaybuly", "Vilabuly", "Atsaphone", "Xayphoothong", "Thaphalanxay"], ["Saravane", "Ta Oi", "Toomlarn", "Lakhonepheng", "Vapy", "Khongxedone", "Lao Ngarm", "Samuoi"], ["Lamarm", "Kaleum", "Dakcheung", "Thateng"], ["Pakse", "Sanasomboon", "Bachiangchaleunsook", "Paksong", "Pathoomphone", "Phonthong", "Champassack", "Sukhuma", "Moonlapamok", "Khong"], ["Xaysetha", "Samakkhixay", "Sanamxay", "Sanxay", "Phouvong"], ["Xaysomboun", "Thathom", "Hom", "Phun"]];
+function districtOptions(provinceName, selectedDistrict){
+  const idx = LAOS_PROVINCES.indexOf(provinceName);
+  const list = idx>=0 ? DISTRICTS_BY_PROVINCE[idx] : [];
+  if(!list.length) return '<option value="">—</option>';
+  return list.map(d=>`<option ${selectedDistrict===d?'selected':''}>${d}</option>`).join('');
+}
+function onAddrProvinceChange(){
+  const province = document.getElementById('addrProvince').value;
+  document.getElementById('addrDistrict').innerHTML = districtOptions(province, null);
+}
 function renderAddressForm(){
   const a = checkoutState.address || {};
   document.getElementById('addressBody').innerHTML = `
     <div class="field"><label>ຊື່ຜູ້ຮັບ</label><input id="addrName" value="${a.recipient_name||STATE.customer?.full_name||''}"></div>
     <div class="field"><label>ເບີໂທ</label><input id="addrPhone" value="${a.phone||STATE.customer?.phone||''}"></div>
-    <div class="field"><label>ແຂວງ</label><select id="addrProvince">${LAOS_PROVINCES.map(p=>`<option ${a.province===p?'selected':''}>${p}</option>`).join('')}</select></div>
+    <div class="field"><label>ແຂວງ</label><select id="addrProvince" onchange="onAddrProvinceChange()">${LAOS_PROVINCES.map(p=>`<option ${a.province===p?'selected':''}>${p}</option>`).join('')}</select></div>
     <div class="row2">
-      <div class="field"><label>ເມືອງ</label><input id="addrDistrict" value="${a.district||''}"></div>
-      <div class="field"><label>ບ້ານ</label><input id="addrVillage" value="${a.village||''}"></div>
+      <div class="field"><label>ເມືອງ</label><select id="addrDistrict">${districtOptions(a.province||LAOS_PROVINCES[0], a.district)}</select></div>
+      <div class="field"><label>ບ້ານ</label><input id="addrVillage" value="${a.village||''}" placeholder="ພິມຊື່ບ້ານ"></div>
     </div>
-    <div class="field"><label>ລາຍລະອຽດເພີ່ມເຕີມ</label><textarea id="addrDetail" rows="2">${a.detail||''}</textarea></div>
+    <div class="hint" style="margin:-6px 0 12px;">📍 ເລືອກແຂວງ ແລ້ວລາຍຊື່ເມືອງຈະປ່ຽນຕາມໂດຍອັດຕະໂນມັດ — ບ້ານໃຫ້ພິມຊື່ (ມີບ້ານຫຼາຍພັນແຫ່ງທົ່ວປະເທດ)</div>
+    <div class="field"><label>ລາຍລະອຽດເພີ່ມເຕີມ</label><textarea id="addrDetail" rows="2" placeholder="ຈຸດສັງເກດ, ຊອຍ, ບ້ານເລກທີ...">${a.detail||''}</textarea></div>
     <button class="btn btn-primary" onclick="saveAddress()">ບັນທຶກທີ່ຢູ່</button>`;
 }
 function saveAddress(){
@@ -741,12 +938,13 @@ function saveAddress(){
     recipient_name: document.getElementById('addrName').value.trim(),
     phone: document.getElementById('addrPhone').value.trim(),
     province: document.getElementById('addrProvince').value,
-    district: document.getElementById('addrDistrict').value.trim(),
+    district: document.getElementById('addrDistrict').value,
     village: document.getElementById('addrVillage').value.trim(),
     detail: document.getElementById('addrDetail').value.trim()
   };
   closeModal('modalAddress'); renderCheckout();
 }
+
 
 /* ============================================================ ORDERS HISTORY ============================================================ */
 async function showOrders(){
@@ -786,23 +984,31 @@ async function showWallet(){
   });
 }
 function showTopupForm(){
+  const qr = STATE.settings.wallet_qr_url;
+  const info = STATE.settings.wallet_instructions;
   document.getElementById('topupFormWrap').innerHTML = `
-    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000"></div>
-    <div class="field"><label>ອັບໂຫລດສະລິບໂອນເງິນ</label><input type="file" id="topupSlip" accept="image/*"></div>
-    <button class="btn btn-primary" onclick="submitTopup()">ສົ່ງຄຳຂໍເຕີມເງິນ</button>
-    <div class="hint">ແອດມິນຈະກວດສອບ ແລະ ອະນຸມັດພາຍໃນບໍ່ດົນ</div>`;
+    ${qr || info ? `<div class="optcard" style="flex-direction:column; align-items:flex-start; gap:8px;">
+      ${qr?`<img src="${qr}" style="width:140px; height:140px; object-fit:cover; border-radius:10px; align-self:center;">`:''}
+      ${info?`<div class="hint" style="white-space:pre-wrap;">${info}</div>`:''}
+    </div>` : ''}
+    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000"></div>
+    <div class="field"><label>ອັບໂຫລດສະລິບໂອນເງິນ (ຈຳເປັນ)</label><input type="file" id="topupSlip" accept="image/*"></div>
+    <button class="btn btn-primary" id="topupSubmitBtn" onclick="submitTopup()">ສົ່ງຄຳຂໍເຕີມເງິນ</button>
+    <div class="hint">ແອດມິນຈະກວດສອບສະລິບ ແລະ ອະນຸມັດພາຍໃນບໍ່ດົນ — ຍອດຈະບໍ່ເຂົ້າກະເປົາທັນທີ ຈົນກວ່າຈະໄດ້ຮັບການອະນຸມັດ</div>`;
 }
 async function submitTopup(){
   const amount = Number(document.getElementById('topupAmount').value);
   const file = document.getElementById('topupSlip').files[0];
   if(!amount || amount<=0){ alert('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
-  let slipUrl = null;
+  if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
+  const btn = document.getElementById('topupSubmitBtn');
+  btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...'; // prevent double-submit while uploading/creating the request
   try{
-    if(file){ slipUrl = await sbUpload('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, file); }
+    const slipUrl = await sbUpload('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, file);
     await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
     alert('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
     showWallet();
-  }catch(e){ alert('ຜິດພາດ: ' + e.message); }
+  }catch(e){ alert('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
 }
 
 /* ============================================================ ACCOUNT PAGE ============================================================ */
@@ -818,9 +1024,19 @@ function renderAccount(){
     return;
   }
   body.innerHTML = `
-    <div class="profile-hero" style="border-radius:0 0 24px 24px;">
-      <div style="font-size:15px; font-weight:700;">${STATE.customer.full_name}</div>
-      <div style="font-size:11.5px; opacity:.85;">${STATE.customer.phone} • ${STATE.customer.email}</div>
+    <div class="profile-hero" style="border-radius:0 0 24px 24px; display:flex; align-items:center; gap:14px;">
+      <div style="position:relative; flex-shrink:0;">
+        <div id="avatarWrap" style="width:60px; height:60px; border-radius:50%; overflow:hidden; background:rgba(255,255,255,.15); border:2px solid rgba(255,255,255,.6); display:flex; align-items:center; justify-content:center; font-size:26px;" onclick="document.getElementById('avatarFileInput').click()">
+          ${STATE.customer.avatar_url ? `<img src="${STATE.customer.avatar_url}" style="width:100%; height:100%; object-fit:cover;">` : '👤'}
+        </div>
+        <div onclick="document.getElementById('avatarFileInput').click()" style="position:absolute; bottom:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; font-size:11px; box-shadow:0 2px 6px rgba(0,0,0,.3);">📷</div>
+        <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="uploadAvatar(this.files[0])">
+      </div>
+      <div style="min-width:0;">
+        <div style="font-size:15px; font-weight:700;">${STATE.customer.full_name}</div>
+        <div style="font-size:11.5px; opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${STATE.customer.phone} • ${STATE.customer.email}</div>
+        <div style="font-size:10.5px; opacity:.7; margin-top:2px;">ID: ${customerCode(STATE.customer.id)}</div>
+      </div>
     </div>
     <div class="walletcard">
       <div><div class="hint">ກະເປົາເງິນ</div><div style="font-weight:800; color:var(--maroon); font-size:16px;">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
@@ -828,11 +1044,50 @@ function renderAccount(){
     </div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px;">
       <div class="listrow" onclick="showOrders()"><span class="ico">📦</span><span class="t">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="showFavorites()"><span class="ico">❤️</span><span class="t">ສິນຄ້າທີ່ມັກ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="openModal('modalAddress'); checkoutState.address=checkoutState.address||{}; renderAddressForm();"><span class="ico">📍</span><span class="t">ທີ່ຢູ່ຈັດສົ່ງ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="showEditProfile()"><span class="ico">✏️</span><span class="t">ແກ້ໄຂຂໍ້ມູນສ່ວນຕົວ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="showChangePassword()"><span class="ico">🔒</span><span class="t">ປ່ຽນລະຫັດຜ່ານ</span><span class="arrow">›</span></div>
       <div class="listrow" id="gearRow" onclick="tapGear()"><span class="ico">⚙️</span><span class="t">ຕັ້ງຄ່າ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="logout()"><span class="ico">🚪</span><span class="t" style="color:var(--danger);">ອອກຈາກລະບົບ</span></div>
     </div>`;
+}
+// friendly, searchable customer ID derived from the numeric row id — no schema change needed
+function customerCode(id){ return 'KD-' + String(id).padStart(6,'0'); }
+async function uploadAvatar(file){
+  if(!file) return;
+  if(file.size > 4*1024*1024){ alert('ຮູບໃຫຍ່ເກີນໄປ (ສູງສຸດ 4MB)'); return; }
+  try{
+    const url = await sbUpload('khaidee-products', `avatars/${STATE.customer.id}_${Date.now()}_${file.name}`, file);
+    await sbRPC('customer_update_profile', {p_customer_id: STATE.customer.id, p_avatar_url: url});
+    STATE.customer.avatar_url = url;
+    saveCustomer(); renderAccount();
+  }catch(e){
+    alert('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message + '\n\n(ຖ້າຄັ້ງທຳອິດ ອາດຕ້ອງເພີ່ມຟັງຊັນ customer_update_profile ໃນ Supabase ກ່ອນ — ຖາມແອດມິນ/ຜູ້ພັດທະນາ)');
+  }
+}
+function showEditProfile(){
+  document.getElementById('authTitle').textContent = 'ແກ້ໄຂຂໍ້ມູນສ່ວນຕົວ';
+  document.getElementById('authBody').innerHTML = `
+    <div id="authErr"></div>
+    <div class="field"><label>ຊື່ ແລະ ນາມສະກຸນ</label><input id="editFullName" value="${STATE.customer.full_name||''}"></div>
+    <div class="field"><label>ອີເມວ</label><input id="editEmail" value="${STATE.customer.email||''}"></div>
+    <div class="field"><label>ເບີໂທ</label><input id="editPhone" value="${STATE.customer.phone||''}"></div>
+    <button class="btn btn-primary" onclick="doEditProfile()">ບັນທຶກ</button>`;
+  openModal('modalAuth');
+}
+async function doEditProfile(){
+  const full_name = document.getElementById('editFullName').value.trim();
+  const email = document.getElementById('editEmail').value.trim();
+  const phone = document.getElementById('editPhone').value.trim();
+  if(!full_name || !phone){ document.getElementById('authErr').innerHTML = `<div class="err">ກະລຸນາປ້ອນຊື່ ແລະ ເບີໂທ</div>`; return; }
+  try{
+    await sbRPC('customer_update_profile', {p_customer_id: STATE.customer.id, p_full_name: full_name, p_email: email, p_phone: phone});
+    STATE.customer.full_name = full_name; STATE.customer.email = email; STATE.customer.phone = phone;
+    saveCustomer(); closeModal('modalAuth'); renderAccount();
+  }catch(e){
+    document.getElementById('authErr').innerHTML = `<div class="err">ບັນທຶກບໍ່ສຳເລັດ: ${e.message}</div>`;
+  }
 }
 function showChangePassword(){
   document.getElementById('authTitle').textContent = 'ປ່ຽນລະຫັດຜ່ານ';
@@ -850,17 +1105,48 @@ async function doChangePassword(){
   }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ລະຫັດຜ່ານເກົ່າບໍ່ຖືກຕ້ອງ</div>`; }
 }
 
-/* ---- hidden admin trigger: triple-tap the gear row ---- */
+/* ---- ⚙️ gear row: 1 tap (or 2) opens normal customer settings, 3 quick taps opens the
+   hidden admin gate. This keeps admin access tucked away without hiding settings entirely. ---- */
 function tapGear(){
   STATE.gearTaps++;
   clearTimeout(STATE.gearTapTimer);
-  STATE.gearTapTimer = setTimeout(()=>{ STATE.gearTaps=0; }, 900);
   if(STATE.gearTaps>=3){
     STATE.gearTaps=0;
     document.getElementById('adminGateErr').innerHTML='';
     document.getElementById('adminPassInput').value='';
     openModal('modalAdminGate');
+    return;
   }
+  STATE.gearTapTimer = setTimeout(()=>{
+    if(STATE.gearTaps>0 && STATE.gearTaps<3){ openSettings(); }
+    STATE.gearTaps=0;
+  }, 450);
+}
+function openSettings(){
+  document.getElementById('settingsBody').innerHTML = `
+    <div class="field"><label>🌐 ພາສາ</label>
+      <div class="chiprow">
+        <button onclick="setLang('lo'); openSettings();" class="${LANG==='lo'?'active':''}">ລາວ</button>
+        <button onclick="setLang('th'); openSettings();" class="${LANG==='th'?'active':''}">ไทย</button>
+        <button onclick="setLang('en'); openSettings();" class="${LANG==='en'?'active':''}">EN</button>
+      </div>
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:14px 0;">
+      <div class="listrow" onclick="closeModal('modalSettings'); showContactAdmin();"><span class="ico">💬</span><span class="t">ຕິດຕໍ່ແອດມິນ</span><span class="arrow">›</span></div>
+      ${STATE.customer?`<div class="listrow" onclick="closeModal('modalSettings'); showChangePassword();"><span class="ico">🔒</span><span class="t">ປ່ຽນລະຫັດຜ່ານ</span><span class="arrow">›</span></div>`:''}
+    </div>
+    <div class="hint" style="text-align:center;">KhaiDee ຂາຍດີ • v1.0</div>`;
+  openModal('modalSettings');
+}
+function showContactAdmin(){
+  const desc = STATE.settings.contact_description;
+  const qr = STATE.settings.contact_qr_url;
+  const waLink = STATE.settings.contact_whatsapp_link || `https://wa.me/${(STATE.settings.whatsapp_number||WHATSAPP_FALLBACK).replace(/[^0-9]/g,'')}`;
+  document.getElementById('contactAdminBody').innerHTML = `
+    ${desc?`<p style="font-size:13.5px; color:var(--ink-soft); white-space:pre-wrap;">${desc}</p>`:'<p style="font-size:13.5px; color:var(--ink-soft);">ມີບັນຫາ ຫຼື ຢາກສອບຖາມ? ທັກຫາແອດມິນໄດ້ໂດຍກົງ</p>'}
+    ${qr?`<img src="${qr}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; display:block; margin:14px auto; border:1px solid var(--line);">`:''}
+    <a href="${waLink}" target="_blank" class="btn btn-primary" style="display:block; text-align:center; text-decoration:none;">💬 ທັກຜ່ານ WhatsApp</a>`;
+  openModal('modalContactAdmin');
 }
 
 /* ============================================================ NAVIGATION (real page switching, no popups) ============================================================ */
@@ -969,26 +1255,61 @@ function adminEditProduct(id){
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
     <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
-    <div class="field"><label>ຮູບພາບ (URL, ຄັ້ນລະ 1 ແຖວ)</label><textarea id="pImages" rows="2">${(p.images||[]).join('\\n')}</textarea></div>
+    <div class="field"><label>ຮູບພາບສິນຄ້າ (ອັບໂຫລດໄດ້ຫຼາຍໆຮູບ)</label><input type="file" id="pImageFiles" accept="image/*" multiple></div>
+    <div id="pImagePreview" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
+      ${(p.images||[]).map((url,i)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImage(${i})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join('')}
+    </div>
+    <div class="field"><label>ວິດີໂອສິນຄ້າ (ບໍ່ເກີນ 10 ວິນາທີ, ຖ້າມີ)</label><input type="file" id="pVideoFile" accept="video/*"></div>
+    <div id="pVideoPreview" style="margin:8px 0;">${p.video_url?`<video src="${p.video_url}" style="width:100px; border-radius:8px;" muted controls></video>`:''}</div>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px;"><input type="checkbox" id="pFeatured" ${p.is_featured?'checked':''}> ສິນຄ້າແນະນຳ (ຂາຍດີ)</label>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px;"><input type="checkbox" id="pActive" ${p.is_active!==false?'checked':''}> ເປີດຂາຍ</label>
     <button class="btn btn-primary" style="margin-top:14px;" id="pSaveBtn">ບັນທຶກ</button>
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  let pendingImages = [...(p.images||[])];
+  let pendingVideoUrl = p.video_url||null;
+  window.removePImage = (i)=>{ pendingImages.splice(i,1); document.getElementById('pImagePreview').innerHTML = pendingImages.map((url,j)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImage(${j})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join(''); };
   overlay.querySelector('#pSaveBtn').onclick = async ()=>{
-    const payload = {
-      id: id||undefined, category_id: Number(document.getElementById('pCat').value),
-      name_lo: document.getElementById('pNameLo').value, name_th: document.getElementById('pNameTh').value,
-      name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
-      price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
-      stock: Number(document.getElementById('pStock').value),
-      images: document.getElementById('pImages').value.split('\\n').map(s=>s.trim()).filter(Boolean),
-      is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
-    };
-    await sbRPC('admin_upsert_product', {p_password:STATE.adminPassword, p_product:payload});
-    overlay.remove(); renderAdminProducts();
+    const btn = overlay.querySelector('#pSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    try{
+      const imgFiles = document.getElementById('pImageFiles').files;
+      for(const file of imgFiles){
+        const url = await sbUpload('khaidee-products', `product_${Date.now()}_${file.name}`, file);
+        pendingImages.push(url);
+      }
+      const videoFile = document.getElementById('pVideoFile').files[0];
+      if(videoFile){
+        const duration = await getVideoDuration(videoFile);
+        if(duration > 10.5){ alert(`ວິດີໂອຍາວເກີນໄປ (${duration.toFixed(1)} ວິນາທີ) — ອະນຸຍາດສູງສຸດ 10 ວິນາທີ`); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+        pendingVideoUrl = await sbUpload('khaidee-products', `video_${Date.now()}_${videoFile.name}`, videoFile);
+      }
+      const payload = {
+        id: id||undefined, category_id: Number(document.getElementById('pCat').value),
+        name_lo: document.getElementById('pNameLo').value, name_th: document.getElementById('pNameTh').value,
+        name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
+        price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
+        stock: Number(document.getElementById('pStock').value),
+        images: pendingImages, video_url: pendingVideoUrl,
+        is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
+      };
+      await sbRPC('admin_upsert_product', {p_password:STATE.adminPassword, p_product:payload});
+      overlay.remove(); renderAdminProducts();
+    }catch(e){
+      alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message);
+      btn.disabled = false; btn.textContent = 'ບັນທຶກ';
+    }
   };
+}
+// reads a video file's duration client-side (no upload needed) so we can reject >10s clips early
+function getVideoDuration(file){
+  return new Promise((resolve, reject)=>{
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = ()=>{ URL.revokeObjectURL(v.src); resolve(v.duration); };
+    v.onerror = ()=> reject(new Error('ອ່ານໄຟລ໌ວິດີໂອບໍ່ໄດ້'));
+    v.src = URL.createObjectURL(file);
+  });
 }
 async function adminDeleteProduct(id){
   if(!confirm('ລຶບສິນຄ້ານີ້?')) return;
@@ -1028,11 +1349,29 @@ function adminEditCategory(id){
 async function renderAdminCustomers(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
-  const list = await sbRPC('admin_list_customers', {p_password: STATE.adminPassword});
-  body.innerHTML = list.map(c=>`
+  STATE.adminCustomers = await sbRPC('admin_list_customers', {p_password: STATE.adminPassword});
+  body.innerHTML = `<div class="field" style="margin-bottom:10px;"><input id="adminCustSearch" placeholder="🔍 ຄົ້ນຫາດ້ວຍ ID, ຊື່, ເບີໂທ, ອີເມວ..." oninput="renderAdminCustomerList()"></div>
+    <div id="adminCustomerList"></div>`;
+  renderAdminCustomerList();
+}
+function renderAdminCustomerList(){
+  const q = (document.getElementById('adminCustSearch')?.value || '').trim().toLowerCase();
+  let list = STATE.adminCustomers || [];
+  if(q){
+    list = list.filter(c =>
+      customerCode(c.id).toLowerCase().includes(q) ||
+      String(c.id).includes(q) ||
+      (c.full_name||'').toLowerCase().includes(q) ||
+      (c.phone||'').toLowerCase().includes(q) ||
+      (c.email||'').toLowerCase().includes(q));
+  }
+  const wrap = document.getElementById('adminCustomerList');
+  if(!wrap) return;
+  if(!list.length){ wrap.innerHTML = '<div class="empty">ບໍ່ພົບລູກຄ້າ 🔍</div>'; return; }
+  wrap.innerHTML = list.map(c=>`
     <div class="admin-list-item">
       <div class="top"><span class="title">${c.full_name}</span>${c.is_blocked?'<span class="status-pill status-cancelled">ບລັອກ</span>':''}</div>
-      <div class="hint">${c.phone} • ${c.email}</div>
+      <div class="hint">${customerCode(c.id)} • ${c.phone} • ${c.email}</div>
       <div class="hint">ກະເປົາເງິນ: ${fmtMoney(c.wallet_balance)}</div>
       <div class="chiprow">
         <button onclick="adminEditCustomer('${c.id}')">✏️ ແກ້ໄຂ</button>
@@ -1045,7 +1384,7 @@ function adminEditCustomer(id){
   sbRPC('admin_list_customers', {p_password:STATE.adminPassword}).then(list=>{
     const c = list.find(x=>x.id===id);
     const overlay = document.createElement('div'); overlay.className='overlay show center';
-    overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ແກ້ໄຂລູກຄ້າ</h3><button class="closex" data-close>✕</button></div>
+    overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ແກ້ໄຂລູກຄ້າ ${customerCode(id)}</h3><button class="closex" data-close>✕</button></div>
     <div class="sheet-body">
       <div class="field"><label>ຊື່</label><input id="ecName" value="${c.full_name||''}"></div>
       <div class="field"><label>ເບີໂທ</label><input id="ecPhone" value="${c.phone||''}"></div>
@@ -1127,8 +1466,8 @@ function adminEditCoupon(){
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ສ້າງຄູປອງ</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
     <div class="field"><label>ລະຫັດຄູປອງ</label><input id="cpCode" placeholder="KHAIDEE10"></div>
-    <div class="field"><label>ປະເພດສ່ວນຫຼຸດ</label><select id="cpType"><option value="fixed">ຫຼຸດຈຳນວນເງິນ</option><option value="percent">ຫຼຸດເປັນ %</option></select></div>
-    <div class="field"><label>ມູນຄ່າສ່ວນຫຼຸດ</label><input type="number" id="cpValue"></div>
+    <div class="field"><label>ປະເພດສ່ວນຫຼຸດ</label><select id="cpType" onchange="document.getElementById('cpValueField').style.display = this.value==='free_shipping'?'none':'block';"><option value="fixed">ຫຼຸດຈຳນວນເງິນ</option><option value="percent">ຫຼຸດເປັນ %</option><option value="free_shipping">🚚 ສົ່ງຟຣີ</option></select></div>
+    <div class="field" id="cpValueField"><label>ມູນຄ່າສ່ວນຫຼຸດ</label><input type="number" id="cpValue"></div>
     <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ</label><input type="number" id="cpMin" value="0"></div>
     <div class="field"><label>ຈຳນວນຄັ້ງທີ່ໃຊ້ໄດ້</label><input type="number" id="cpLimit"></div>
     <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cpExpire"></div>
@@ -1137,9 +1476,10 @@ function adminEditCoupon(){
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
   overlay.querySelector('#cpSave').onclick=async()=>{
+    const discountType = document.getElementById('cpType').value;
     await sbRPC('admin_upsert_coupon', {p_password:STATE.adminPassword, p_coupon:{
-      code:document.getElementById('cpCode').value, discount_type:document.getElementById('cpType').value,
-      discount_value:Number(document.getElementById('cpValue').value), min_order:Number(document.getElementById('cpMin').value)||0,
+      code:document.getElementById('cpCode').value, discount_type:discountType,
+      discount_value: discountType==='free_shipping' ? 0 : Number(document.getElementById('cpValue').value), min_order:Number(document.getElementById('cpMin').value)||0,
       usage_limit:Number(document.getElementById('cpLimit').value)||null,
       expires_at:document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
       is_active:true}});
@@ -1158,6 +1498,23 @@ async function renderAdminSettings(){
     </div>
     <div class="field"><label>ເບີ WhatsApp ຮັບການແຈ້ງເຕືອນອໍເດີ</label><input id="stWa" value="${STATE.settings.whatsapp_number||''}" placeholder="8562054966168"></div>
     <button class="btn btn-primary" id="stSave">ບັນທຶກການຕັ້ງຄ່າ</button>
+
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
+    <h4 style="font-size:13px;">💰 ກະເປົາເງິນ — QR ຮັບເງິນ ແລະ ຄຳແນະນຳໂອນເງິນ</h4>
+    <div class="hint" style="margin-top:-4px;">ຮູບ QR ແລະ ຂໍ້ຄວາມນີ້ຈະສະແດງໃຫ້ລູກຄ້າເຫັນຕອນເຕີມເງິນເຂົ້າກະເປົາ</div>
+    ${STATE.settings.wallet_qr_url?`<img src="${STATE.settings.wallet_qr_url}" style="width:120px; height:120px; object-fit:cover; border-radius:10px; margin:8px 0; border:1px solid var(--line);">`:''}
+    <div class="field"><label>ອັບໂຫລດຮູບ QR ຮັບເງິນ</label><input type="file" id="stWalletQrFile" accept="image/*"></div>
+    <div class="field"><label>ຄຳອະທິບາຍ / ຄຳແນະນຳການໂອນເງິນ</label><textarea id="stWalletInfo" rows="3" placeholder="ຕົວຢ່າງ: ໂອນເຂົ້າບັນຊີ BCEL ຊື່ ... ເລກບັນຊີ ... ແລ້ວອັບໂຫລດສະລິບ">${STATE.settings.wallet_instructions||''}</textarea></div>
+    <button class="btn btn-primary" id="stWalletSave">ບັນທຶກຂໍ້ມູນກະເປົາເງິນ</button>
+
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
+    <h4 style="font-size:13px;">💬 ຕິດຕໍ່ແອດມິນ (ສະແດງໃນໜ້າຕັ້ງຄ່າຂອງລູກຄ້າ)</h4>
+    ${STATE.settings.contact_qr_url?`<img src="${STATE.settings.contact_qr_url}" style="width:120px; height:120px; object-fit:cover; border-radius:10px; margin:8px 0; border:1px solid var(--line);">`:''}
+    <div class="field"><label>ອັບໂຫລດຮູບ QR WhatsApp</label><input type="file" id="stContactQrFile" accept="image/*"></div>
+    <div class="field"><label>ລິ້ງ WhatsApp (ຕົວຢ່າງ: https://wa.me/8562054966168)</label><input id="stContactWa" value="${STATE.settings.contact_whatsapp_link||''}" placeholder="https://wa.me/856..."></div>
+    <div class="field"><label>ຄຳອະທິບາຍໃຫ້ລູກຄ້າ</label><textarea id="stContactDesc" rows="3" placeholder="ຕົວຢ່າງ: ມີບັນຫາການສັ່ງຊື້ ຫຼື ຢາກສອບຖາມ ສາມາດທັກແອດມິນໄດ້ໂດຍກົງ">${STATE.settings.contact_description||''}</textarea></div>
+    <button class="btn btn-primary" id="stContactSave">ບັນທຶກຂໍ້ມູນຕິດຕໍ່</button>
+
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">ປ່ຽນລະຫັດຜ່ານແອດມິນ</h4>
     <div class="field"><label>ລະຫັດຜ່ານປັດຈຸບັນ</label><input type="password" id="apOld"></div>
@@ -1175,6 +1532,30 @@ async function renderAdminSettings(){
     for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
     await loadSettings();
     alert('ບັນທຶກແລ້ວ');
+  };
+  document.getElementById('stWalletSave').onclick = async ()=>{
+    const btn = document.getElementById('stWalletSave'); btn.disabled=true;
+    try{
+      let qrUrl = STATE.settings.wallet_qr_url||'';
+      const file = document.getElementById('stWalletQrFile').files[0];
+      if(file){ qrUrl = await sbUpload('khaidee-products', `wallet_qr_${Date.now()}_${file.name}`, file); }
+      const updates = { wallet_qr_url: qrUrl, wallet_instructions: document.getElementById('stWalletInfo').value };
+      for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
+      await loadSettings(); renderAdminSettings();
+      alert('ບັນທຶກຂໍ້ມູນກະເປົາເງິນແລ້ວ');
+    }catch(e){ alert('ຜິດພາດ: '+e.message); } finally { btn.disabled=false; }
+  };
+  document.getElementById('stContactSave').onclick = async ()=>{
+    const btn = document.getElementById('stContactSave'); btn.disabled=true;
+    try{
+      let qrUrl = STATE.settings.contact_qr_url||'';
+      const file = document.getElementById('stContactQrFile').files[0];
+      if(file){ qrUrl = await sbUpload('khaidee-products', `contact_qr_${Date.now()}_${file.name}`, file); }
+      const updates = { contact_qr_url: qrUrl, contact_whatsapp_link: document.getElementById('stContactWa').value, contact_description: document.getElementById('stContactDesc').value };
+      for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
+      await loadSettings(); renderAdminSettings();
+      alert('ບັນທຶກຂໍ້ມູນຕິດຕໍ່ແລ້ວ');
+    }catch(e){ alert('ຜິດພາດ: '+e.message); } finally { btn.disabled=false; }
   };
   document.getElementById('apSave').onclick = async ()=>{
     try{
