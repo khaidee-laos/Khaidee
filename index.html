@@ -550,6 +550,56 @@ async function sbUpload(bucket, path, file){
   if(!r.ok) throw new Error(await r.text());
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
+/* ---- Upload with live progress (XHR gives upload progress events; fetch does not) ----
+   Used for the topup slip so the button can show a real % instead of a frozen-looking
+   "ກຳລັງສົ່ງ..." while a big photo crawls up on slow mobile data. */
+function sbUploadWithProgress(bucket, path, file, onProgress){
+  return new Promise((resolve, reject)=>{
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`);
+    xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer '+SUPABASE_ANON_KEY);
+    if(xhr.upload && onProgress){
+      xhr.upload.onprogress = (e)=>{ if(e.lengthComputable) onProgress(Math.round(e.loaded/e.total*100)); };
+    }
+    xhr.onload = ()=>{
+      if(xhr.status>=200 && xhr.status<300){ resolve(`${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`); }
+      else{ reject(new Error(xhr.responseText||('ອັບໂຫລດບໍ່ສຳເລັດ ('+xhr.status+')'))); }
+    };
+    xhr.onerror = ()=> reject(new Error('ອິນເຕີເນັດຂັດຂ້ອງ ຂະນະອັບໂຫລດ'));
+    xhr.send(file);
+  });
+}
+/* ---- Shrink a photo client-side before upload ----
+   Camera slips are often 3-8MB straight out of the phone; on slow mobile data that alone
+   is most of the wait. Downscale to a reasonable max dimension and re-encode as JPEG.
+   Falls back to the original file if anything goes wrong (e.g. HEIC the browser can't decode). */
+function compressImageFile(file, maxDim=1600, quality=0.75){
+  return new Promise((resolve)=>{
+    if(!file || !file.type || !file.type.startsWith('image/')){ resolve(file); return; }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      try{
+        let {width, height} = img;
+        if(width>maxDim || height>maxDim){
+          const scale = maxDim/Math.max(width, height);
+          width = Math.round(width*scale); height = Math.round(height*scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob)=>{
+          URL.revokeObjectURL(url);
+          if(!blob || blob.size >= file.size){ resolve(file); return; } // compression didn't help, keep original
+          resolve(new File([blob], file.name.replace(/\.\w+$/, '.jpg'), {type:'image/jpeg'}));
+        }, 'image/jpeg', quality);
+      }catch(e){ URL.revokeObjectURL(url); resolve(file); }
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); resolve(file); }; // e.g. HEIC not decodable — upload original
+    img.src = url;
+  });
+}
 
 /* ============================================================ RAPID-TAP GUARD ============================================================
    Fixes the "spammed the button and it sent multiple requests" bug. Disabling the button alone
@@ -1314,10 +1364,11 @@ async function openOrderDetail(orderId){
 async function showWallet(){
   requireLogin(async ()=>{
     openModal('modalWallet');
+    await refreshWalletBalance(); // get the real current balance before painting the screen
     const list = await sbRPC('wallet_list', {p_customer_id: STATE.customer.id});
     document.getElementById('walletBody').innerHTML = `
       <div class="walletcard" style="margin:0 0 16px;">
-        <div><div class="hint">ຍອດເງິນຄົງເຫຼືອ</div><div style="font-size:22px; font-weight:800; color:var(--maroon);">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
+        <div><div class="hint">ຍອດເງິນຄົງເຫຼືອ</div><div data-wallet-balance style="font-size:22px; font-weight:800; color:var(--maroon);">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
         <button class="btn btn-gold btn-sm" onclick="showTopupForm()">➕ ເຕີມເງິນ</button>
       </div>
       <div id="topupFormWrap"></div>
@@ -1349,11 +1400,30 @@ async function submitTopup(){
     const file = document.getElementById('topupSlip').files[0];
     if(!amount || amount<=0){ alert('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
     if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
-    const btn = document.getElementById('topupSubmitBtn');
-    btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...'; // visual cue — the onGuard() call above is what actually blocks repeat taps
+
+    // Guard against the "closed and reopened the page, so it looks fresh" duplicate-submit case:
+    // a matching pending request sent in the last 3 minutes means one is likely already in flight
+    // on the server (or already submitted successfully) — confirm before sending another.
+    const dupKey = `khaidee_last_topup_${STATE.customer.id}`;
     try{
-      const slipUrl = await sbUpload('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, file);
+      const last = JSON.parse(localStorage.getItem(dupKey)||'null');
+      if(last && last.amount===amount && (Date.now()-last.at) < 3*60*1000){
+        const proceed = confirm('ທ່ານຫາກໍສົ່ງຄຳຂໍເຕີມເງິນຈຳນວນນີ້ໄປແລ້ວເມື່ອຄູ່ນີ້ — ອາດຈະສົ່ງໄປແລ້ວແຕ່ໜ້າຈໍປິດກ່ອນສະແດງຜົນ. ກວດເບິ່ງ "ປະຫວັດທຸລະກຳ" ກ່ອນ. ຕ້ອງການສົ່ງອີກຄັ້ງບໍ?');
+        if(!proceed) return;
+      }
+    }catch(e){/* ignore malformed cache */}
+
+    const btn = document.getElementById('topupSubmitBtn');
+    btn.disabled = true; btn.textContent = 'ກຳລັງບີບອັດຮູບ...';
+    try{
+      const compressed = await compressImageFile(file);
+      btn.textContent = 'ກຳລັງອັບໂຫລດ... 0%';
+      const slipUrl = await sbUploadWithProgress('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, compressed, (pct)=>{
+        btn.textContent = `ກຳລັງອັບໂຫລດ... ${pct}%`;
+      });
+      btn.textContent = 'ກຳລັງບັນທຶກ...';
       await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
+      localStorage.setItem(dupKey, JSON.stringify({amount, at: Date.now()}));
       playSuccessSound();
       alert('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
       showWallet();
@@ -1400,6 +1470,31 @@ async function refreshNotifBadge(){
     badge.textContent = count>99?'99+':count;
     badge.classList.toggle('hidden', count===0);
   }catch(e){ /* RPC not set up yet — badge just stays hidden */ }
+  refreshWalletBalance(); // piggyback on the same 30s poll so the balance updates on its own after admin approves
+}
+/* ---- Pull the LIVE wallet balance from the server ----
+   Login only fetches the balance once and it gets cached in STATE/localStorage from then on,
+   so approving a topup on the admin side never reached the customer's screen until they logged
+   out and back in. This re-asks the server and syncs STATE, called on wallet-open, on the same
+   30s poll as the notification badge, and right after opening the account page.
+   Needs a small SECURITY DEFINER RPC on the Supabase side, e.g.:
+     create or replace function customer_wallet_balance(p_customer_id uuid)
+     returns numeric language sql security definer as $$
+       select wallet_balance from customers where id = p_customer_id;
+     $$;
+   Fails silently (keeps showing the cached value) if that RPC isn't deployed yet. */
+async function refreshWalletBalance(){
+  if(!STATE.customer) return;
+  try{
+    const bal = await sbRPC('customer_wallet_balance', {p_customer_id: STATE.customer.id});
+    const val = (bal && typeof bal==='object') ? (bal.wallet_balance ?? bal.balance) : bal;
+    if(val!=null && Number(val) !== Number(STATE.customer.wallet_balance||0)){
+      STATE.customer.wallet_balance = Number(val);
+      saveCustomer();
+      // live-update any wallet balance already on screen without waiting for a manual reopen
+      document.querySelectorAll('[data-wallet-balance]').forEach(el=>{ el.textContent = fmtMoney(STATE.customer.wallet_balance); });
+    }
+  }catch(e){ /* RPC not deployed yet — keep the cached value, don't break the UI */ }
 }
 async function showNotifications(){
   requireLogin(async ()=>{
@@ -1442,6 +1537,7 @@ function renderAccount(){
     </div>`;
     return;
   }
+  refreshWalletBalance(); // re-check the real balance every time the account tab is opened, not just at login
   body.innerHTML = `
     <div class="profile-hero" style="border-radius:0 0 24px 24px; display:flex; align-items:center; gap:14px;">
       <div style="position:relative; flex-shrink:0;">
@@ -1458,7 +1554,7 @@ function renderAccount(){
       </div>
     </div>
     <div class="walletcard">
-      <div><div class="hint">ກະເປົາເງິນ</div><div style="font-weight:800; color:var(--maroon); font-size:16px;">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
+      <div><div class="hint">ກະເປົາເງິນ</div><div data-wallet-balance style="font-weight:800; color:var(--maroon); font-size:16px;">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
       <button class="btn btn-gold btn-sm" onclick="showWallet()">ຈັດການ</button>
     </div>
     <div class="coinchip">
