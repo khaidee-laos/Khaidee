@@ -1127,23 +1127,32 @@ function saveAddress(){
 
 
 /* ============================================================ ORDERS HISTORY ============================================================ */
+let customerOrdersList = [];
+let customerOrdersTab = 'pending';
+function customerSetOrdersTab(tab){ customerOrdersTab = tab; paintCustomerOrders(); }
 async function showOrders(){
   requireLogin(async ()=>{
     goPage('orders');
     document.getElementById('ordersBody').innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
-    const list = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
-    if(!list.length){ document.getElementById('ordersBody').innerHTML = '<div class="empty">ຍັງບໍ່ມີຄຳສັ່ງຊື້</div>'; return; }
-    document.getElementById('ordersBody').innerHTML = list.map(o=>`
+    customerOrdersList = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
+    paintCustomerOrders();
+  });
+}
+function paintCustomerOrders(){
+  const wrap = document.getElementById('ordersBody');
+  if(!customerOrdersList.length){ wrap.innerHTML = '<div class="empty">ຍັງບໍ່ມີຄຳສັ່ງຊື້</div>'; return; }
+  const filtered = customerOrdersList.filter(o=>orderTabOf(o.status)===customerOrdersTab);
+  wrap.innerHTML = renderOrderTabs(customerOrdersTab, customerOrdersList, 'customerSetOrdersTab') +
+    (filtered.map(o=>`
       <div class="admin-list-item" style="cursor:pointer;" onclick="openOrderDetail(${o.id})">
-        <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${o.status}</span></div>
+        <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span></div>
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         <div style="margin-top:6px; font-size:12.5px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
         <div style="margin-top:6px; display:flex; align-items:center; justify-content:space-between;">
           <span style="font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</span>
           <span class="hint">ເບິ່ງລາຍລະອຽດ ›</span>
         </div>
-      </div>`).join('');
-  });
+      </div>`).join('') || '<div class="empty">ບໍ່ມີຄຳສັ່ງຊື້ໃນໝວດນີ້</div>');
 }
 
 /* ============================================================ ORDER DETAIL (items + images + status timeline) ============================================================
@@ -1151,11 +1160,40 @@ async function showOrders(){
    shipping_fee, discount, address:{recipient_name,phone,village,district,province}, carrier_name,
    items:[{product_name, image_url, qty, price}]}. Item images let the customer tap through to see exactly
    what they ordered, same as the product photos shown on Shopee/Lazada order pages. */
+// Lao labels for the real order.status values used across the DB/RPCs (pending/paid/packing/shipping/delivered/cancelled).
+// Used everywhere a raw status is shown to a customer or admin so nothing appears in English anymore.
+const ORDER_STATUS_LABELS = {
+  pending:'ລໍຖ້າຢືນຢັນ', paid:'ຊຳລະເງິນແລ້ວ', packing:'ກຳລັງແພັກເຄື່ອງ',
+  shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ'
+};
+function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
+// Groups the 6 real statuses into the 4 tabs the customer/admin actually think in terms of.
+const ORDER_TABS = [
+  {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
+  {key:'shipping', ico:'🚚', lbl:'ກຳລັງຂົນສົ່ງ', match:['shipping']},
+  {key:'delivered', ico:'✅', lbl:'ສຳເລັດ', match:['delivered']},
+  {key:'cancelled', ico:'✕', lbl:'ຍົກເລີກ', match:['cancelled']}
+];
+function orderTabOf(status){ return (ORDER_TABS.find(t=>t.match.includes(status))||ORDER_TABS[0]).key; }
+function renderOrderTabs(activeTab, list, onClick){
+  return `<div class="order-tabs" style="display:flex; gap:6px; margin-bottom:12px; overflow-x:auto;">
+    ${ORDER_TABS.map(t=>{
+      const n = list.filter(o=>orderTabOf(o.status)===t.key).length;
+      return `<button onclick="${onClick}('${t.key}')" style="flex:1; min-width:78px; border:1.5px solid ${t.key===activeTab?'var(--maroon)':'var(--line)'}; background:${t.key===activeTab?'var(--gold-light)':'#fff'}; border-radius:12px; padding:8px 4px; font-weight:${t.key===activeTab?'800':'600'}; font-size:11.5px; color:var(--ink); display:flex; flex-direction:column; align-items:center; gap:2px;">
+        <span style="font-size:16px;">${t.ico}</span><span>${t.lbl}</span><span style="font-size:10px; color:var(--ink-soft);">${n}</span>
+      </button>`;
+    }).join('')}
+  </div>`;
+}
+// NOTE: previously used the key 'confirmed', which never matches the real status values
+// ('paid'/'packing'), so the progress-track below silently failed to highlight those steps.
+// Fixed to use the actual status keys so the track lights up correctly at every stage.
 const ORDER_STATUS_STEPS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າ'},
-  {key:'confirmed', ico:'✅', lbl:'ຢືນຢັນ'},
+  {key:'paid', ico:'💰', lbl:'ຊຳລະແລ້ວ'},
+  {key:'packing', ico:'📦', lbl:'ແພັກເຄື່ອງ'},
   {key:'shipping', ico:'🚚', lbl:'ກຳລັງສົ່ງ'},
-  {key:'delivered', ico:'📦', lbl:'ສຳເລັດ'}
+  {key:'delivered', ico:'✅', lbl:'ສຳເລັດ'}
 ];
 async function openOrderDetail(orderId){
   requireLogin(async ()=>{
@@ -1169,7 +1207,7 @@ async function openOrderDetail(orderId){
       wrap.innerHTML = `
         <div class="top" style="display:flex; justify-content:space-between; align-items:center;">
           <span class="title" style="font-weight:800;">#${o.order_number}</span>
-          <span class="status-pill status-${o.status}">${o.status}</span>
+          <span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span>
         </div>
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         ${o.status==='cancelled' ? '' : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
@@ -1528,23 +1566,32 @@ function adminStatusColor(status){
   if(bad.includes(status)) return 'var(--danger)';
   return 'var(--ink-soft)';
 }
+let adminOrdersList = [];
+let adminOrdersTab = 'pending';
+function adminSetOrdersTab(tab){ adminOrdersTab = tab; paintAdminOrders(); }
 async function renderAdminOrders(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
-  const list = await sbRPC('admin_list_orders', {p_password: STATE.adminPassword});
+  adminOrdersList = await sbRPC('admin_list_orders', {p_password: STATE.adminPassword});
+  paintAdminOrders();
+}
+function paintAdminOrders(){
+  const body = document.getElementById('adminBody');
   const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
-  body.innerHTML = list.map(o=>`
+  const filtered = adminOrdersList.filter(o=>orderTabOf(o.status)===adminOrdersTab);
+  body.innerHTML = renderOrderTabs(adminOrdersTab, adminOrdersList, 'adminSetOrdersTab') +
+    (filtered.map(o=>`
     <div class="admin-list-item">
       <button class="del-x" title="ລຶບອໍເດີ" onclick="adminDeleteOrder(${o.id})">✕</button>
-      <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${o.status}</span></div>
+      <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span></div>
       <div class="hint">${o.customer_name||'-'} • ${o.customer_phone||'-'}</div>
       <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
       <div style="font-size:12.5px; margin-top:6px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
-        ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${s}</option>`).join('')}
+        ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${orderStatusLabel(s)}</option>`).join('')}
       </select>
-    </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີ</div>';
+    </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີໃນໝວດນີ້</div>');
 }
 async function adminSetOrderStatus(id, status){
   await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status});
@@ -1555,7 +1602,14 @@ async function adminSetOrderStatus(id, status){
 // test orders — deleting real order history can break reporting/accounting.
 async function adminDeleteOrder(id){
   if(!confirm('ລຶບອໍເດີນີ້ຖາວອນ? ຂໍ້ມູນຈະຫາຍໄປທັງໝົດ')) return;
-  try{ await sbRPC('admin_delete_order', {p_password:STATE.adminPassword, p_order_id:id}); renderAdminOrders(); }
+  try{
+    await sbRPC('admin_delete_order', {p_password:STATE.adminPassword, p_order_id:id});
+    adminOrdersList = adminOrdersList.filter(o=>o.id!==id); // drop it locally right away so it can't appear "stuck"
+    paintAdminOrders();
+    // then re-sync with the server — if the row is still there after this, the delete RPC
+    // itself isn't removing it server-side (see comment above) and needs to be fixed in Supabase.
+    renderAdminOrders();
+  }
   catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function renderAdminProducts(){
