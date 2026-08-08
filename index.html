@@ -268,6 +268,44 @@ nav.bottom .icon{font-size:19px;}
 .chiprow button.active{background:var(--maroon); color:#fff; border-color:var(--maroon); font-weight:700;}
 .fab{position:fixed; right:16px; bottom:80px; width:50px; height:50px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:22px; box-shadow:0 6px 16px rgba(122,30,43,.4); z-index:20;}
 
+/* ---- Notification bell + badge ---- */
+.bell-btn{position:relative; background:rgba(255,255,255,.15); border:none; width:32px; height:32px; border-radius:999px; color:#fff; font-size:15px; display:flex; align-items:center; justify-content:center; margin-left:6px; flex-shrink:0;}
+.notif-badge{position:absolute; top:-3px; right:-3px; background:var(--gold); color:var(--maroon); font-size:9px; font-weight:800; border-radius:999px; min-width:15px; height:15px; display:flex; align-items:center; justify-content:center; padding:0 3px; border:1.5px solid var(--maroon-dark);}
+
+/* ---- Notifications list ---- */
+.notif-item{display:flex; gap:10px; padding:12px 14px; border-bottom:1px solid var(--line); background:#fff; position:relative;}
+.notif-item.unread{background:rgba(212,169,76,.10);}
+.notif-item.unread::before{content:''; position:absolute; left:5px; top:18px; width:7px; height:7px; border-radius:50%; background:var(--maroon);}
+.notif-item .ico{width:38px; height:38px; border-radius:50%; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:17px; flex-shrink:0;}
+.notif-item .body{flex:1; min-width:0;}
+.notif-item .title{font-size:13px; font-weight:700; color:var(--ink);}
+.notif-item .txt{font-size:12px; color:var(--ink-soft); margin-top:2px; line-height:1.4;}
+.notif-item .when{font-size:10.5px; color:var(--ink-soft); margin-top:4px;}
+
+/* ---- Coin balance chip ---- */
+.coinchip{display:flex; align-items:center; gap:8px; background:#fff; border-radius:14px; box-shadow:var(--shadow); padding:12px 16px; margin:0 14px 14px;}
+.coinchip .n{font-weight:800; color:var(--gold); font-size:18px;}
+
+/* ---- Star rating selector ---- */
+.starpick{display:flex; gap:4px; margin:8px 0;}
+.starpick span{font-size:24px; cursor:pointer; color:var(--line);}
+.starpick span.on{color:var(--gold);}
+.comment-item .stars{color:var(--gold); font-size:12px; margin:2px 0;}
+
+/* ---- Order detail: status timeline ---- */
+.status-track{display:flex; padding:16px 6px; margin-bottom:8px;}
+.status-track .step{flex:1; text-align:center; position:relative;}
+.status-track .step .dot{width:22px; height:22px; border-radius:50%; background:var(--line); color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; margin:0 auto 6px; position:relative; z-index:1;}
+.status-track .step.done .dot{background:var(--ok);}
+.status-track .step::after{content:''; position:absolute; top:11px; left:-50%; width:100%; height:2px; background:var(--line); z-index:0;}
+.status-track .step:first-child::after{display:none;}
+.status-track .step.done::after{background:var(--ok);}
+.status-track .step .lbl{font-size:10px; color:var(--ink-soft);}
+.od-item{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--line);}
+.od-item img{width:52px; height:52px; border-radius:10px; object-fit:cover; background:var(--gold-light);}
+.od-coupon-card{border:1.5px dashed var(--gold); border-radius:12px; padding:12px 14px; margin-bottom:10px; background:var(--gold-light);}
+.od-coupon-card.expired{opacity:.5; border-color:var(--line); background:var(--cream);}
+
 .hidden{display:none !important;}
 .empty{text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:13px;}
 .loader{text-align:center; padding:30px; color:var(--ink-soft); font-size:13px;}
@@ -296,6 +334,7 @@ nav.bottom .icon{font-size:19px;}
         <div class="brand-name" id="siteName">KhaiDee ຂາຍດີ</div>
         <div class="brand-sub" data-i18n="tagline">ຂາຍດີ ຊື້ງ່າຍ ໄດ້ໄວ</div>
       </div>
+      <button class="bell-btn" onclick="showNotifications()" aria-label="notifications">🔔<span class="notif-badge hidden" id="notifBadge">0</span></button>
       <div class="lang-switch">
         <button data-lang="lo" class="active">ລາວ</button>
         <button data-lang="th">ไทย</button>
@@ -403,6 +442,27 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-handle"></div>
   <div class="sheet-header"><h3>💬 ຕິດຕໍ່ແອດມິນ</h3><button class="closex" onclick="closeModal('modalContactAdmin')">✕</button></div>
   <div class="sheet-body" id="contactAdminBody"></div>
+</div></div>
+
+<!-- My Coupons wallet -->
+<div class="overlay" id="modalMyCoupons"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>🎟️ ບັດສ່ວນຫຼຸດຂອງຂ້ອຍ</h3><button class="closex" onclick="closeModal('modalMyCoupons')">✕</button></div>
+  <div class="sheet-body" id="myCouponsBody"></div>
+</div></div>
+
+<!-- Notifications (chat-style order & promo alerts) -->
+<div class="overlay" id="modalNotifications"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>🔔 ການແຈ້ງເຕືອນ</h3><button class="closex" onclick="closeModal('modalNotifications')">✕</button></div>
+  <div class="sheet-body" id="notificationsBody" style="padding:0;"></div>
+</div></div>
+
+<!-- Order detail (items, images, address, status timeline) -->
+<div class="overlay" id="modalOrderDetail"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>📦 ລາຍລະອຽດຄຳສັ່ງຊື້</h3><button class="closex" onclick="closeModal('modalOrderDetail')">✕</button></div>
+  <div class="sheet-body" id="orderDetailBody"></div>
 </div></div>
 
 <!-- Admin password gate -->
@@ -612,8 +672,16 @@ function onBannerScroll(){
 function onBannerTap(couponCode){
   if(couponCode) claimAdCoupon(couponCode);
 }
-// copies the coupon code to the clipboard and, if the cart already has items, pre-fills it at checkout
-function claimAdCoupon(code){
+// saves the coupon into the customer's coupon wallet (needs coupon_claim RPC) when logged in,
+// and always copies the code to the clipboard so it can be pasted at checkout right away
+async function claimAdCoupon(code){
+  if(STATE.customer){
+    try{ await sbRPC('coupon_claim', {p_customer_id: STATE.customer.id, p_code: code}); }
+    catch(e){ /* already claimed, expired, or RPC not set up yet — clipboard copy below still helps */ }
+  }
+  claimAdCouponLegacy(code);
+}
+function claimAdCouponLegacy(code){
   navigator.clipboard?.writeText(code).catch(()=>{});
   alert(`🎉 ຄັດລອກລະຫັດຄູປອງແລ້ວ: ${code}\nນຳໄປໃສ່ຕອນຊຳລະເງິນເພື່ອຮັບສ່ວນຫຼຸດ`);
 }
@@ -725,8 +793,10 @@ function openProduct(id){
       </div>
       <div id="pdTabReviews" class="hidden">
         <div id="pdCommentsList" style="margin:10px 0;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+        ${STATE.customer?`<div class="hint" style="margin-bottom:2px;">ໃຫ້ດາວ ແລະ ຂຽນລີວິວສິນຄ້າທີ່ທ່ານສັ່ງຊື້ ຮັບຫຼຽນສະສົມສູງສຸດ 5 ຫຼຽນ/ລີວິວ 🪙</div>`:''}
+        <div class="starpick" id="pdStarPick">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setPdRating(${n})">★</span>`).join('')}</div>
         <div class="field"><textarea id="pdNewComment" rows="2" placeholder="${STATE.customer?'ຂຽນຄວາມຄິດເຫັນກ່ຽວກັບສິນຄ້ານີ້...':'ເຂົ້າສູ່ລະບົບກ່ອນເພື່ອຂຽນຄວາມຄິດເຫັນ'}" ${STATE.customer?'':'disabled'}></textarea></div>
-        <button class="btn btn-ghost btn-sm" onclick="submitComment(${p.id})" ${STATE.customer?'':'disabled'}>ສົ່ງຄວາມຄິດເຫັນ</button>
+        <button class="btn btn-ghost btn-sm" onclick="submitComment(${p.id})" ${STATE.customer?'':'disabled'}>ສົ່ງລີວິວ ຮັບຫຼຽນ</button>
       </div>
 
       ${related.length?`<h4 style="font-size:13px; margin-top:20px;">ສິນຄ້າທີ່ກ່ຽວຂ້ອງ</h4>
@@ -759,13 +829,23 @@ function switchPdTab(tab){
   document.getElementById('pdTabDetails').classList.toggle('hidden', tab!=='details');
   document.getElementById('pdTabReviews').classList.toggle('hidden', tab!=='reviews');
 }
-/* ---- Comments (needs the product_comments table + RPCs — see Group F SQL notes) ---- */
+/* ---- Comments / reviews (needs the product_comments table + RPCs — see Group F SQL notes).
+   Reviews add a star rating and award coins server-side: coin_add = rating (1-5), capped at 5/review,
+   and should only be granted by the RPC when the customer actually purchased & received this product —
+   the client can't be trusted to enforce that, so comment_add/review RPC must check order history itself. ---- */
+let pdRating = 0;
+function setPdRating(n){
+  pdRating = n;
+  document.querySelectorAll('#pdStarPick span').forEach(s=> s.classList.toggle('on', Number(s.dataset.n)<=n));
+}
 async function loadComments(productId){
   const wrap = document.getElementById('pdCommentsList');
+  pdRating = 0;
+  document.querySelectorAll('#pdStarPick span').forEach(s=> s.classList.remove('on'));
   try{
     const list = await sbRPC('comment_list', {p_product_id: productId});
     wrap.innerHTML = !list.length ? '<div class="empty">ຍັງບໍ່ມີຄວາມຄິດເຫັນ ເປັນຄົນທຳອິດເລີຍ!</div>' :
-      list.map(c=>`<div class="comment-item"><div class="who">${c.customer_name||'ລູກຄ້າ'}</div><div class="txt">${c.comment}</div><div class="when">${new Date(c.created_at).toLocaleDateString('lo-LA')}</div></div>`).join('');
+      list.map(c=>`<div class="comment-item"><div class="who">${c.customer_name||'ລູກຄ້າ'}</div>${c.rating?`<div class="stars">${'★'.repeat(c.rating)}${'☆'.repeat(5-c.rating)}</div>`:''}<div class="txt">${c.comment}</div><div class="when">${new Date(c.created_at).toLocaleDateString('lo-LA')}</div></div>`).join('');
   }catch(e){
     wrap.innerHTML = '<div class="empty">ລະບົບຄວາມຄິດເຫັນຍັງບໍ່ພ້ອມໃຊ້ງານ</div>';
   }
@@ -773,12 +853,18 @@ async function loadComments(productId){
 async function submitComment(productId){
   if(!STATE.customer) return;
   const text = document.getElementById('pdNewComment').value.trim();
-  if(!text) return;
+  if(!text){ alert('ກະລຸນາຂຽນຄວາມຄິດເຫັນ'); return; }
+  if(!pdRating){ alert('ກະລຸນາໃຫ້ດາວກ່ອນ'); return; }
   try{
-    await sbRPC('comment_add', {p_customer_id: STATE.customer.id, p_product_id: productId, p_comment: text});
+    const res = await sbRPC('comment_add', {p_customer_id: STATE.customer.id, p_product_id: productId, p_comment: text, p_rating: pdRating});
     document.getElementById('pdNewComment').value = '';
+    if(res && res.coins_earned){
+      STATE.customer.coin_balance = Number(STATE.customer.coin_balance||0) + Number(res.coins_earned);
+      saveCustomer();
+      alert(`ຂອບໃຈສຳລັບລີວິວ! ໄດ້ຮັບ ${res.coins_earned} ຫຼຽນ 🪙`);
+    }
     loadComments(productId);
-  }catch(e){ alert('ສົ່ງຄວາມຄິດເຫັນບໍ່ສຳເລັດ: ' + e.message); }
+  }catch(e){ alert('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
 }
 function changeDetailQty(d){ detailQty = Math.max(1, detailQty+d); document.getElementById('detailQtyLabel').textContent = detailQty; }
 function quickAdd(id){ addToCart(id, 1); pulseCart(); }
@@ -856,7 +942,7 @@ async function doLogin(){
   try{
     const c = await sbRPC('customer_login', {p_identifier:id, p_password:pw});
     STATE.customer = c; saveCustomer(); closeModal('modalAuth');
-    renderAccount();
+    renderAccount(); refreshNotifBadge();
     if(window.__authSuccess) window.__authSuccess();
   }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ເບີ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>`; }
 }
@@ -869,11 +955,11 @@ async function doRegister(){
   try{
     const c = await sbRPC('customer_register', {p_phone:phone, p_email:email, p_password:pw, p_full_name:name});
     STATE.customer = c; saveCustomer(); closeModal('modalAuth');
-    renderAccount();
+    renderAccount(); refreshNotifBadge();
     if(window.__authSuccess) window.__authSuccess();
   }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ເບີໂທ ຫຼື ອີເມວນີ້ຖືກໃຊ້ແລ້ວ</div>`; }
 }
-function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); }
+function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); document.getElementById('notifBadge').classList.add('hidden'); }
 
 /* ============================================================ CHECKOUT ============================================================ */
 let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false};
@@ -1036,12 +1122,64 @@ async function showOrders(){
     const list = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
     if(!list.length){ document.getElementById('ordersBody').innerHTML = '<div class="empty">ຍັງບໍ່ມີຄຳສັ່ງຊື້</div>'; return; }
     document.getElementById('ordersBody').innerHTML = list.map(o=>`
-      <div class="admin-list-item">
+      <div class="admin-list-item" style="cursor:pointer;" onclick="openOrderDetail(${o.id})">
         <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${o.status}</span></div>
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         <div style="margin-top:6px; font-size:12.5px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
-        <div style="margin-top:6px; font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</div>
+        <div style="margin-top:6px; display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</span>
+          <span class="hint">ເບິ່ງລາຍລະອຽດ ›</span>
+        </div>
       </div>`).join('');
+  });
+}
+
+/* ============================================================ ORDER DETAIL (items + images + status timeline) ============================================================
+   Needs an order_detail_for_customer RPC returning: {order_number, status, created_at, total, subtotal,
+   shipping_fee, discount, address:{recipient_name,phone,village,district,province}, carrier_name,
+   items:[{product_name, image_url, qty, price}]}. Item images let the customer tap through to see exactly
+   what they ordered, same as the product photos shown on Shopee/Lazada order pages. */
+const ORDER_STATUS_STEPS = [
+  {key:'pending', ico:'🕐', lbl:'ລໍຖ້າ'},
+  {key:'confirmed', ico:'✅', lbl:'ຢືນຢັນ'},
+  {key:'shipping', ico:'🚚', lbl:'ກຳລັງສົ່ງ'},
+  {key:'delivered', ico:'📦', lbl:'ສຳເລັດ'}
+];
+async function openOrderDetail(orderId){
+  requireLogin(async ()=>{
+    openModal('modalOrderDetail');
+    const wrap = document.getElementById('orderDetailBody');
+    wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+    try{
+      const o = await sbRPC('order_detail_for_customer', {p_customer_id: STATE.customer.id, p_order_id: orderId});
+      const curIdx = o.status==='cancelled' ? -1 : ORDER_STATUS_STEPS.findIndex(s=>s.key===o.status);
+      const a = o.address || {};
+      wrap.innerHTML = `
+        <div class="top" style="display:flex; justify-content:space-between; align-items:center;">
+          <span class="title" style="font-weight:800;">#${o.order_number}</span>
+          <span class="status-pill status-${o.status}">${o.status}</span>
+        </div>
+        <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
+        ${o.status==='cancelled' ? '' : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
+          <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
+        <h4 style="font-size:13px; margin:14px 0 4px;">🛍️ ລາຍການສິນຄ້າ</h4>
+        ${(o.items||[]).map(i=>`
+          <div class="od-item" onclick="event.stopPropagation();">
+            <img src="${i.image_url||'https://placehold.co/60x60/F1DFAE/7A1E2B?text=KD'}" onclick="window.open('${i.image_url||''}','_blank')">
+            <div style="flex:1;">
+              <div style="font-size:13px; font-weight:600;">${i.product_name}</div>
+              <div class="hint">x${i.qty}</div>
+            </div>
+            <div style="font-weight:700; font-size:13px;">${fmtMoney(i.price)}</div>
+          </div>`).join('')}
+        <div class="sumrow" style="margin-top:10px;"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(o.subtotal)}</span></div>
+        <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${fmtMoney(o.shipping_fee)}</span></div>
+        ${o.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(o.discount)}</span></div>`:''}
+        <div class="sumrow total"><span>ຍອດລວມ</span><span>${fmtMoney(o.total)}</span></div>
+        <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
+        <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
+        ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}`;
+    }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດລາຍລະອຽດຄຳສັ່ງຊື້ໄດ້</div>'; }
   });
 }
 
@@ -1093,6 +1231,75 @@ async function submitTopup(){
   }catch(e){ alert('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
 }
 
+/* ============================================================ MY COUPONS WALLET ============================================================
+   Needs a coupon_list_for_customer RPC returning each claimed coupon joined with the coupons table:
+   {code, title, discount_type, discount_value, min_spend, free_shipping, expires_at, used} — see coupon_claim above. */
+async function showMyCoupons(){
+  requireLogin(async ()=>{
+    openModal('modalMyCoupons');
+    const wrap = document.getElementById('myCouponsBody');
+    wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+    try{
+      const list = await sbRPC('coupon_list_for_customer', {p_customer_id: STATE.customer.id});
+      wrap.innerHTML = !list.length ? '<div class="empty">ທ່ານຍັງບໍ່ມີບັດສ່ວນຫຼຸດ — ເກັບໄດ້ຈາກປ້າຍໂຄສະນາ ຫຼື ໂປຣໂມຊັ່ນຕ່າງໆ 🎟️</div>' :
+        list.map(c=>{
+          const expired = c.expires_at && new Date(c.expires_at) < new Date();
+          const desc = c.free_shipping ? 'ຟຣີຄ່າຂົນສົ່ງ' : (c.discount_type==='percent' ? `ຫຼຸດ ${c.discount_value}%` : `ຫຼຸດ ${fmtMoney(c.discount_value)}`);
+          return `<div class="od-coupon-card ${expired||c.used?'expired':''}">
+            <div style="font-weight:800; color:var(--maroon);">${c.title||c.code}</div>
+            <div class="hint" style="margin:2px 0;">${desc}${c.min_spend?` • ຊື້ຂັ້ນຕ່ຳ ${fmtMoney(c.min_spend)}`:''}</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
+              <span class="hint">${c.used?'ໃຊ້ແລ້ວ':expired?'ໝົດອາຍຸແລ້ວ':(c.expires_at?`ໝົດອາຍຸ ${new Date(c.expires_at).toLocaleDateString('lo-LA')}`:'ບໍ່ມີວັນໝົດອາຍຸ')}</span>
+              <code style="font-weight:700; letter-spacing:.5px;">${c.code}</code>
+            </div>
+          </div>`;
+        }).join('');
+    }catch(e){ wrap.innerHTML = '<div class="empty">ລະບົບບັດສ່ວນຫຼຸດຍັງບໍ່ພ້ອມໃຊ້ງານ</div>'; }
+  });
+}
+
+/* ============================================================ NOTIFICATIONS (chat-style order & promo alerts) ============================================================
+   Needs notification_list_for_customer, notification_mark_read, and notification_unread_count RPCs.
+   Each notification row: {id, type, title, body, image_url, order_id, is_read, created_at}. */
+async function refreshNotifBadge(){
+  if(!STATE.customer) return;
+  try{
+    const n = await sbRPC('notification_unread_count', {p_customer_id: STATE.customer.id});
+    const badge = document.getElementById('notifBadge');
+    const count = Number(n && n.count || n || 0);
+    badge.textContent = count>99?'99+':count;
+    badge.classList.toggle('hidden', count===0);
+  }catch(e){ /* RPC not set up yet — badge just stays hidden */ }
+}
+async function showNotifications(){
+  requireLogin(async ()=>{
+    openModal('modalNotifications');
+    const wrap = document.getElementById('notificationsBody');
+    wrap.innerHTML = '<div class="loader" style="padding:20px;">ກຳລັງໂຫລດ...</div>';
+    try{
+      const list = await sbRPC('notification_list_for_customer', {p_customer_id: STATE.customer.id});
+      wrap.innerHTML = !list.length ? '<div class="empty" style="padding:20px;">ຍັງບໍ່ມີການແຈ້ງເຕືອນ</div>' :
+        list.map(n=>`
+          <div class="notif-item ${n.is_read?'':'unread'}" onclick="openNotification(${n.id}, ${n.order_id||'null'})">
+            <div class="ico">${n.type==='order'?'📦':n.type==='promo'?'🎁':'🔔'}</div>
+            <div class="body">
+              <div class="title">${n.title}</div>
+              <div class="txt">${n.body||''}</div>
+              <div class="when">${new Date(n.created_at).toLocaleString('lo-LA')}</div>
+            </div>
+          </div>`).join('');
+    }catch(e){ wrap.innerHTML = '<div class="empty" style="padding:20px;">ລະບົບແຈ້ງເຕືອນຍັງບໍ່ພ້ອມໃຊ້ງານ</div>'; }
+  });
+}
+async function openNotification(id, orderId){
+  try{ await sbRPC('notification_mark_read', {p_customer_id: STATE.customer.id, p_notification_id: id}); }catch(e){}
+  refreshNotifBadge();
+  if(orderId){
+    closeModal('modalNotifications');
+    openOrderDetail(orderId);
+  }
+}
+
 /* ============================================================ ACCOUNT PAGE ============================================================ */
 function renderAccount(){
   const body = document.getElementById('accountBody');
@@ -1124,8 +1331,14 @@ function renderAccount(){
       <div><div class="hint">ກະເປົາເງິນ</div><div style="font-weight:800; color:var(--maroon); font-size:16px;">${fmtMoney(STATE.customer.wallet_balance)}</div></div>
       <button class="btn btn-gold btn-sm" onclick="showWallet()">ຈັດການ</button>
     </div>
+    <div class="coinchip">
+      <div style="flex:1;"><div class="hint">🪙 ຫຼຽນສະສົມ (ຈາກການລີວິວສິນຄ້າ)</div><div class="n">${Number(STATE.customer.coin_balance||0)} ຫຼຽນ</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="showMyCoupons()">ໃຊ້ຫຼຽນ/ຄູປອງ</button>
+    </div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px;">
       <div class="listrow" onclick="showOrders()"><span class="ico">📦</span><span class="t">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="showMyCoupons()"><span class="ico">🎟️</span><span class="t">ບັດສ່ວນຫຼຸດຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
+      <div class="listrow" onclick="showNotifications()"><span class="ico">🔔</span><span class="t">ການແຈ້ງເຕືອນ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="showFavorites()"><span class="ico">❤️</span><span class="t">ສິນຄ້າທີ່ມັກ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="openModal('modalAddress'); checkoutState.address=checkoutState.address||{}; renderAddressForm();"><span class="ico">📍</span><span class="t">ທີ່ຢູ່ຈັດສົ່ງ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="showEditProfile()"><span class="ico">✏️</span><span class="t">ແກ້ໄຂຂໍ້ມູນສ່ວນຕົວ</span><span class="arrow">›</span></div>
@@ -1751,6 +1964,10 @@ function hideSplash(){
     await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds()]);
     renderProducts();
     updateCartBadge();
+    if(STATE.customer){
+      refreshNotifBadge();
+      setInterval(refreshNotifBadge, 30000); // poll for new order/promo notifications, like Shopee/Lazada's chat badge
+    }
   }catch(e){ console.warn('init failed', e); }
   // keep the splash on screen for at least ~1.1s so the animation isn't a flicker,
   // even if data loaded faster than that
