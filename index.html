@@ -502,6 +502,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="sellers">🏪 ຜູ້ຂາຍ</button>
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
+    <button data-tab="banks">🏦 ທະນາຄານ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
     <button data-tab="ads">🖼️ ໂຄສະນາ</button>
     <button data-tab="settings">⚙️ ຕັ້ງຄ່າ</button>
@@ -1906,7 +1907,7 @@ function switchAdminTab(tab){
   document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups,
-    carriers:renderAdminCarriers, coupons:renderAdminCoupons, ads:renderAdminAds, settings:renderAdminSettings};
+    carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons, ads:renderAdminAds, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
 }
 async function renderAdminDashboard(){
@@ -2417,6 +2418,71 @@ function adminEditCarrier(id){
       base_fee:Number(document.getElementById('shFee').value),
       avg_delivery_days:Number(document.getElementById('shDays').value)||3}});
     overlay.remove(); renderAdminCarriers();
+  };
+}
+/* ---------- ຈັດການທະນາຄານ (ບັນຊີຮັບໂອນເງິນ) ---------- */
+let adminBanksList = [];
+async function renderAdminBanks(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{ adminBanksList = await sbRPC('admin_list_bank_accounts', {p_password: STATE.adminPassword}); }
+  catch(e){ body.innerHTML = `<div class="empty">ໂຫລດບໍ່ສຳເລັດ: ${e.message}</div>`; return; }
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditBank(null)">➕ ເພີ່ມທະນາຄານ</button>` +
+    (!adminBanksList.length ? '<div class="empty">ຍັງບໍ່ມີທະນາຄານ</div>' : adminBanksList.map(b=>`
+      <div class="tile" style="display:flex; align-items:center; gap:10px; padding:12px; margin-bottom:8px; cursor:pointer;" onclick="adminEditBank(${b.id})">
+        <div style="font-size:26px;">${b.logo_emoji||'🏦'}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-weight:800; font-size:13.5px;">${b.bank_name_en||b.bank_name} ${b.is_active?'<span style="color:var(--ok); font-size:11px;">● ເປີດໃຊ້ງານ</span>':'<span style="color:var(--ink-soft); font-size:11px;">● ປິດຢູ່</span>'}</div>
+          <div class="hint" style="margin-top:2px;">${b.bank_name}</div>
+          <div class="hint" style="margin-top:2px;">${b.account_number? ('ເລກບັນຊີ: '+b.account_number+(b.account_name?' • '+b.account_name:'')) : '⚠️ ຍັງບໍ່ໄດ້ໃສ່ເລກບັນຊີ'}</div>
+        </div>
+        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteBank(${b.id})">✕</button>
+      </div>`).join(''));
+}
+async function adminDeleteBank(id){
+  if(!confirm('ລຶບທະນາຄານນີ້?')) return;
+  try{ await sbRPC('admin_delete_bank_account', {p_password:STATE.adminPassword, p_bank_id:id}); renderAdminBanks(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+}
+function adminEditBank(id){
+  const b = id ? adminBanksList.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂ':'ເພີ່ມ'}ທະນາຄານ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ໄອຄອນ (emoji)</label><input id="bkIcon" value="${b.logo_emoji||'🏦'}"></div>
+    <div class="field"><label>ຊື່ທະນາຄານ (ພາສາລາວ)</label><input id="bkName" value="${b.bank_name||''}"></div>
+    <div class="field"><label>ຊື່ຫຍໍ້ (EN)</label><input id="bkNameEn" value="${b.bank_name_en||''}"></div>
+    <div class="field"><label>ຊື່ບັນຊີ</label><input id="bkAccName" value="${b.account_name||''}" placeholder="ຊື່ເຈົ້າຂອງບັນຊີ"></div>
+    <div class="field"><label>ເລກບັນຊີ</label><input id="bkAccNum" value="${b.account_number||''}" placeholder="ເລກບັນຊີທະນາຄານ"></div>
+    ${b.qr_url?`<img src="${b.qr_url}" style="width:100px; height:100px; object-fit:cover; border-radius:10px; margin:6px 0; border:1px solid var(--line);">`:''}
+    <div class="field"><label>ອັບໂຫລດຮູບ QR (ຖ້າມີ)</label><input type="file" id="bkQrFile" accept="image/*"></div>
+    <div class="field"><label>ລຳດັບການສະແດງ (ຕົວເລກນ້ອຍ = ຢູ່ເທິງສຸດ)</label><input type="number" id="bkSort" value="${b.sort_order??999}"></div>
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="bkActive" ${b.is_active?'checked':''} style="width:18px; height:18px;">
+      <label style="margin:0;" for="bkActive">ເປີດໃຊ້ງານ (ໃຫ້ລູກຄ້າເຫັນ ແລະ ເລືອກໂອນເຂົ້າໄດ້)</label>
+    </div>
+    <button class="btn btn-primary" id="bkSave">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  overlay.querySelector('#bkSave').onclick=async()=>{
+    const saveBtn = overlay.querySelector('#bkSave'); saveBtn.disabled = true;
+    try{
+      let qrUrl = b.qr_url || null;
+      const file = document.getElementById('bkQrFile').files[0];
+      if(file){ qrUrl = await sbUpload('khaidee-products', `bank_qr_${Date.now()}_${file.name}`, file); }
+      await sbRPC('admin_upsert_bank_account', {p_password:STATE.adminPassword, p_bank:{
+        id:id||undefined,
+        bank_name:document.getElementById('bkName').value,
+        bank_name_en:document.getElementById('bkNameEn').value,
+        account_name:document.getElementById('bkAccName').value,
+        account_number:document.getElementById('bkAccNum').value,
+        logo_emoji:document.getElementById('bkIcon').value,
+        qr_url:qrUrl,
+        sort_order:Number(document.getElementById('bkSort').value)||999,
+        is_active:document.getElementById('bkActive').checked}});
+      overlay.remove(); renderAdminBanks();
+    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { saveBtn.disabled = false; }
   };
 }
 async function renderAdminCoupons(){
