@@ -1000,7 +1000,7 @@ function renderCheckout(){
       <label>🚚 ບໍລິສັດຂົນສົ່ງ</label>
       ${STATE.carriers.map(c=>`
         <div class="optcard ${checkoutState.carrier&&checkoutState.carrier.id===c.id?'selected':''}" onclick="selectCarrier(${c.id})">
-          <div class="ico">${c.logo}</div><div class="t">${c.name}</div><div class="p">${fmtMoney(c.base_fee)}</div>
+          <div class="ico">${c.logo}</div><div class="t">${c.name}<div class="hint" style="margin-top:2px;">ຄາດວ່າ ~${c.avg_delivery_days||3} ມື້</div></div><div class="p">${fmtMoney(c.base_fee)}</div>
         </div>`).join('')}
     </div>
     <div class="field">
@@ -1148,6 +1148,7 @@ function paintCustomerOrders(){
         <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span></div>
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         <div style="margin-top:6px; font-size:12.5px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
+        ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
         <div style="margin-top:6px; display:flex; align-items:center; justify-content:space-between;">
           <span style="font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</span>
           <span class="hint">ເບິ່ງລາຍລະອຽດ ›</span>
@@ -1195,6 +1196,19 @@ const ORDER_STATUS_STEPS = [
   {key:'shipping', ico:'🚚', lbl:'ກຳລັງສົ່ງ'},
   {key:'delivered', ico:'✅', lbl:'ສຳເລັດ'}
 ];
+// Rule-based ETA: order date + that carrier's average delivery days (set once per carrier
+// in the admin panel). This is NOT live GPS tracking — Lao couriers don't expose that via any
+// public API today — it's the same "estimated to arrive by ..." approach Shopee/Lazada use for
+// small couriers that don't have live tracking either. Matches by carrier_name since that's
+// what order_detail_for_customer/admin_list_orders already return.
+function estimateDeliveryDate(order){
+  if(!order.carrier_name || !order.created_at) return null;
+  const carrier = STATE.carriers.find(c=>c.name===order.carrier_name);
+  const days = carrier ? Number(carrier.avg_delivery_days||3) : 3;
+  const d = new Date(order.created_at);
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString('lo-LA', {day:'numeric', month:'long', year:'numeric'});
+}
 async function openOrderDetail(orderId){
   requireLogin(async ()=>{
     openModal('modalOrderDetail');
@@ -1212,6 +1226,7 @@ async function openOrderDetail(orderId){
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         ${o.status==='cancelled' ? '' : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
           <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
+        ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:8px; font-weight:600; color:var(--maroon);">📅 ຄາດວ່າຈະຮອດປະມານ ${estimateDeliveryDate(o)}</div>` : ''}
         <h4 style="font-size:13px; margin:14px 0 4px;">🛍️ ລາຍການສິນຄ້າ</h4>
         ${(o.items||[]).map(i=>`
           <div class="od-item" onclick="event.stopPropagation();">
@@ -1587,6 +1602,7 @@ function paintAdminOrders(){
       <div class="hint">${o.customer_name||'-'} • ${o.customer_phone||'-'}</div>
       <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
       <div style="font-size:12.5px; margin-top:6px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
+      ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
         ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${orderStatusLabel(s)}</option>`).join('')}
@@ -1933,7 +1949,7 @@ async function renderAdminCarriers(){
         <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCarrier(${c.id})">✕</button>
         <div class="tile-img" style="font-size:22px;">${c.logo}</div>
         <div class="tile-title">${c.name}</div>
-        <div class="tile-sub">${fmtMoney(c.base_fee)}</div>
+        <div class="tile-sub">${fmtMoney(c.base_fee)} • ~${c.avg_delivery_days||3} ມື້</div>
       </div>`).join('')}</div>`);
 }
 // Needs a new admin_delete_carrier RPC.
@@ -1950,6 +1966,7 @@ function adminEditCarrier(id){
     <div class="field"><label>ໄອຄອນ (emoji)</label><input id="shIcon" value="${c.logo||'🚚'}"></div>
     <div class="field"><label>ຊື່ບໍລິສັດ</label><input id="shName" value="${c.name||''}"></div>
     <div class="field"><label>ຄ່າຂົນສົ່ງພື້ນຖານ</label><input type="number" id="shFee" value="${c.base_fee||0}"></div>
+    <div class="field"><label>ຈຳນວນມື້ຂົນສົ່ງໂດຍສະເລ່ຍ (ໃຊ້ຄາດຄະເນມື້ຮອດ)</label><input type="number" id="shDays" min="1" value="${c.avg_delivery_days||3}"></div>
     <button class="btn btn-primary" id="shSave">ບັນທຶກ</button>
   </div></div>`;
   document.body.appendChild(overlay);
@@ -1957,7 +1974,8 @@ function adminEditCarrier(id){
   overlay.querySelector('#shSave').onclick=async()=>{
     await sbRPC('admin_upsert_carrier', {p_password:STATE.adminPassword, p_carrier:{
       id:id||undefined, logo:document.getElementById('shIcon').value, name:document.getElementById('shName').value,
-      base_fee:Number(document.getElementById('shFee').value)}});
+      base_fee:Number(document.getElementById('shFee').value),
+      avg_delivery_days:Number(document.getElementById('shDays').value)||3}});
     overlay.remove(); renderAdminCarriers();
   };
 }
