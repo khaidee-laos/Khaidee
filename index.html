@@ -106,6 +106,23 @@ header.top{
 
 /* ---------- BANNER ---------- */
 .banner{margin:0 14px 16px; border-radius:var(--r-lg); background:linear-gradient(120deg,var(--gold-light),#fff 70%); border:1px solid var(--gold); padding:16px; position:relative; overflow:hidden;}
+
+/* ---- Admin-managed banner carousel (replaces the static banner when ads exist) ---- */
+.banner-carousel{margin:0 14px 16px; border-radius:var(--r-lg); overflow:hidden; position:relative; box-shadow:var(--shadow);}
+.banner-carousel-track{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;}
+.banner-carousel-track::-webkit-scrollbar{display:none;}
+.banner-carousel-slide{flex:0 0 100%; scroll-snap-align:center; aspect-ratio:16/7; cursor:pointer;}
+.banner-carousel-slide img{width:100%; height:100%; object-fit:cover;}
+.banner-carousel-dots{position:absolute; bottom:8px; left:0; right:0; display:flex; justify-content:center; gap:5px;}
+.banner-carousel-dots span{width:5px; height:5px; border-radius:99px; background:rgba(255,255,255,.6);}
+.banner-carousel-dots span.active{background:#fff; width:14px; border-radius:99px;}
+
+/* ---- Popup ad (shown after splash, once per day) ---- */
+#adPopupOverlay .sheet{max-width:340px; padding:0; overflow:visible; background:transparent; box-shadow:none;}
+#adPopupOverlay .ad-card{background:#fff; border-radius:20px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.35);}
+#adPopupOverlay .ad-card img{width:100%; aspect-ratio:1/1; object-fit:cover; display:block;}
+#adPopupOverlay .ad-body{padding:16px; text-align:center;}
+#adPopupOverlay .ad-close{position:absolute; top:-14px; right:-6px; width:30px; height:30px; border-radius:50%; background:#fff; color:var(--ink); font-size:15px; box-shadow:0 3px 10px rgba(0,0,0,.3); z-index:2;}
 .banner h2{margin:0 0 4px; font-size:17px; color:var(--maroon-dark);}
 .banner p{margin:0; font-size:12px; color:var(--ink-soft);}
 .banner::after{content:"ຂາຍດີ"; position:absolute; right:-6px; bottom:-14px; font-size:52px; font-weight:900; color:rgba(122,30,43,.06);}
@@ -293,9 +310,11 @@ nav.bottom .icon{font-size:19px;}
 
   <div id="catrow" class="catrow"></div>
 
-  <div class="banner">
-    <h2 data-i18n="banner_title">🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ</h2>
-    <p data-i18n="banner_sub">ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ</p>
+  <div id="bannerWrap">
+    <div class="banner">
+      <h2 data-i18n="banner_title">🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ</h2>
+      <p data-i18n="banner_sub">ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ</p>
+    </div>
   </div>
 
   <div class="section-title"><h3 id="productSectionTitle">🛍️ ສິນຄ້າທັງໝົດ</h3></div>
@@ -412,6 +431,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
+    <button data-tab="ads">🖼️ ໂຄສະນາ</button>
     <button data-tab="settings">⚙️ ຕັ້ງຄ່າ</button>
   </div>
   <div class="admin-body" id="adminBody"></div>
@@ -558,6 +578,68 @@ async function loadSettings(){
     if(STATE.settings.theme_primary){ document.documentElement.style.setProperty('--maroon', STATE.settings.theme_primary); }
     if(STATE.settings.theme_accent){ document.documentElement.style.setProperty('--gold', STATE.settings.theme_accent); }
   }catch(e){ console.warn('settings load failed', e); }
+}
+
+/* ============================================================ ADS / PROMOTIONS ============================================================ */
+async function loadAds(){
+  try{
+    const [popupAds, bannerAds] = await Promise.all([
+      sbRPC('ads_list_active', {p_placement:'popup'}),
+      sbRPC('ads_list_active', {p_placement:'banner'})
+    ]);
+    STATE.ads = {popup: popupAds||[], banner: bannerAds||[]};
+  }catch(e){ STATE.ads = {popup:[], banner:[]}; } // ads system not set up yet — the app works fine without it
+  renderBannerCarousel();
+}
+function renderBannerCarousel(){
+  const wrap = document.getElementById('bannerWrap');
+  const ads = STATE.ads && STATE.ads.banner;
+  if(!ads || !ads.length) return; // keep the default static banner already in the markup
+  wrap.innerHTML = `
+    <div class="banner-carousel">
+      <div class="banner-carousel-track" id="bannerTrack" onscroll="onBannerScroll()">
+        ${ads.map(a=>`<div class="banner-carousel-slide" onclick="onBannerTap('${a.coupon_code||''}')"><img src="${a.image_url}" loading="lazy"></div>`).join('')}
+      </div>
+      ${ads.length>1?`<div class="banner-carousel-dots" id="bannerDots">${ads.map((_,i)=>`<span class="${i===0?'active':''}"></span>`).join('')}</div>`:''}
+    </div>`;
+}
+function onBannerScroll(){
+  const track = document.getElementById('bannerTrack'); const dots = document.getElementById('bannerDots');
+  if(!track || !dots) return;
+  const idx = Math.round(track.scrollLeft / track.clientWidth);
+  dots.querySelectorAll('span').forEach((d,i)=> d.classList.toggle('active', i===idx));
+}
+function onBannerTap(couponCode){
+  if(couponCode) claimAdCoupon(couponCode);
+}
+// copies the coupon code to the clipboard and, if the cart already has items, pre-fills it at checkout
+function claimAdCoupon(code){
+  navigator.clipboard?.writeText(code).catch(()=>{});
+  alert(`🎉 ຄັດລອກລະຫັດຄູປອງແລ້ວ: ${code}\nນຳໄປໃສ່ຕອນຊຳລະເງິນເພື່ອຮັບສ່ວນຫຼຸດ`);
+}
+// full-screen popup ad shown once per calendar day after the splash screen fades
+// (shows the highest-priority active popup ad — admins control order via sort_order)
+function maybeShowPopupAd(){
+  const ads = STATE.ads && STATE.ads.popup;
+  if(!ads || !ads.length) return;
+  const todayKey = 'kd_ad_seen_' + new Date().toISOString().slice(0,10);
+  if(localStorage.getItem(todayKey)) return;
+  localStorage.setItem(todayKey, '1');
+  const a = ads[0];
+  const overlay = document.createElement('div'); overlay.id='adPopupOverlay'; overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div style="position:relative;">
+    <button class="ad-close" data-close>✕</button>
+    <div class="ad-card">
+      <img src="${a.image_url}">
+      <div class="ad-body">
+        ${a.title?`<div style="font-size:15px; font-weight:800; color:var(--maroon);">${a.title}</div>`:''}
+        ${a.subtitle?`<div style="font-size:12.5px; color:var(--ink-soft); margin-top:4px;">${a.subtitle}</div>`:''}
+        ${a.coupon_code?`<button class="btn btn-primary" style="margin-top:12px;" onclick="claimAdCoupon('${a.coupon_code}')">🎁 ຮັບສ່ວນຫຼຸດ</button>`:''}
+      </div>
+    </div>
+  </div></div>`;
+  overlay.querySelector('[data-close]').onclick = ()=> overlay.remove();
+  document.body.appendChild(overlay);
 }
 async function loadCategories(){
   STATE.categories = await sbSelect('categories', 'select=*&order=sort_order.asc');
@@ -1193,7 +1275,7 @@ function switchAdminTab(tab){
   document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, topups:renderAdminTopups,
-    carriers:renderAdminCarriers, coupons:renderAdminCoupons, settings:renderAdminSettings};
+    carriers:renderAdminCarriers, coupons:renderAdminCoupons, ads:renderAdminAds, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
 }
 async function renderAdminDashboard(){
@@ -1486,6 +1568,94 @@ function adminEditCoupon(){
     overlay.remove(); alert('ສ້າງຄູປອງແລ້ວ');
   };
 }
+async function renderAdminAds(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  let list = [];
+  try{ list = await sbRPC('admin_list_ads', {p_password: STATE.adminPassword}); }
+  catch(e){ body.innerHTML = `<div class="empty">ຍັງເປີດໃຊ້ບໍ່ໄດ້ — ກະລຸນາລັນ SQL setup (supabase_setup_ads.sql) ກ່ອນ</div>`; return; }
+  STATE.adminAdsCache = list;
+  const popupAds = list.filter(a=>a.placement==='popup');
+  const bannerAds = list.filter(a=>a.placement==='banner');
+  const section = (title, hint, items)=> `
+    <h4 style="font-size:13px; margin:18px 0 2px;">${title}</h4>
+    <div class="hint" style="margin-top:0;">${hint}</div>
+    ${!items.length ? '<div class="empty" style="padding:20px 0;">ຍັງບໍ່ມີ</div>' : items.map(a=>`
+      <div class="admin-list-item">
+        <div style="display:flex; gap:10px;">
+          <img src="${a.image_url}" style="width:64px; height:64px; object-fit:cover; border-radius:8px; flex-shrink:0;">
+          <div style="min-width:0; flex:1;">
+            <div class="top"><span class="title">${a.title||'(ບໍ່ມີຫົວຂໍ້)'}</span>${a.is_active?'':'<span class="status-pill status-cancelled">ປິດ</span>'}</div>
+            <div class="hint">${a.subtitle||''}</div>
+            ${a.coupon_code?`<div class="hint">🎟️ ${a.coupon_code}</div>`:''}
+          </div>
+        </div>
+        <div class="chiprow">
+          <button onclick="adminEditAd(${a.id})">✏️ ແກ້ໄຂ</button>
+          <button onclick="adminDeleteAd(${a.id})">🗑️ ລຶບ</button>
+        </div>
+      </div>`).join('')}`;
+  body.innerHTML = `
+    <button class="btn btn-gold" style="margin-bottom:6px;" onclick="adminEditAd()">➕ ເພີ່ມໂຄສະນາ</button>
+    ${section('🎉 ໂຄສະນາປັອບອັບ (ຕອນເປີດແອັບຄັ້ງທຳອິດ)', 'ຂຶ້ນສະແດງ 1 ຄັ້ງຕໍ່ວັນ ຫຼັງຈາກເປີດແອັບ', popupAds)}
+    ${section('🖼️ ແບນເນີໜ້າຫຼັກ (ສະໄລ້)', 'ສະແດງແທນແບນເນີໂປຣໂມຊັ່ນປົກກະຕິຢູ່ໜ້າຫຼັກ', bannerAds)}`;
+}
+function adminEditAd(id){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  const existing = id ? (STATE.adminAdsCache||[]).find(a=>a.id===id) : null;
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂ':'ເພີ່ມ'}ໂຄສະນາ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ຕຳແໜ່ງສະແດງ</label>
+      <select id="adPlacement">
+        <option value="popup">🎉 ປັອບອັບ (ຕອນເປີດແອັບ)</option>
+        <option value="banner">🖼️ ແບນເນີໜ້າຫຼັກ</option>
+      </select>
+    </div>
+    <div class="field"><label>ຮູບພາບ</label><input type="file" id="adImageFile" accept="image/*"></div>
+    <div id="adImagePreview" style="margin:8px 0;"></div>
+    <div class="field"><label>ຫົວຂໍ້</label><input id="adTitle" placeholder="ຕົວຢ່າງ: ຫຼຸດ 20% ທຸກລາຍການ!"></div>
+    <div class="field"><label>ຄຳອະທິບາຍສັ້ນ</label><input id="adSubtitle"></div>
+    <div class="field"><label>ລະຫັດຄູປອງ (ຖ້າມີ — ຈະຂຶ້ນປຸ່ມ "ຮັບສ່ວນຫຼຸດ")</label><input id="adCoupon" placeholder="ຕົວຢ່າງ: KHAIDEE10"></div>
+    <div class="row2">
+      <div class="field"><label>ລຳດັບສະແດງ</label><input type="number" id="adSort" value="0"></div>
+      <div class="field"><label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="adActive" checked style="width:auto;"> ເປີດໃຊ້ງານ</label></div>
+    </div>
+    <button class="btn btn-primary" id="adSaveBtn">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  let pendingImageUrl = '';
+  if(existing){
+    document.getElementById('adPlacement').value = existing.placement;
+    document.getElementById('adTitle').value = existing.title||'';
+    document.getElementById('adSubtitle').value = existing.subtitle||'';
+    document.getElementById('adCoupon').value = existing.coupon_code||'';
+    document.getElementById('adSort').value = existing.sort_order||0;
+    document.getElementById('adActive').checked = existing.is_active;
+    pendingImageUrl = existing.image_url;
+    document.getElementById('adImagePreview').innerHTML = `<img src="${existing.image_url}" style="width:100px; border-radius:8px;">`;
+  }
+  overlay.querySelector('#adSaveBtn').onclick = async ()=>{
+    const btn = overlay.querySelector('#adSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    try{
+      const file = document.getElementById('adImageFile').files[0];
+      if(file){ pendingImageUrl = await sbUpload('khaidee-products', `ad_${Date.now()}_${file.name}`, file); }
+      if(!pendingImageUrl){ alert('ກະລຸນາອັບໂຫລດຮູບພາບ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+      await sbRPC('admin_upsert_ad', {p_password: STATE.adminPassword, p_ad: {
+        id: id||null, placement: document.getElementById('adPlacement').value,
+        image_url: pendingImageUrl, title: document.getElementById('adTitle').value,
+        subtitle: document.getElementById('adSubtitle').value, coupon_code: document.getElementById('adCoupon').value,
+        sort_order: Number(document.getElementById('adSort').value)||0, is_active: document.getElementById('adActive').checked
+      }});
+      overlay.remove(); renderAdminAds();
+    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+  };
+}
+async function adminDeleteAd(id){
+  if(!confirm('ລຶບໂຄສະນານີ້?')) return;
+  try{ await sbRPC('admin_delete_ad', {p_password: STATE.adminPassword, p_ad_id: id}); renderAdminAds(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+}
 async function renderAdminSettings(){
   const body = document.getElementById('adminBody');
   body.innerHTML = `
@@ -1570,6 +1740,7 @@ async function renderAdminSettings(){
 function hideSplash(){
   const splash = document.getElementById('splashScreen');
   if(splash){ splash.classList.add('fade-out'); setTimeout(()=>splash.remove(), 550); }
+  setTimeout(maybeShowPopupAd, 600); // let the splash finish fading before the promo popup appears
 }
 (async function init(){
   const splashStart = Date.now();
@@ -1577,7 +1748,7 @@ function hideSplash(){
   try{
     await loadSettings();
     if(STATE.settings.logo_url){ document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`; }
-    await Promise.all([loadCategories(), loadProducts(), loadCarriers()]);
+    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds()]);
     renderProducts();
     updateCartBadge();
   }catch(e){ console.warn('init failed', e); }
