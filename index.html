@@ -551,6 +551,54 @@ async function sbUpload(bucket, path, file){
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
 
+/* ============================================================ RAPID-TAP GUARD ============================================================
+   Fixes the "spammed the button and it sent multiple requests" bug. Disabling the button alone
+   isn't fully reliable on fast repeat taps (the browser can queue a second click before the
+   disable takes effect), so this adds a plain JS flag check — a Set lookup is synchronous and
+   happens before any async work starts, so the 2nd/3rd/4th tap while one is already in flight is
+   dropped immediately no matter how fast the taps are. Wrap any "submit"-style handler with it:
+     onguard('topup', async () => { ...the actual work... });
+*/
+const _inFlightActions = new Set();
+async function onGuard(key, fn){
+  if(_inFlightActions.has(key)) return; // already running — ignore this extra tap
+  _inFlightActions.add(key);
+  try{ await fn(); } finally{ _inFlightActions.delete(key); }
+}
+
+/* ============================================================ UI SOUND FEEDBACK ============================================================
+   Short synthesized chimes via the Web Audio API — no external audio files to host/cache,
+   works offline, and there's nothing for the service worker to fetch/cache-bust. */
+let _audioCtx = null;
+function _getAudioCtx(){
+  try{
+    if(!_audioCtx) _audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(_audioCtx.state==='suspended') _audioCtx.resume().catch(()=>{});
+    return _audioCtx;
+  }catch(e){ return null; }
+}
+function _tone(ctx, freq, startTime, duration, gain){
+  const osc = ctx.createOscillator(), g = ctx.createGain();
+  osc.type = 'sine'; osc.frequency.value = freq;
+  g.gain.setValueAtTime(0, startTime);
+  g.gain.linearRampToValueAtTime(gain, startTime+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, startTime+duration);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(startTime); osc.stop(startTime+duration);
+}
+function playSuccessSound(){
+  const ctx = _getAudioCtx(); if(!ctx) return;
+  const t = ctx.currentTime;
+  _tone(ctx, 880, t, 0.12, 0.15);       // two quick rising notes — same pattern as a payment-app "done" chime
+  _tone(ctx, 1318.5, t+0.09, 0.18, 0.15);
+}
+function playErrorSound(){
+  const ctx = _getAudioCtx(); if(!ctx) return;
+  const t = ctx.currentTime;
+  _tone(ctx, 220, t, 0.2, 0.12);        // single low tone — distinct from success so they're never confused
+}
+
+
 /* ============================================================ i18n ============================================================ */
 const I18N = {
   lo:{tagline:'ຂາຍດີ ຊື້ງ່າຍ ໄດ້ໄວ', search_ph:'ຄົ້ນຫາສິນຄ້າ...', banner_title:'🔥 ໂປຣໂມຊັ່ນປະຈຳວັນ', banner_sub:'ສັ່ງເລີຍ ສົ່ງທົ່ວ ສປປ ລາວ',
@@ -949,27 +997,33 @@ function showAuth(mode, onSuccess){
   openModal('modalAuth');
 }
 async function doLogin(){
-  const id = document.getElementById('loginId').value.trim();
-  const pw = document.getElementById('loginPw').value;
-  try{
-    const c = await sbRPC('customer_login', {p_identifier:id, p_password:pw});
-    STATE.customer = c; saveCustomer(); closeModal('modalAuth');
-    renderAccount(); refreshNotifBadge();
-    if(window.__authSuccess) window.__authSuccess();
-  }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ເບີ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>`; }
+  onGuard('login', async ()=>{
+    const id = document.getElementById('loginId').value.trim();
+    const pw = document.getElementById('loginPw').value;
+    try{
+      const c = await sbRPC('customer_login', {p_identifier:id, p_password:pw});
+      STATE.customer = c; saveCustomer(); closeModal('modalAuth');
+      playSuccessSound();
+      renderAccount(); refreshNotifBadge();
+      if(window.__authSuccess) window.__authSuccess();
+    }catch(e){ playErrorSound(); document.getElementById('authErr').innerHTML = `<div class="err">ເບີ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>`; }
+  });
 }
 async function doRegister(){
-  const name = document.getElementById('regName').value.trim();
-  const phone = document.getElementById('regPhone').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
-  const pw = document.getElementById('regPw').value;
-  if(!name||!phone||!email||pw.length<6){ document.getElementById('authErr').innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
-  try{
-    const c = await sbRPC('customer_register', {p_phone:phone, p_email:email, p_password:pw, p_full_name:name});
-    STATE.customer = c; saveCustomer(); closeModal('modalAuth');
-    renderAccount(); refreshNotifBadge();
-    if(window.__authSuccess) window.__authSuccess();
-  }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ເບີໂທ ຫຼື ອີເມວນີ້ຖືກໃຊ້ແລ້ວ</div>`; }
+  onGuard('register', async ()=>{
+    const name = document.getElementById('regName').value.trim();
+    const phone = document.getElementById('regPhone').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
+    const pw = document.getElementById('regPw').value;
+    if(!name||!phone||!email||pw.length<6){ playErrorSound(); document.getElementById('authErr').innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
+    try{
+      const c = await sbRPC('customer_register', {p_phone:phone, p_email:email, p_password:pw, p_full_name:name});
+      STATE.customer = c; saveCustomer(); closeModal('modalAuth');
+      playSuccessSound();
+      renderAccount(); refreshNotifBadge();
+      if(window.__authSuccess) window.__authSuccess();
+    }catch(e){ playErrorSound(); document.getElementById('authErr').innerHTML = `<div class="err">ເບີໂທ ຫຼື ອີເມວນີ້ຖືກໃຊ້ແລ້ວ</div>`; }
+  });
 }
 function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); document.getElementById('notifBadge').classList.add('hidden'); }
 
@@ -1029,52 +1083,60 @@ function renderCheckout(){
 }
 function selectCarrier(id){ checkoutState.carrier = STATE.carriers.find(c=>c.id===id); renderCheckout(); }
 async function applyCoupon(){
-  const code = document.getElementById('couponCode').value.trim();
-  if(!code) return;
-  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
-  try{
-    const res = await sbRPC('coupon_validate', {p_code:code, p_subtotal:subtotal});
-    checkoutState.coupon = code;
-    checkoutState.freeShipping = !!res.free_shipping;
-    checkoutState.discount = Number(res.discount||0);
-    renderCheckout();
-  }catch(e){ document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
+  onGuard('coupon', async ()=>{
+    const code = document.getElementById('couponCode').value.trim();
+    if(!code) return;
+    const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+    try{
+      const res = await sbRPC('coupon_validate', {p_code:code, p_subtotal:subtotal});
+      checkoutState.coupon = code;
+      checkoutState.freeShipping = !!res.free_shipping;
+      checkoutState.discount = Number(res.discount||0);
+      playSuccessSound();
+      renderCheckout();
+    }catch(e){ playErrorSound(); document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
+  });
 }
 async function submitOrder(){
-  if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
-  const payment = document.getElementById('paymentMethod').value;
-  const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
-  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
-  const total = subtotal + shipping - (checkoutState.discount||0);
-  // block wallet checkout up-front when the balance can't cover the order — the RPC
-  // below should still re-check this server-side, this is just the friendly UX guard
-  if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
-    alert(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
-    return;
-  }
-  const btn = document.getElementById('submitOrderBtn');
-  if(btn){ btn.disabled = true; btn.textContent = 'ກຳລັງດຳເນີນການ...'; } // prevent double-submit / double-charge
-  try{
-    const res = await sbRPC('order_create', {
-      p_customer_id: STATE.customer.id,
-      p_items: STATE.cart.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty})),
-      p_address: checkoutState.address,
-      p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
-      p_shipping_fee: shipping,
-      p_payment_method: payment,
-      p_coupon_code: checkoutState.coupon
-    });
-    STATE.cart = []; saveCart();
-    closeModal('modalCheckout');
-    notifyWhatsApp(res.order_number, res.total);
-    alert(`ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
-    if(STATE.customer && res.wallet_balance!=null){ STATE.customer.wallet_balance = res.wallet_balance; saveCustomer(); }
-    loadProducts().then(renderProducts);
-  }catch(e){
-    alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
-  }finally{
-    if(btn){ btn.disabled = false; btn.textContent = '✅ ຢືນຢັນສັ່ງຊື້'; }
-  }
+  onGuard('order', async ()=>{
+    if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
+    const payment = document.getElementById('paymentMethod').value;
+    const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
+    const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+    const total = subtotal + shipping - (checkoutState.discount||0);
+    // block wallet checkout up-front when the balance can't cover the order — the RPC
+    // below should still re-check this server-side, this is just the friendly UX guard
+    if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
+      playErrorSound();
+      alert(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
+      return;
+    }
+    const btn = document.getElementById('submitOrderBtn');
+    if(btn){ btn.disabled = true; btn.textContent = 'ກຳລັງດຳເນີນການ...'; } // visual cue — onGuard() above is what actually blocks repeat taps / double-charge
+    try{
+      const res = await sbRPC('order_create', {
+        p_customer_id: STATE.customer.id,
+        p_items: STATE.cart.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty})),
+        p_address: checkoutState.address,
+        p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
+        p_shipping_fee: shipping,
+        p_payment_method: payment,
+        p_coupon_code: checkoutState.coupon
+      });
+      STATE.cart = []; saveCart();
+      closeModal('modalCheckout');
+      notifyWhatsApp(res.order_number, res.total);
+      playSuccessSound();
+      alert(`ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
+      if(STATE.customer && res.wallet_balance!=null){ STATE.customer.wallet_balance = res.wallet_balance; saveCustomer(); }
+      loadProducts().then(renderProducts);
+    }catch(e){
+      playErrorSound();
+      alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = '✅ ຢືນຢັນສັ່ງຊື້'; }
+    }
+  });
 }
 function notifyWhatsApp(orderNumber, total){
   const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
@@ -1282,18 +1344,21 @@ function showTopupForm(){
     <div class="hint">ແອດມິນຈະກວດສອບສະລິບ ແລະ ອະນຸມັດພາຍໃນບໍ່ດົນ — ຍອດຈະບໍ່ເຂົ້າກະເປົາທັນທີ ຈົນກວ່າຈະໄດ້ຮັບການອະນຸມັດ</div>`;
 }
 async function submitTopup(){
-  const amount = Number(document.getElementById('topupAmount').value);
-  const file = document.getElementById('topupSlip').files[0];
-  if(!amount || amount<=0){ alert('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
-  if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
-  const btn = document.getElementById('topupSubmitBtn');
-  btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...'; // prevent double-submit while uploading/creating the request
-  try{
-    const slipUrl = await sbUpload('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, file);
-    await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
-    alert('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
-    showWallet();
-  }catch(e){ alert('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
+  onGuard('topup', async ()=>{
+    const amount = Number(document.getElementById('topupAmount').value);
+    const file = document.getElementById('topupSlip').files[0];
+    if(!amount || amount<=0){ alert('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
+    if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
+    const btn = document.getElementById('topupSubmitBtn');
+    btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...'; // visual cue — the onGuard() call above is what actually blocks repeat taps
+    try{
+      const slipUrl = await sbUpload('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, file);
+      await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
+      playSuccessSound();
+      alert('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
+      showWallet();
+    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
+  });
 }
 
 /* ============================================================ MY COUPONS WALLET ============================================================
@@ -1610,23 +1675,28 @@ function paintAdminOrders(){
     </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີໃນໝວດນີ້</div>');
 }
 async function adminSetOrderStatus(id, status){
-  await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status});
-  renderAdminOrders();
+  onGuard('order-status-'+id, async ()=>{
+    try{ await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status}); playSuccessSound(); renderAdminOrders(); }
+    catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+  });
 }
 // Needs a new admin_delete_order RPC (SECURITY DEFINER) that removes the order + its
 // order_items after checking p_password. Consider only allowing this for cancelled/old
 // test orders — deleting real order history can break reporting/accounting.
 async function adminDeleteOrder(id){
   if(!confirm('ລຶບອໍເດີນີ້ຖາວອນ? ຂໍ້ມູນຈະຫາຍໄປທັງໝົດ')) return;
-  try{
-    await sbRPC('admin_delete_order', {p_password:STATE.adminPassword, p_order_id:id});
-    adminOrdersList = adminOrdersList.filter(o=>o.id!==id); // drop it locally right away so it can't appear "stuck"
-    paintAdminOrders();
-    // then re-sync with the server — if the row is still there after this, the delete RPC
-    // itself isn't removing it server-side (see comment above) and needs to be fixed in Supabase.
-    renderAdminOrders();
-  }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  onGuard('delete-order-'+id, async ()=>{
+    try{
+      await sbRPC('admin_delete_order', {p_password:STATE.adminPassword, p_order_id:id});
+      adminOrdersList = adminOrdersList.filter(o=>o.id!==id); // drop it locally right away so it can't appear "stuck"
+      paintAdminOrders();
+      playSuccessSound();
+      // then re-sync with the server — if the row is still there after this, the delete RPC
+      // itself isn't removing it server-side (see comment above) and needs to be fixed in Supabase.
+      renderAdminOrders();
+    }
+    catch(e){ playErrorSound(); alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  });
 }
 async function renderAdminProducts(){
   const body = document.getElementById('adminBody');
@@ -1823,8 +1893,13 @@ async function adminResetPw(id){
 async function adminAdjustWallet(id){
   const amt = prompt('ຈຳນວນເງິນ (ໃສ່ຕິດລົບເພື່ອຫັກເງິນ):');
   if(!amt) return;
-  await sbRPC('admin_adjust_wallet', {p_password:STATE.adminPassword, p_customer_id:id, p_amount:Number(amt), p_note:'ປັບໂດຍແອດມິນ'});
-  renderAdminCustomers();
+  onGuard('adjust-wallet-'+id, async ()=>{
+    try{
+      await sbRPC('admin_adjust_wallet', {p_password:STATE.adminPassword, p_customer_id:id, p_amount:Number(amt), p_note:'ປັບໂດຍແອດມິນ'});
+      playSuccessSound();
+      renderAdminCustomers();
+    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+  });
 }
 /* ============================================================ SELLERS (KYC approval queue)
    Backend requirements (SQL side, not in this file):
@@ -1936,9 +2011,14 @@ function adminViewTopup(id){
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
 }
 async function adminApproveTopup(id, approve){
-  await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve});
-  document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
-  renderAdminTopups();
+  onGuard('topup-approve-'+id, async ()=>{
+    try{
+      await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve});
+      playSuccessSound();
+      document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
+      renderAdminTopups();
+    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+  });
 }
 async function renderAdminCarriers(){
   const body = document.getElementById('adminBody');
