@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>KhaiDee Seller — ຮ້ານຄ້າຂອງຂ້ອຍ</title>
+<meta name="theme-color" content="#7A1E2B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="KhaiDee Seller">
+<style>
+:root{
+  --maroon:#7A1E2B; --maroon-dark:#5A1420; --gold:#D4A94C; --gold-light:#F1DFAE;
+  --cream:#FBF6EC; --ink:#2B1B14; --ink-soft:#7A6A5D; --line:#EADFCB;
+  --ok:#3C7A4B; --warn:#C97A2B; --danger:#B23A3A; --white:#fff;
+  --r-lg:18px; --r-md:12px; --r-sm:8px;
+  --shadow:0 6px 20px rgba(122,30,43,.10);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+body{margin:0; padding:0; font-family:'Noto Sans Lao','Noto Sans',system-ui,-apple-system,'Segoe UI',sans-serif; color:var(--ink);
+  padding-bottom:74px; background-color:var(--cream);
+  background-image:radial-gradient(circle at 100% 0%, rgba(212,169,76,.16), transparent 42%), radial-gradient(circle at 0% 100%, rgba(122,30,43,.08), transparent 40%);
+  background-repeat:no-repeat, no-repeat; min-height:100vh;}
+img{max-width:100%; display:block;}
+button{font-family:inherit; cursor:pointer;}
+.hidden{display:none !important;}
+
+/* ---- Splash ---- */
+#splashScreen{position:fixed; inset:0; background:linear-gradient(160deg,var(--maroon),var(--maroon-dark)); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:999; color:#fff;}
+#splashScreen .logo{width:96px; height:96px; border-radius:24px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:34px; margin-bottom:14px;}
+#splashScreen .tag{font-size:12px; opacity:.85; margin-top:6px; letter-spacing:.5px;}
+#splashScreen .badge{position:absolute; top:14px; right:14px; font-size:10px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); padding:4px 10px; border-radius:999px;}
+
+/* ---- Header ---- */
+header.top{background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); padding:14px 16px 12px; color:#fff; position:sticky; top:0; z-index:40;}
+.brandrow{display:flex; align-items:center; gap:10px;}
+.brand-logo{width:36px; height:36px; border-radius:10px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:16px; flex-shrink:0;}
+.brand-name{font-size:15px; font-weight:800;}
+.brand-sub{font-size:10.5px; opacity:.85;}
+.seller-tag{margin-left:auto; font-size:9.5px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.35); padding:3px 9px; border-radius:999px; white-space:nowrap;}
+
+.page-topbar{padding:14px 16px 4px; font-size:15px; font-weight:800; display:flex; align-items:center; gap:6px;}
+
+/* ---- Cards / lists (reused KhaiDee admin look) ---- */
+.stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px;}
+.stat-card{background:#fff; border-radius:14px; padding:14px; box-shadow:var(--shadow);}
+.stat-card .n{font-size:20px; font-weight:800; color:var(--maroon);}
+.stat-card .l{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+.admin-list-item{background:#fff; border-radius:12px; padding:12px 14px; margin:0 14px 10px; box-shadow:var(--shadow);}
+.admin-list-item .top{display:flex; justify-content:space-between; align-items:center;}
+.admin-list-item .title{font-weight:700; font-size:13.5px;}
+.hint{font-size:11.5px; color:var(--ink-soft); margin:2px 0;}
+.status-pill{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px; background:var(--gold-light); color:var(--maroon-dark);}
+.status-delivered{background:#E9F5EC; color:var(--ok);}
+.status-cancelled{background:#FBEAEA; color:var(--danger);}
+.status-shipping{background:#FFF3E0; color:var(--warn);}
+.chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
+.chiprow button{font-size:10.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
+.chiprow button.active{background:var(--maroon); color:#fff; border-color:var(--maroon); font-weight:700;}
+.empty,.loader{text-align:center; color:var(--ink-soft); font-size:13px; padding:30px 10px;}
+
+/* ---- Forms ---- */
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; font-weight:600;}
+.field input, .field select, .field textarea{width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:var(--r-sm); font-size:13.5px; font-family:inherit; background:#fff; color:var(--ink);}
+.field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--maroon);}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.btn{display:block; width:100%; text-align:center; padding:13px; border-radius:999px; border:none; font-weight:700; font-size:14.5px;}
+.btn-primary{background:var(--maroon); color:#fff;}
+.btn-gold{background:var(--gold); color:var(--maroon-dark);}
+.btn-ghost{background:#fff; border:1.5px solid var(--maroon); color:var(--maroon);}
+.btn-sm{padding:7px 12px; font-size:12px; border-radius:8px; width:auto; display:inline-block;}
+.err{background:#FBEAEA; color:var(--danger); padding:9px 12px; border-radius:8px; font-size:12.5px; margin-bottom:12px;}
+
+/* ---- Bottom nav ---- */
+nav.bottom{position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); display:flex; z-index:50; padding:6px 0 8px; box-shadow:0 -4px 16px rgba(0,0,0,.06);}
+nav.bottom button{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:2px; color:var(--ink-soft); font-size:10px; padding:4px 0;}
+nav.bottom button.active{color:var(--maroon); font-weight:700;}
+nav.bottom .icon{font-size:19px;}
+
+/* ---- Overlays / sheets (reused pattern) ---- */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:100; opacity:0; pointer-events:none; transition:opacity .2s;}
+.overlay.show{opacity:1; pointer-events:auto;}
+.overlay.center{align-items:center;}
+.sheet{background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; max-height:90vh; overflow-y:auto;}
+.overlay.center .sheet{border-radius:20px; max-height:85vh; margin:0 16px;}
+.sheet-header{display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--line);}
+.sheet-header h3{margin:0; font-size:15px;}
+.sheet-body{padding:16px;}
+.closex{background:var(--cream); border:none; width:30px; height:30px; border-radius:999px; font-size:15px; color:var(--ink-soft);}
+
+.fab{position:fixed; right:16px; bottom:80px; width:50px; height:50px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:22px; box-shadow:0 6px 16px rgba(122,30,43,.4); z-index:20;}
+
+/* ---- Login screen ---- */
+#authScreen{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;}
+#authScreen .logo{width:70px; height:70px; border-radius:18px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:26px; margin-bottom:12px;}
+#authScreen .card{width:100%; max-width:360px; background:#fff; border-radius:18px; padding:22px 20px; box-shadow:var(--shadow);}
+#authScreen h2{margin:0 0 4px; font-size:17px; text-align:center;}
+#authScreen .sub{text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:18px;}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splashScreen">
+  <span class="badge">SELLER</span>
+  <div class="logo">KD</div>
+  <div style="font-weight:800; font-size:16px;">KhaiDee Seller</div>
+  <div class="tag">ຈັດການຮ້ານຄ້າຂອງທ່ານ</div>
+</div>
+
+<!-- LOGIN / REGISTER (separate seller identity — not a customer, not the site admin) -->
+<div id="authScreen" class="hidden">
+  <div class="logo">KD</div>
+  <div class="card">
+    <h2 id="authScreenTitle">ເຂົ້າສູ່ລະບົບຮ້ານຄ້າ</h2>
+    <div class="sub">KhaiDee Seller — ສຳລັບຜູ້ຂາຍເທົ່ານັ້ນ</div>
+    <div id="authScreenErr"></div>
+    <div id="authScreenBody"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header class="top">
+    <div class="brandrow">
+      <div class="brand-logo">KD</div>
+      <div>
+        <div class="brand-name" id="storeNameLabel">ຮ້ານຄ້າ</div>
+        <div class="brand-sub">KhaiDee Seller</div>
+      </div>
+      <span class="seller-tag">🏪 SELLER ID</span>
+    </div>
+  </header>
+
+  <!-- PAGE: DASHBOARD -->
+  <div id="pageDashboard" class="apppage">
+    <div class="page-topbar">📊 ພາບລວມຮ້ານຄ້າ</div>
+    <div id="dashboardBody" class="stat-grid"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+  </div>
+
+  <!-- PAGE: PRODUCTS -->
+  <div id="pageProducts" class="apppage hidden">
+    <div class="page-topbar">🛍️ ສິນຄ້າຂອງຮ້ານ</div>
+    <div id="productsBody" style="padding-bottom:10px;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+  </div>
+
+  <!-- PAGE: ORDERS -->
+  <div id="pageOrders" class="apppage hidden">
+    <div class="page-topbar">📦 ອໍເດີທີ່ມີສິນຄ້າຂອງຂ້ອຍ</div>
+    <div id="ordersBody" style="padding-bottom:10px;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+  </div>
+
+  <!-- PAGE: ACCOUNT -->
+  <div id="pageAccount" class="apppage hidden">
+    <div class="page-topbar">👤 ບັນຊີຮ້ານຄ້າ</div>
+    <div id="accountBody"></div>
+  </div>
+
+  <nav class="bottom">
+    <button class="navbtn active" data-page="dashboard"><span class="icon">📊</span><span>ພາບລວມ</span></button>
+    <button class="navbtn" data-page="products"><span class="icon">🛍️</span><span>ສິນຄ້າ</span></button>
+    <button class="navbtn" data-page="orders"><span class="icon">📦</span><span>ອໍເດີ</span></button>
+    <button class="navbtn" data-page="account"><span class="icon">👤</span><span>ບັນຊີ</span></button>
+  </nav>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — same Supabase project as the main KhaiDee site, so the
+   seller app shares the same products/orders backend.
+   ============================================================ */
+const SUPABASE_URL = 'https://fzxetdumhymqkfisefnq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6eGV0ZHVtaHltcWtmaXNlZm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjA4OTUsImV4cCI6MjEwMTY5Njg5NX0.07r-mPOPD93_chRlmxIX7LfKU6U51TV0CUjCv2eZFhc';
+const REST = SUPABASE_URL + '/rest/v1';
+function sbHeaders(extra){ return Object.assign({'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'}, extra||{}); }
+async function sbSelect(table, query){ const r=await fetch(`${REST}/${table}?${query||'select=*'}`,{headers:sbHeaders()}); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+async function sbRPC(fn, body){
+  const r = await fetch(`${REST}/rpc/${fn}`,{method:'POST', headers:sbHeaders(), body:JSON.stringify(body||{})});
+  const data = await r.json().catch(()=>null);
+  if(!r.ok){ throw new Error((data&&(data.message||data.hint))||'error'); }
+  return data;
+}
+async function sbUpload(bucket, path, file){
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,{method:'POST', headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}, body:file});
+  if(!r.ok) throw new Error(await r.text());
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+function fmtMoney(n){ return '₭ ' + Number(n||0).toLocaleString('en-US'); }
+
+/* ============================================================ STATE — separate seller session, stored under its own key
+   so it never collides with the customer session on the main site. ============================================================ */
+let STATE = { seller: JSON.parse(localStorage.getItem('kd_seller')||'null'), categories: [], products: [] };
+function saveSeller(){ localStorage.setItem('kd_seller', JSON.stringify(STATE.seller)); }
+
+/* ============================================================ AUTH ============================================================ */
+function showAuthScreen(mode){
+  document.getElementById('authScreenTitle').textContent = mode==='login' ? 'ເຂົ້າສູ່ລະບົບຮ້ານຄ້າ' : 'ສະໝັກເປັນຜູ້ຂາຍ';
+  document.getElementById('authScreenErr').innerHTML = '';
+  const body = document.getElementById('authScreenBody');
+  if(mode==='login'){
+    body.innerHTML = `
+      <div class="field"><label>ເບີໂທ ຫຼື ອີເມວ</label><input id="sLoginId" placeholder="020XXXXXXXX ຫຼື email@example.com"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sLoginPw"></div>
+      <button class="btn btn-primary" onclick="doSellerLogin()">ເຂົ້າສູ່ລະບົບ</button>
+      <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີຮ້ານຄ້າ? <a href="#" id="toRegister">ສະໝັກຮ້ານຄ້າໃໝ່</a></div>`;
+    document.getElementById('toRegister').onclick = (e)=>{ e.preventDefault(); showAuthScreen('register'); };
+  }else{
+    body.innerHTML = `
+      <div class="field"><label>ຊື່ຮ້ານຄ້າ</label><input id="sRegStore" placeholder="ຮ້ານ..."></div>
+      <div class="field"><label>ເບີໂທ</label><input id="sRegPhone" placeholder="020XXXXXXXX"></div>
+      <div class="field"><label>ອີເມວ</label><input type="email" id="sRegEmail"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sRegPw"></div>
+      <button class="btn btn-primary" onclick="doSellerRegister()">ສະໝັກຮ້ານຄ້າ</button>
+      <div class="hint" style="text-align:center; margin-top:12px;">ມີບັນຊີແລ້ວ? <a href="#" id="toLogin">ເຂົ້າສູ່ລະບົບ</a></div>`;
+    document.getElementById('toLogin').onclick = (e)=>{ e.preventDefault(); showAuthScreen('login'); };
+  }
+}
+async function doSellerLogin(){
+  const id = document.getElementById('sLoginId').value.trim();
+  const pw = document.getElementById('sLoginPw').value;
+  try{
+    const s = await sbRPC('seller_login', {p_identifier:id, p_password:pw});
+    STATE.seller = s; saveSeller();
+    bootApp();
+  }catch(e){ document.getElementById('authScreenErr').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+async function doSellerRegister(){
+  const store = document.getElementById('sRegStore').value.trim();
+  const phone = document.getElementById('sRegPhone').value.trim();
+  const email = document.getElementById('sRegEmail').value.trim();
+  const pw = document.getElementById('sRegPw').value;
+  if(!store||!phone||pw.length<6){ document.getElementById('authScreenErr').innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
+  try{
+    const s = await sbRPC('seller_register', {p_store_name:store, p_phone:phone, p_email:email||null, p_password:pw});
+    STATE.seller = s; saveSeller();
+    bootApp();
+  }catch(e){ document.getElementById('authScreenErr').innerHTML = `<div class="err">${e.message}</div>`; }
+}
+function sellerLogout(){ STATE.seller = null; saveSeller(); location.reload(); }
+
+/* ============================================================ NAVIGATION ============================================================ */
+const PAGE_IDS = {dashboard:'pageDashboard', products:'pageProducts', orders:'pageOrders', account:'pageAccount'};
+function goPage(page){
+  Object.entries(PAGE_IDS).forEach(([key,id])=>{ document.getElementById(id).classList.toggle('hidden', key!==page); });
+  document.querySelectorAll('.navbtn').forEach(b=> b.classList.toggle('active', b.dataset.page===page));
+  if(page==='dashboard') renderDashboard();
+  else if(page==='products') renderProducts();
+  else if(page==='orders') renderOrders();
+  else if(page==='account') renderAccount();
+}
+document.querySelectorAll('.navbtn').forEach(b=> b.onclick = ()=> goPage(b.dataset.page));
+
+/* ============================================================ DASHBOARD ============================================================ */
+async function renderDashboard(){
+  const wrap = document.getElementById('dashboardBody');
+  wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{
+    const d = await sbRPC('seller_dashboard_stats', {p_seller_id: STATE.seller.id});
+    wrap.innerHTML = `
+      <div class="stat-card"><div class="n">${d.total_orders}</div><div class="l">ອໍເດີທັງໝົດ</div></div>
+      <div class="stat-card"><div class="n">${fmtMoney(d.total_revenue)}</div><div class="l">ຍອດຂາຍລວມ</div></div>
+      <div class="stat-card"><div class="n">${d.total_products}</div><div class="l">ສິນຄ້າທັງໝົດ</div></div>
+      <div class="stat-card"><div class="n">${d.pending_items}</div><div class="l">ລໍຖ້າດຳເນີນການ</div></div>`;
+  }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
+}
+
+/* ============================================================ PRODUCTS ============================================================ */
+async function loadCategoriesOnce(){
+  if(STATE.categories.length) return;
+  try{ STATE.categories = await sbSelect('categories', 'select=*&order=sort_order.asc'); }catch(e){ STATE.categories = []; }
+}
+async function renderProducts(){
+  await loadCategoriesOnce();
+  const wrap = document.getElementById('productsBody');
+  wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{
+    STATE.products = await sbRPC('seller_product_list', {p_seller_id: STATE.seller.id});
+    wrap.innerHTML = `<div style="padding:0 14px 12px;"><button class="btn btn-gold" onclick="editProduct(null)">➕ ເພີ່ມສິນຄ້າໃໝ່</button></div>` +
+      (!STATE.products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ — ເພີ່ມສິນຄ້າທຳອິດຂອງທ່ານ 🛍️</div>' :
+        STATE.products.map(p=>`
+        <div class="admin-list-item">
+          <div class="top"><span class="title">${p.name_lo}</span><span class="hint">${p.is_active?'ເປີດຂາຍ':'ປິດ'}</span></div>
+          <div class="hint">${fmtMoney(p.price)} • ຄົງເຫຼືອ ${p.stock} • ຂາຍ ${p.sold_count||0}</div>
+          <div class="chiprow"><button onclick="editProduct(${p.id})">✏️ ແກ້ໄຂ</button><button onclick="deleteProduct(${p.id})" style="color:var(--danger);">🗑️ ລຶບ</button></div>
+        </div>`).join(''));
+  }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດສິນຄ້າໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
+}
+function editProduct(id){
+  const p = id ? STATE.products.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂສິນຄ້າ':'ເພີ່ມສິນຄ້າ'}</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ໝວດໝູ່</label><select id="pCat">${STATE.categories.map(c=>`<option value="${c.id}" ${p.category_id===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
+    <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
+    <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
+    <div class="field"><label>ຊື່ (English)</label><input id="pNameEn" value="${p.name_en||''}"></div>
+    <div class="field"><label>ຄຳອະທິບາຍ</label><textarea id="pDesc" rows="3">${p.description||''}</textarea></div>
+    <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
+    <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
+    <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
+    <div class="field"><label>ຮູບພາບສິນຄ້າ</label><input type="file" id="pImageFiles" accept="image/*" multiple></div>
+    <div id="pImagePreview" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
+      ${(p.images||[]).map((url,i)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImg(${i})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join('')}
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px;"><input type="checkbox" id="pFeatured" ${p.is_featured?'checked':''}> ສິນຄ້າແນະນຳ</label>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px;"><input type="checkbox" id="pActive" ${p.is_active!==false?'checked':''}> ເປີດຂາຍ</label>
+    <button class="btn btn-primary" style="margin-top:14px;" id="pSaveBtn">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  let pendingImages = [...(p.images||[])];
+  window.removePImg = (i)=>{ pendingImages.splice(i,1); document.getElementById('pImagePreview').innerHTML = pendingImages.map((url,j)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImg(${j})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join(''); };
+  overlay.querySelector('#pSaveBtn').onclick = async ()=>{
+    const btn = overlay.querySelector('#pSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    try{
+      const imgFiles = document.getElementById('pImageFiles').files;
+      for(const file of imgFiles){
+        const url = await sbUpload('khaidee-products', `seller_${STATE.seller.id}_${Date.now()}_${file.name}`, file);
+        pendingImages.push(url);
+      }
+      const payload = {
+        id: id||undefined, category_id: Number(document.getElementById('pCat').value),
+        name_lo: document.getElementById('pNameLo').value, name_th: document.getElementById('pNameTh').value,
+        name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
+        price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
+        stock: Number(document.getElementById('pStock').value), images: pendingImages,
+        is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
+      };
+      await sbRPC('seller_product_upsert', {p_seller_id: STATE.seller.id, p_product: payload});
+      overlay.remove(); renderProducts();
+    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+  };
+}
+async function deleteProduct(id){
+  if(!confirm('ລຶບສິນຄ້ານີ້?')) return;
+  try{ await sbRPC('seller_product_delete', {p_seller_id: STATE.seller.id, p_product_id: id}); renderProducts(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+}
+
+/* ============================================================ ORDERS (order items belonging to this seller's products) ============================================================ */
+const SELLER_STATUSES = ['pending','confirmed','shipping','delivered','cancelled'];
+async function renderOrders(){
+  const wrap = document.getElementById('ordersBody');
+  wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{
+    const list = await sbRPC('seller_order_items_list', {p_seller_id: STATE.seller.id});
+    wrap.innerHTML = !list.length ? '<div class="empty">ຍັງບໍ່ມີອໍເດີສຳລັບສິນຄ້າຂອງທ່ານ</div>' :
+      list.map(i=>`
+        <div class="admin-list-item">
+          <div class="top"><span class="title">#${i.order_number}</span><span class="status-pill status-${i.seller_status}">${i.seller_status}</span></div>
+          <div class="hint">${new Date(i.order_created_at).toLocaleString('lo-LA')}</div>
+          <div style="display:flex; gap:10px; align-items:center; margin-top:6px;">
+            <img src="${i.image_url||'https://placehold.co/48x48/F1DFAE/7A1E2B?text=KD'}" style="width:44px; height:44px; border-radius:8px; object-fit:cover;">
+            <div style="flex:1;"><div style="font-size:13px; font-weight:600;">${i.product_name}</div><div class="hint">x${i.qty} • ${fmtMoney(i.price)}</div></div>
+          </div>
+          <div class="hint" style="margin-top:6px;">📍 ${i.recipient_name||'-'} • ${i.recipient_phone||'-'}</div>
+          <div class="chiprow">${SELLER_STATUSES.map(s=>`<button class="${s===i.seller_status?'active':''}" onclick="setItemStatus(${i.order_item_id},'${s}')">${s}</button>`).join('')}</div>
+        </div>`).join('');
+  }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດອໍເດີໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
+}
+async function setItemStatus(itemId, status){
+  try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: status}); renderOrders(); }
+  catch(e){ alert('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+}
+
+/* ============================================================ ACCOUNT ============================================================ */
+function renderAccount(){
+  const s = STATE.seller;
+  document.getElementById('accountBody').innerHTML = `
+    <div style="background:#fff; border-radius:14px; box-shadow:var(--shadow); margin:0 14px 16px; padding:16px; text-align:center;">
+      <div style="width:56px; height:56px; border-radius:50%; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:24px; margin:0 auto 8px;">🏪</div>
+      <div style="font-weight:800; font-size:15px;">${s.store_name}</div>
+      <div class="hint">${s.phone||''} ${s.email?'• '+s.email:''}</div>
+      <div class="hint">Seller ID: ${s.id.slice(0,8)}</div>
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px;">
+      <div class="field" style="padding:14px 14px 0;"><label>ຊື່ຮ້ານຄ້າ</label><input id="accStore" value="${s.store_name||''}"></div>
+      <div class="field" style="padding:0 14px;"><label>ເບີໂທ</label><input id="accPhone" value="${s.phone||''}"></div>
+      <div class="field" style="padding:0 14px;"><label>ອີເມວ</label><input id="accEmail" value="${s.email||''}"></div>
+      <div style="padding:0 14px 14px;"><button class="btn btn-primary" onclick="saveAccount()">ບັນທຶກ</button></div>
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
+      <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">ປ່ຽນລະຫັດຜ່ານ</label>
+      <div class="field" style="margin-top:8px;"><input type="password" id="accOldPw" placeholder="ລະຫັດຜ່ານເກົ່າ"></div>
+      <div class="field"><input type="password" id="accNewPw" placeholder="ລະຫັດຜ່ານໃໝ່"></div>
+      <button class="btn btn-ghost" onclick="changePw()">ປ່ຽນລະຫັດຜ່ານ</button>
+    </div>
+    <div style="padding:0 14px;"><button class="btn" style="background:#fff; border:1.5px solid var(--danger); color:var(--danger);" onclick="sellerLogout()">🚪 ອອກຈາກລະບົບ</button></div>`;
+}
+async function saveAccount(){
+  try{
+    await sbRPC('seller_update_profile', {p_seller_id: STATE.seller.id, p_store_name: document.getElementById('accStore').value,
+      p_phone: document.getElementById('accPhone').value, p_email: document.getElementById('accEmail').value, p_logo_url: null});
+    STATE.seller.store_name = document.getElementById('accStore').value;
+    STATE.seller.phone = document.getElementById('accPhone').value;
+    STATE.seller.email = document.getElementById('accEmail').value;
+    saveSeller(); document.getElementById('storeNameLabel').textContent = STATE.seller.store_name; renderAccount();
+    alert('ບັນທຶກແລ້ວ');
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function changePw(){
+  try{
+    await sbRPC('seller_change_password', {p_seller_id: STATE.seller.id, p_old: document.getElementById('accOldPw').value, p_new: document.getElementById('accNewPw').value});
+    alert('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+
+/* ============================================================ BOOT ============================================================ */
+function bootApp(){
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('storeNameLabel').textContent = STATE.seller.store_name || 'ຮ້ານຄ້າ';
+  goPage('dashboard');
+}
+(function init(){
+  setTimeout(()=>{
+    document.getElementById('splashScreen').classList.add('hidden');
+    if(STATE.seller){ bootApp(); }
+    else{ document.getElementById('authScreen').classList.remove('hidden'); showAuthScreen('login'); }
+  }, 900);
+})();
+</script>
+</body>
+</html>
