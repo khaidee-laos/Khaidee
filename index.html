@@ -688,7 +688,7 @@ document.querySelectorAll('.lang-switch button').forEach(b=>{
 
 /* ============================================================ STATE ============================================================ */
 let STATE = {
-  products: [], categories: [], carriers: [], settings: {},
+  products: [], categories: [], carriers: [], settings: {}, bankAccounts: [],
   activeCategory: null, cart: JSON.parse(localStorage.getItem('kd_cart')||'[]'),
   customer: JSON.parse(localStorage.getItem('kd_customer')||'null'),
   favorites: JSON.parse(localStorage.getItem('kd_favorites')||'[]'),
@@ -835,6 +835,12 @@ async function loadProducts(){
 }
 async function loadCarriers(){
   STATE.carriers = await sbSelect('shipping_carriers', 'select=*&order=sort_order.asc');
+}
+// Active Lao banks the customer can transfer to at checkout — only ones the admin has
+// switched on (is_active=true, filled in via Table Editor) come back, thanks to RLS.
+async function loadBankAccounts(){
+  try{ STATE.bankAccounts = await sbSelect('bank_accounts', 'select=*&is_active=eq.true&order=sort_order.asc'); }
+  catch(e){ STATE.bankAccounts = []; console.warn('loadBankAccounts failed', e); }
 }
 function renderProducts(){
   let list = STATE.products;
@@ -1078,11 +1084,11 @@ async function doRegister(){
 function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); document.getElementById('notifBadge').classList.add('hidden'); }
 
 /* ============================================================ CHECKOUT ============================================================ */
-let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false};
+let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false, bankAccountId:null};
 function startCheckout(){
   if(!STATE.cart.length) return;
   requireLogin(()=>{
-    checkoutState = {address:null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false};
+    checkoutState = {address:null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, bankAccountId:null};
     renderCheckout();
     openModal('modalCheckout');
   });
@@ -1124,7 +1130,7 @@ function renderCheckout(){
     ${checkoutState.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(checkoutState.discount)}</span></div>`:''}
     <div class="sumrow total"><span>ຍອດຊຳລະ</span><span>${fmtMoney(total)}</span></div>
     ${STATE.customer && Number(STATE.customer.wallet_balance||0) < total ? `<div class="hint" id="walletLowHint" style="display:none; color:var(--danger);">⚠️ ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ</div>`:''}
-    <button class="btn btn-primary" style="margin-top:10px;" id="submitOrderBtn" onclick="submitOrder()">✅ ຢືນຢັນສັ່ງຊື້</button>`;
+    <button class="btn btn-primary" style="margin-top:10px;" id="submitOrderBtn" onclick="proceedCheckout()">✅ ຢືນຢັນສັ່ງຊື້</button>`;
   const pmSelect = document.getElementById('paymentMethod');
   const lowHint = document.getElementById('walletLowHint');
   if(pmSelect && lowHint){
@@ -1147,23 +1153,104 @@ async function applyCoupon(){
     }catch(e){ playErrorSound(); document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
   });
 }
-async function submitOrder(){
+/* ---- Step 1 → Step 2 dispatcher ----
+   "ໂອນຜ່ານທະນາຄານ" needs proof of payment before the order is placed — same idea as the wallet
+   topup flow: show the QR + transfer instructions, make the slip upload mandatory, and only then
+   let the customer hit a second, real confirm button. This is what stops the old behaviour where
+   tapping "ຢືນຢັນສັ່ງຊື້" instantly said "ສັ່ງຊື້ສຳເລັດ!" and opened WhatsApp before any money had
+   actually moved. Wallet (balance already reserved server-side) and COD (nothing to pay yet) skip
+   straight through, same as before. */
+function proceedCheckout(){
+  if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
+  const payment = document.getElementById('paymentMethod').value;
+  const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
+  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const total = subtotal + shipping - (checkoutState.discount||0);
+  if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
+    playErrorSound();
+    alert(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
+    return;
+  }
+  if(payment==='transfer'){ renderTransferProofStep(total); return; }
+  submitOrder(payment, null);
+}
+/* ---- Step 2 (transfer only): pick a bank, see ITS QR + account, then attach the slip ----
+   Each row in public.bank_accounts (BCEL, LDB, JDB, LVB, ...) can carry its own QR image and
+   account number, so the customer transfers to whichever bank they actually use instead of a
+   single fixed account. Falls back to the old single wallet_qr_url/wallet_instructions if the
+   shop hasn't set up any bank in bank_accounts yet, so nothing breaks mid-upgrade. */
+function renderTransferProofStep(total){
+  const banks = STATE.bankAccounts || [];
+  const selectedId = checkoutState.bankAccountId;
+  const selected = banks.find(b=>b.id===selectedId);
+  const legacyQr = STATE.settings.wallet_qr_url;
+  const legacyInfo = STATE.settings.wallet_instructions;
+
+  const bankListHtml = banks.length ? `
+    <div class="field">
+      <label>🏦 ເລືອກທະນາຄານທີ່ຈະໂອນ</label>
+      ${banks.map(b=>`
+        <div class="optcard ${selectedId===b.id?'selected':''}" onclick="selectTransferBank(${b.id}, ${total})">
+          <div class="ico">${b.logo_emoji||'🏦'}</div>
+          <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
+          <div class="arrow">›</div>
+        </div>`).join('')}
+    </div>` : '';
+
+  const payInfoHtml = banks.length
+    ? (selected ? `<div class="optcard" style="flex-direction:column; align-items:flex-start; gap:8px;">
+        ${selected.qr_url?`<img src="${selected.qr_url}" style="width:160px; height:160px; object-fit:cover; border-radius:10px; align-self:center;">`:''}
+        <div class="hint">ຊື່ບັນຊີ: <b>${selected.account_name||'-'}</b></div>
+        <div class="hint">ເລກບັນຊີ: <b>${selected.account_number||'-'}</b></div>
+      </div>` : `<div class="hint">👆 ກະລຸນາເລືອກທະນາຄານທີ່ຈະໂອນເງິນກ່ອນ</div>`)
+    : (legacyQr || legacyInfo ? `<div class="optcard" style="flex-direction:column; align-items:flex-start; gap:8px;">
+        ${legacyQr?`<img src="${legacyQr}" style="width:160px; height:160px; object-fit:cover; border-radius:10px; align-self:center;">`:''}
+        ${legacyInfo?`<div class="hint" style="white-space:pre-wrap;">${legacyInfo}</div>`:''}
+      </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າ QR ຮັບເງິນ — ກະລຸນາຕິດຕໍ່ຮ້ານ</div>`);
+
+  const canSubmit = !banks.length || !!selected; // legacy shops (no bank_accounts rows yet) skip straight through
+
+  document.getElementById('checkoutBody').innerHTML = `
+    <div class="hint" style="cursor:pointer; margin-bottom:10px;" onclick="renderCheckout()">← ຍ້ອນກັບ ແກ້ໄຂຄຳສັ່ງຊື້</div>
+    <div class="field">
+      <label>💳 ໂອນຜ່ານທະນາຄານ</label>
+      <div class="sumrow total" style="margin-bottom:10px;"><span>ຍອດທີ່ຕ້ອງໂອນ</span><span>${fmtMoney(total)}</span></div>
+    </div>
+    ${bankListHtml}
+    <div class="field">${payInfoHtml}</div>
+    <div class="field"><label>ອັບໂຫລດສະລິບໂອນເງິນ (ຈຳເປັນ)</label><input type="file" id="orderSlip" accept="image/*"></div>
+    <button class="btn btn-primary" id="submitOrderBtn" ${canSubmit?'':'disabled'} onclick="submitOrder('transfer', true)">✅ ຢືນຢັນອີກຄັ້ງ — ສົ່ງໃຫ້ກວດສອບ</button>
+    <div class="hint" style="margin-top:8px;">ແອດມິນຈະກວດສອບສະລິບ ແລະ ຢືນຢັນຄຳສັ່ງຊື້ພາຍໃນບໍ່ດົນ — ອໍເດີຈະຄ້າງໄວ້ "ລໍຖ້າຢືນຢັນ" ຈົນກວ່າຈະໄດ້ຮັບການກວດສອບ</div>`;
+}
+function selectTransferBank(id, total){
+  checkoutState.bankAccountId = id;
+  renderTransferProofStep(total);
+}
+async function submitOrder(payment, needsSlip){
   onGuard('order', async ()=>{
-    if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
-    const payment = document.getElementById('paymentMethod').value;
     const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
     const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
     const total = subtotal + shipping - (checkoutState.discount||0);
-    // block wallet checkout up-front when the balance can't cover the order — the RPC
-    // below should still re-check this server-side, this is just the friendly UX guard
-    if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
-      playErrorSound();
-      alert(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
-      return;
-    }
     const btn = document.getElementById('submitOrderBtn');
-    if(btn){ btn.disabled = true; btn.textContent = 'ກຳລັງດຳເນີນການ...'; } // visual cue — onGuard() above is what actually blocks repeat taps / double-charge
+    let file = null;
+    if(needsSlip){
+      if((STATE.bankAccounts||[]).length && !checkoutState.bankAccountId){
+        alert('ກະລຸນາເລືອກທະນາຄານທີ່ໂອນເງິນເຂົ້າ'); return;
+      }
+      file = document.getElementById('orderSlip').files[0];
+      if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
+    }
+    if(btn){ btn.disabled = true; btn.textContent = needsSlip ? 'ກຳລັງບີບອັດຮູບ...' : 'ກຳລັງດຳເນີນການ...'; } // onGuard() above is what actually blocks repeat taps / double-charge
     try{
+      let slipUrl = null;
+      if(needsSlip){
+        const compressed = await compressImageFile(file);
+        btn.textContent = 'ກຳລັງອັບໂຫລດ... 0%';
+        slipUrl = await sbUploadWithProgress('khaidee-slips', `order_${STATE.customer.id}_${Date.now()}_${file.name}`, compressed, (pct)=>{
+          btn.textContent = `ກຳລັງອັບໂຫລດ... ${pct}%`;
+        });
+        btn.textContent = 'ກຳລັງບັນທຶກ...';
+      }
       const res = await sbRPC('order_create', {
         p_customer_id: STATE.customer.id,
         p_items: STATE.cart.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty})),
@@ -1171,26 +1258,31 @@ async function submitOrder(){
         p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
         p_shipping_fee: shipping,
         p_payment_method: payment,
-        p_coupon_code: checkoutState.coupon
+        p_coupon_code: checkoutState.coupon,
+        p_payment_slip_url: slipUrl,
+        p_bank_account_id: needsSlip ? checkoutState.bankAccountId : null
       });
       STATE.cart = []; saveCart();
       closeModal('modalCheckout');
-      notifyWhatsApp(res.order_number, res.total);
+      notifyWhatsApp(res.order_number, res.total, needsSlip);
       playSuccessSound();
-      alert(`ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
+      alert(needsSlip
+        ? `ສົ່ງຄຳສັ່ງຊື້ແລ້ວ! ເລກທີອໍເດີ: ${res.order_number}\nລໍຖ້າແອດມິນກວດສອບສະລິບໂອນເງິນ`
+        : `ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
       if(STATE.customer && res.wallet_balance!=null){ STATE.customer.wallet_balance = res.wallet_balance; saveCustomer(); }
       loadProducts().then(renderProducts);
     }catch(e){
       playErrorSound();
       alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
     }finally{
-      if(btn){ btn.disabled = false; btn.textContent = '✅ ຢືນຢັນສັ່ງຊື້'; }
+      if(btn){ btn.disabled = false; btn.textContent = needsSlip ? '✅ ຢືນຢັນອີກຄັ້ງ — ສົ່ງໃຫ້ກວດສອບ' : '✅ ຢືນຢັນສັ່ງຊື້'; }
     }
   });
 }
-function notifyWhatsApp(orderNumber, total){
+function notifyWhatsApp(orderNumber, total, pendingSlip){
   const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
-  const msg = encodeURIComponent(`🛍️ ອໍເດີໃໝ່ KhaiDee\nເລກທີ: ${orderNumber}\nຍອດລວມ: ${fmtMoney(total)}\nລູກຄ້າ: ${STATE.customer.full_name} (${STATE.customer.phone})`);
+  const bank = (STATE.bankAccounts||[]).find(b=>b.id===checkoutState.bankAccountId);
+  const msg = encodeURIComponent(`🛍️ ອໍເດີໃໝ່ KhaiDee\nເລກທີ: ${orderNumber}\nຍອດລວມ: ${fmtMoney(total)}\nລູກຄ້າ: ${STATE.customer.full_name} (${STATE.customer.phone})${bank ? `\n🏦 ໂອນຜ່ານ: ${bank.bank_name}${bank.bank_name_en?` (${bank.bank_name_en})`:''}` : ''}${pendingSlip ? '\n📎 ແນບສະລິບແລ້ວ — ລໍຖ້າກວດສອບ' : ''}`);
   window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
 }
 
@@ -1353,6 +1445,7 @@ async function openOrderDetail(orderId){
         <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${fmtMoney(o.shipping_fee)}</span></div>
         ${o.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(o.discount)}</span></div>`:''}
         <div class="sumrow total"><span>ຍອດລວມ</span><span>${fmtMoney(o.total)}</span></div>
+        ${o.payment_slip_url ? `<h4 style="font-size:13px; margin:16px 0 4px;">📎 ສະລິບໂອນເງິນທີ່ອັບໂຫລດ</h4><img src="${o.payment_slip_url}" style="width:140px; border-radius:10px; cursor:pointer;" onclick="window.open('${o.payment_slip_url}','_blank')">` : ''}
         <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
         <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
         ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}`;
@@ -1763,6 +1856,7 @@ function paintAdminOrders(){
       <div class="hint">${o.customer_name||'-'} • ${o.customer_phone||'-'}</div>
       <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
       <div style="font-size:12.5px; margin-top:6px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
+      ${o.payment_slip_url ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📎 ສະລິບໂອນເງິນ:</div><img src="${o.payment_slip_url}" onclick="window.open('${o.payment_slip_url}','_blank')" style="width:100px; height:100px; object-fit:cover; border-radius:8px; margin-top:4px; cursor:pointer; border:1px solid var(--line);">` : ''}
       ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
@@ -2413,7 +2507,7 @@ function hideSplash(){
   try{
     await loadSettings();
     if(STATE.settings.logo_url){ document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`; }
-    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds()]);
+    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts()]);
     renderProducts();
     updateCartBadge();
     if(STATE.customer){
