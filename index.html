@@ -488,6 +488,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="products">🛍️ ສິນຄ້າ</button>
     <button data-tab="categories">📂 ໝວດໝູ່</button>
     <button data-tab="customers">👥 ລູກຄ້າ</button>
+    <button data-tab="sellers">🏪 ຜູ້ຂາຍ</button>
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
@@ -1487,7 +1488,7 @@ document.querySelectorAll('#adminTabs button').forEach(b=> b.onclick = ()=> swit
 function switchAdminTab(tab){
   document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
-    categories:renderAdminCategories, customers:renderAdminCustomers, topups:renderAdminTopups,
+    categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups,
     carriers:renderAdminCarriers, coupons:renderAdminCoupons, ads:renderAdminAds, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
 }
@@ -1502,6 +1503,7 @@ async function renderAdminDashboard(){
     <div class="stat-card"><div class="n">${d.pending_orders}</div><div class="l">ອໍເດີລໍຖ້າ</div></div>
     <div class="stat-card"><div class="n">${d.pending_topups}</div><div class="l">ຄຳຂໍເຕີມເງິນ</div></div>
     <div class="stat-card"><div class="n">${d.low_stock}</div><div class="l">ສິນຄ້າໃກ້ໝົດ</div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="switchAdminTab('sellers')"><div class="n">${d.pending_sellers||0}</div><div class="l">ຄຳຂໍສະໝັກຜູ້ຂາຍໃໝ່</div></div>
   </div>
   <div class="hint">ເຄັດລັບ: ແຕະໄອຄອນ ⚙️ ໃນໜ້າບັນຊີ 3 ຄັ້ງຕິດກັນ ເພື່ອກັບເຂົ້າໜ້ານີ້ໄດ້ທຸກເທື່ອ.</div>`;
 }
@@ -1709,6 +1711,88 @@ async function adminAdjustWallet(id){
   await sbRPC('admin_adjust_wallet', {p_password:STATE.adminPassword, p_customer_id:id, p_amount:Number(amt), p_note:'ປັບໂດຍແອດມິນ'});
   renderAdminCustomers();
 }
+/* ============================================================ SELLERS (KYC approval queue)
+   Backend requirements (SQL side, not in this file):
+   - sellers table needs: status text ('pending'|'approved'|'rejected'|'suspended') default 'pending',
+     province, district, village, id_card_url, reject_reason, approved_at.
+   - seller_application_submit(p_store_name, p_phone, p_email, p_password, p_province, p_district,
+     p_village, p_id_card_url): INSERTs a seller with status='pending'. Must NOT return a usable session.
+   - seller_login(p_identifier, p_password): must only succeed when status='approved'; otherwise raise
+     an exception with a human-readable message (e.g. "ບັນຊີກຳລັງລໍຖ້າການກວດສອບ" / "ຄຳຂໍຖືກປະຕິເສດ").
+   - admin_list_sellers(p_password): admin-only, returns every seller row above plus id/created_at.
+   - admin_seller_approve(p_password, p_seller_id): sets status='approved', approved_at=now().
+   - admin_seller_reject(p_password, p_seller_id, p_reason): sets status='rejected', reject_reason.
+   - admin_seller_suspend / admin_seller_reactivate(p_password, p_seller_id): toggles status='suspended'/'approved'
+     for a seller who was already approved (e.g. policy violation), without deleting their data.
+   - admin_reset_seller_password(p_password, p_seller_id, p_new_password): admin-set password reset.
+   - Storage: khaidee-seller-kyc bucket should be PRIVATE (unlike khaidee-products) since it holds ID
+     card photos — restrict read access to the admin role via storage RLS. ============================================================ */
+STATE.adminSellers = STATE.adminSellers || [];
+STATE.adminSellerFilter = STATE.adminSellerFilter || 'pending';
+async function renderAdminSellers(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{
+    STATE.adminSellers = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword});
+    body.innerHTML = `<div class="chiprow" style="margin-bottom:10px;">
+      ${['pending','approved','suspended','rejected','all'].map(s=>`<button class="${STATE.adminSellerFilter===s?'active':''}" onclick="adminSellerFilterSet('${s}')">${{pending:'ລໍຖ້າກວດສອບ',approved:'ອະນຸມັດແລ້ວ',suspended:'ຖືກລະງັບ',rejected:'ປະຕິເສດ',all:'ທັງໝົດ'}[s]}</button>`).join('')}
+    </div>
+    <div id="adminSellerList"></div>`;
+    renderAdminSellerList();
+  }catch(e){ body.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນຜູ້ຂາຍໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
+}
+function adminSellerFilterSet(s){ STATE.adminSellerFilter = s; renderAdminSellers(); }
+function renderAdminSellerList(){
+  const wrap = document.getElementById('adminSellerList');
+  if(!wrap) return;
+  const f = STATE.adminSellerFilter;
+  const list = f==='all' ? STATE.adminSellers : STATE.adminSellers.filter(s=>s.status===f);
+  if(!list.length){ wrap.innerHTML = '<div class="empty">ບໍ່ມີລາຍການ 🏪</div>'; return; }
+  const statusClass = {pending:'status-pending', approved:'status-approved', rejected:'status-rejected', suspended:'status-shipping'};
+  const statusLabel = {pending:'ລໍຖ້າກວດສອບ', approved:'ອະນຸມັດແລ້ວ', rejected:'ປະຕິເສດ', suspended:'ຖືກລະງັບ'};
+  wrap.innerHTML = list.map(s=>`
+    <div class="admin-list-item">
+      <div class="top"><span class="title">${s.store_name}</span><span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span></div>
+      <div class="hint">${s.phone||'-'} • ${s.email||'-'}</div>
+      <div class="hint">📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')}</div>
+      <div class="hint">ສະໝັກເມື່ອ: ${s.created_at ? new Date(s.created_at).toLocaleString('lo-LA') : '-'}</div>
+      ${s.reject_reason ? `<div class="hint" style="color:var(--danger);">ເຫດຜົນປະຕິເສດ: ${s.reject_reason}</div>` : ''}
+      ${s.id_card_url ? `<img src="${s.id_card_url}" onclick="window.open('${s.id_card_url}','_blank')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); margin-top:8px; cursor:pointer;">` : ''}
+      <div class="chiprow">
+        ${s.status==='pending' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminRejectSeller('${s.id}')" style="color:var(--danger);">❌ ປະຕິເສດ</button>` : ''}
+        ${s.status==='approved' ? `<button onclick="adminSuspendSeller('${s.id}')" style="color:var(--warn);">🚫 ລະງັບ</button><button onclick="adminResetSellerPw('${s.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>` : ''}
+        ${s.status==='suspended' ? `<button onclick="adminReactivateSeller('${s.id}')" style="color:var(--ok);">✅ ເປີດຄືນ</button>` : ''}
+        ${s.status==='rejected' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+async function adminApproveSeller(id){
+  if(!confirm('ອະນຸມັດຜູ້ຂາຍນີ້? ຮ້ານຄ້ານີ້ຈະສາມາດເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້')) return;
+  try{ await sbRPC('admin_seller_approve', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
+  catch(e){ alert('ອະນຸມັດບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function adminRejectSeller(id){
+  const reason = prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຈະສະແດງໃຫ້ຜູ້ຂາຍເຫັນ):');
+  if(reason===null) return;
+  try{ await sbRPC('admin_seller_reject', {p_password: STATE.adminPassword, p_seller_id: id, p_reason: reason}); renderAdminSellers(); }
+  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function adminSuspendSeller(id){
+  if(!confirm('ລະງັບການຂາຍຂອງຮ້ານນີ້ຊົ່ວຄາວ?')) return;
+  try{ await sbRPC('admin_seller_suspend', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
+  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function adminReactivateSeller(id){
+  try{ await sbRPC('admin_seller_reactivate', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
+  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function adminResetSellerPw(id){
+  const pw = prompt('ຕັ້ງລະຫັດຜ່ານໃໝ່ໃຫ້ຜູ້ຂາຍ (ຢ່າງໜ້ອຍ 6 ໂຕ):');
+  if(!pw || pw.length<6) return;
+  try{ await sbRPC('admin_reset_seller_password', {p_password: STATE.adminPassword, p_seller_id: id, p_new_password: pw}); alert('ຣີເຊັດລະຫັດຜ່ານແລ້ວ'); }
+  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+
 async function renderAdminTopups(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';

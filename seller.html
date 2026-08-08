@@ -92,6 +92,15 @@ nav.bottom .icon{font-size:19px;}
 
 .fab{position:fixed; right:16px; bottom:80px; width:50px; height:50px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:22px; box-shadow:0 6px 16px rgba(122,30,43,.4); z-index:20;}
 
+/* ---- Seller application (KYC) ---- */
+.status-pending{background:var(--gold-light); color:var(--maroon-dark);}
+.status-approved{background:#E9F5EC; color:var(--ok);}
+.status-rejected{background:#FBEAEA; color:var(--danger);}
+.wa-connect-box{display:flex; align-items:center; gap:8px; margin:-4px 0 12px;}
+.wa-connect-box .hint{margin:0;}
+#sRegIdPreview img{width:100%; max-width:220px; border-radius:10px; border:1.5px solid var(--line); margin-top:6px;}
+.pending-icon{width:64px; height:64px; border-radius:50%; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:28px; margin:4px auto 14px;}
+
 /* ---- Login screen ---- */
 #authScreen{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;}
 #authScreen .logo{width:70px; height:70px; border-radius:18px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:26px; margin-bottom:12px;}
@@ -115,9 +124,10 @@ nav.bottom .icon{font-size:19px;}
   <div class="logo">KD</div>
   <div class="card">
     <h2 id="authScreenTitle">ເຂົ້າສູ່ລະບົບຮ້ານຄ້າ</h2>
-    <div class="sub">KhaiDee Seller — ສຳລັບຜູ້ຂາຍເທົ່ານັ້ນ</div>
+    <div class="sub" id="authScreenSub">KhaiDee Seller — ສຳລັບຜູ້ຂາຍເທົ່ານັ້ນ</div>
     <div id="authScreenErr"></div>
     <div id="authScreenBody"></div>
+    <div class="hint" style="text-align:center; margin-top:14px;">🔒 ບັນຊີຜູ້ຂາຍຈະສາມາດເປີດຂາຍໄດ້ກໍຕໍ່ເມື່ອແອດມິນກວດສອບ ແລະ ອະນຸມັດຄຳຂໍສະໝັກຂອງທ່ານແລ້ວເທົ່ານັ້ນ</div>
   </div>
 </div>
 
@@ -188,15 +198,36 @@ async function sbUpload(bucket, path, file){
   return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
 }
 function fmtMoney(n){ return '₭ ' + Number(n||0).toLocaleString('en-US'); }
+const WHATSAPP_FALLBACK = '8562054966168';
 
 /* ============================================================ STATE — separate seller session, stored under its own key
    so it never collides with the customer session on the main site. ============================================================ */
-let STATE = { seller: JSON.parse(localStorage.getItem('kd_seller')||'null'), categories: [], products: [] };
+let STATE = { seller: JSON.parse(localStorage.getItem('kd_seller')||'null'), categories: [], products: [], settings: {}, waConnected: false };
 function saveSeller(){ localStorage.setItem('kd_seller', JSON.stringify(STATE.seller)); }
+async function loadSettings(){
+  try{ const rows = await sbSelect('site_settings_public', 'select=*'); rows.forEach(r=> STATE.settings[r.key] = r.value); }catch(e){ /* ok if not set up yet */ }
+}
 
-/* ============================================================ AUTH ============================================================ */
+/* ---- Laos provinces / districts (same list used on the customer site's address form) ---- */
+const LAOS_PROVINCES = ['ນະຄອນຫຼວງວຽງຈັນ','ຜົ້ງສາລີ','ຫຼວງນໍ້າທາ','ບໍ່ແກ້ວ','ອຸດົມໄຊ','ໄຊຍະບູລີ','ຫຼວງພະບາງ','ຫົວພັນ','ຊຽງຂວາງ','ວຽງຈັນ','ບໍລິຄຳໄຊ','ຄຳມ່ວນ','ສະຫວັນນະເຂດ','ສາລະວັນ','ເຊກອງ','ຈຳປາສັກ','ອັດຕະປື','ໄຊສົມບູນ'];
+const DISTRICTS_BY_PROVINCE = [["Chanthabuly", "Sikhottabong", "Xaysetha", "Sisattanak", "Naxaithong", "Xaythany", "Hadxaifong", "Sangthong", "Mayparkngum"], ["Phongsaly", "May", "Khua", "Samphanh", "Boon Neua", "Nhot Ou", "Boontai"], ["Namtha", "Sing", "Long", "Viengphoukha", "Nalae"], ["Houixai", "Tonpheung", "Meung", "Pha Oudom", "Paktha", "Nam You"], ["Xay", "La", "Namor", "Nga", "Beng", "Hoon", "Pakbeng"], ["Xayabury", "Khop", "Hongsa", "Ngeun", "Xienghone", "Phiang", "Parklai", "Kenethao", "Botene", "Thongmyxay"], ["Louangphrabang", "Xieng Ngeun", "Nan", "Park Ou", "Nambak", "Ngoi", "Pak Xeng", "Phonxay", "Chomphet", "Viengkham", "Phoukhoune"], ["Xamneua", "Xiengkhor", "Viengthong", "Viengxay", "Huameuang", "Xamtay", "Sop Bao", "Muang Et"], ["Pek", "Kham", "Nonghed", "Khoune", "Morkmay", "Phookood", "Phaxay"], ["Phonhong", "Thoulakhom", "Keo Oudom", "Kasy", "Vangvieng", "Feuang", "Xanakharm", "Mad", "Hinhurp", "Viengkham"], ["Paksane", "Thaphabath", "Pakkading", "Bolikhanh", "Khamkheuth", "Viengthong", "Xaychamphone"], ["Thakhek", "Mahaxay", "Nongbok", "Hinboon", "Nhommalath", "Bualapha", "Nakai", "Xebangfay", "Xaybuathong"], ["Khanthabouly", "Outhoomphone", "Atsaphangthong", "Phine", "Sepone", "Nong", "Thapangthong", "Songkhone", "Champhone", "Xonbuly", "Xaybuly", "Vilabuly", "Atsaphone", "Xayphoothong", "Thaphalanxay"], ["Saravane", "Ta Oi", "Toomlarn", "Lakhonepheng", "Vapy", "Khongxedone", "Lao Ngarm", "Samuoi"], ["Lamarm", "Kaleum", "Dakcheung", "Thateng"], ["Pakse", "Sanasomboon", "Bachiangchaleunsook", "Paksong", "Pathoomphone", "Phonthong", "Champassack", "Sukhuma", "Moonlapamok", "Khong"], ["Xaysetha", "Samakkhixay", "Sanamxay", "Sanxay", "Phouvong"], ["Xaysomboun", "Thathom", "Hom", "Phun"]];
+function sellerDistrictOptions(provinceName, selectedDistrict){
+  const idx = LAOS_PROVINCES.indexOf(provinceName);
+  const list = idx>=0 ? DISTRICTS_BY_PROVINCE[idx] : [];
+  if(!list.length) return '<option value="">—</option>';
+  return list.map(d=>`<option ${selectedDistrict===d?'selected':''}>${d}</option>`).join('');
+}
+
+/* ============================================================ AUTH
+   Sellers can NOT create a working login by themselves. Registering only
+   files an application (with KYC info) into Supabase; the seller account
+   stays inactive until an admin reviews it in the KhaiDee admin panel and
+   approves it there ("admin backend issues the code" — see the RPC notes
+   near doSellerRegister/doSellerLogin below for what the SQL side must do). ============================================================ */
+const AUTH_TITLES = {login:'ເຂົ້າສູ່ລະບົບຮ້ານຄ້າ', register:'ສະໝັກເປັນຜູ້ຂາຍ', pending:'ສົ່ງຄຳຂໍສຳເລັດ'};
 function showAuthScreen(mode){
-  document.getElementById('authScreenTitle').textContent = mode==='login' ? 'ເຂົ້າສູ່ລະບົບຮ້ານຄ້າ' : 'ສະໝັກເປັນຜູ້ຂາຍ';
+  document.getElementById('authScreenTitle').textContent = AUTH_TITLES[mode] || AUTH_TITLES.login;
+  document.getElementById('authScreenSub').classList.toggle('hidden', mode==='pending');
   document.getElementById('authScreenErr').innerHTML = '';
   const body = document.getElementById('authScreenBody');
   if(mode==='login'){
@@ -204,23 +235,77 @@ function showAuthScreen(mode){
       <div class="field"><label>ເບີໂທ ຫຼື ອີເມວ</label><input id="sLoginId" placeholder="020XXXXXXXX ຫຼື email@example.com"></div>
       <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sLoginPw"></div>
       <button class="btn btn-primary" onclick="doSellerLogin()">ເຂົ້າສູ່ລະບົບ</button>
-      <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີຮ້ານຄ້າ? <a href="#" id="toRegister">ສະໝັກຮ້ານຄ້າໃໝ່</a></div>`;
+      <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີຮ້ານຄ້າ? <a href="#" id="toRegister">ສະໝັກເປັນຜູ້ຂາຍ</a></div>`;
     document.getElementById('toRegister').onclick = (e)=>{ e.preventDefault(); showAuthScreen('register'); };
-  }else{
+  }else if(mode==='register'){
+    STATE.waConnected = false;
     body.innerHTML = `
       <div class="field"><label>ຊື່ຮ້ານຄ້າ</label><input id="sRegStore" placeholder="ຮ້ານ..."></div>
-      <div class="field"><label>ເບີໂທ</label><input id="sRegPhone" placeholder="020XXXXXXXX"></div>
-      <div class="field"><label>ອີເມວ</label><input type="email" id="sRegEmail"></div>
-      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sRegPw"></div>
-      <button class="btn btn-primary" onclick="doSellerRegister()">ສະໝັກຮ້ານຄ້າ</button>
+      <div class="field"><label>ເບີໂທ</label><input id="sRegPhone" placeholder="020XXXXXXXX" oninput="onSellerPhoneInput()"></div>
+      <div id="sRegWaConnect" class="wa-connect-box hidden"></div>
+      <div class="field"><label>ອີເມວ</label><input type="email" id="sRegEmail" placeholder="email@example.com"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sRegPw" placeholder="ຢ່າງໜ້ອຍ 6 ໂຕ (ໃຊ້ເຂົ້າສູ່ລະບົບຫຼັງໄດ້ຮັບອະນຸມັດ)"></div>
+      <div class="field"><label>ແຂວງ</label><select id="sRegProvince" onchange="onSellerProvinceChange()">${LAOS_PROVINCES.map(p=>`<option>${p}</option>`).join('')}</select></div>
+      <div class="row2">
+        <div class="field"><label>ເມືອງ</label><select id="sRegDistrict">${sellerDistrictOptions(LAOS_PROVINCES[0], null)}</select></div>
+        <div class="field"><label>ບ້ານ</label><input id="sRegVillage" placeholder="ພິມຊື່ບ້ານ"></div>
+      </div>
+      <div class="field"><label>ຮູບຖ່າຍບັດປະຈຳຕົວ (ຖືບັດຄູ່ກັບໜ້າ) *</label><input type="file" id="sRegIdCard" accept="image/*" capture="environment" onchange="onSellerIdCardChange()"></div>
+      <div id="sRegIdPreview"></div>
+      <div class="hint" style="margin:10px 0 12px;">📌 ຂໍ້ມູນທັງໝົດຈະຖືກສົ່ງໃຫ້ແອດມິນຫລັງບ້ານກວດສອບ ແລະ ຢືນຢັນຕົວຕົນກ່ອນ — ໄດ້ຮັບອະນຸມັດແລ້ວທ່ານຈຶ່ງຈະໃຊ້ອີເມວ/ລະຫັດຜ່ານຂ້າງເທິງເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້</div>
+      <button class="btn btn-primary" id="sRegSubmitBtn" onclick="doSellerRegister()">📤 ສົ່ງຄຳຂໍສະໝັກ</button>
       <div class="hint" style="text-align:center; margin-top:12px;">ມີບັນຊີແລ້ວ? <a href="#" id="toLogin">ເຂົ້າສູ່ລະບົບ</a></div>`;
     document.getElementById('toLogin').onclick = (e)=>{ e.preventDefault(); showAuthScreen('login'); };
+  }else if(mode==='pending'){
+    const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
+    body.innerHTML = `
+      <div style="text-align:center;">
+        <div class="pending-icon">⏳</div>
+        <div style="font-weight:700; font-size:14.5px; margin-bottom:6px;">ຄຳຂໍສະໝັກຂອງທ່ານຖືກສົ່ງແລ້ວ</div>
+        <div class="hint" style="margin-bottom:18px;">ແອດມິນຈະກວດສອບຂໍ້ມູນ ແລະ ຮູບບັດປະຈຳຕົວຂອງທ່ານ ປົກກະຕິໃຊ້ເວລາ 1-2 ວັນ. ເມື່ອອະນຸມັດແລ້ວ ທ່ານຈະສາມາດເຂົ້າສູ່ລະບົບດ້ວຍອີເມວ/ລະຫັດຜ່ານທີ່ໄດ້ຕັ້ງໄວ້.</div>
+        <a href="https://wa.me/${num}" target="_blank" class="btn btn-gold" style="text-decoration:none; margin-bottom:10px;">💬 ສອບຖາມສະຖານະຜ່ານ WhatsApp</a>
+        <button class="btn btn-ghost" id="pendingToLogin">ກັບໄປໜ້າເຂົ້າສູ່ລະບົບ</button>
+      </div>`;
+    document.getElementById('pendingToLogin').onclick = ()=> showAuthScreen('login');
   }
+}
+function onSellerProvinceChange(){
+  const p = document.getElementById('sRegProvince').value;
+  document.getElementById('sRegDistrict').innerHTML = sellerDistrictOptions(p, null);
+}
+function onSellerPhoneInput(){
+  const box = document.getElementById('sRegWaConnect');
+  const digits = document.getElementById('sRegPhone').value.replace(/[^0-9]/g,'');
+  if(digits.length < 8){ box.classList.add('hidden'); box.innerHTML=''; STATE.waConnected=false; return; }
+  box.classList.remove('hidden');
+  box.innerHTML = STATE.waConnected
+    ? `<span class="status-pill status-approved">✅ ເຊື່ອມຕໍ່ WhatsApp ແລ້ວ</span>`
+    : `<button type="button" class="btn btn-gold btn-sm" onclick="connectSellerWhatsApp()">💬 ເຊື່ອມຕໍ່ ແລະ ຢືນຢັນເບີຜ່ານ WhatsApp</button>`;
+}
+// Opens a WhatsApp chat to the shop's official number with the applicant's info pre-filled,
+// so an admin can manually confirm the phone number belongs to the applicant before approving.
+function connectSellerWhatsApp(){
+  const store = document.getElementById('sRegStore').value.trim() || '-';
+  const phone = document.getElementById('sRegPhone').value.trim();
+  const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
+  const msg = encodeURIComponent(`📝 ຄຳຂໍສະໝັກຜູ້ຂາຍໃໝ່ KhaiDee\nຊື່ຮ້ານ: ${store}\nເບີໂທ: ${phone}\nກະລຸນາຊ່ວຍຢືນຢັນຕົວຕົນ ແລະ ກວດສອບຂໍ້ມູນຂອງຂ້ອຍ 🙏`);
+  window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+  STATE.waConnected = true;
+  onSellerPhoneInput();
+}
+let sellerIdCardFile = null;
+function onSellerIdCardChange(){
+  const f = document.getElementById('sRegIdCard').files[0];
+  sellerIdCardFile = f || null;
+  const prev = document.getElementById('sRegIdPreview');
+  if(!f){ prev.innerHTML=''; return; }
+  prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="ຮູບບັດປະຈຳຕົວ">`;
 }
 async function doSellerLogin(){
   const id = document.getElementById('sLoginId').value.trim();
   const pw = document.getElementById('sLoginPw').value;
   try{
+    // seller_login must only succeed for sellers with status='approved' — see RPC notes below.
     const s = await sbRPC('seller_login', {p_identifier:id, p_password:pw});
     STATE.seller = s; saveSeller();
     bootApp();
@@ -231,12 +316,26 @@ async function doSellerRegister(){
   const phone = document.getElementById('sRegPhone').value.trim();
   const email = document.getElementById('sRegEmail').value.trim();
   const pw = document.getElementById('sRegPw').value;
-  if(!store||!phone||pw.length<6){ document.getElementById('authScreenErr').innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
+  const province = document.getElementById('sRegProvince').value;
+  const district = document.getElementById('sRegDistrict').value;
+  const village = document.getElementById('sRegVillage').value.trim();
+  const errBox = document.getElementById('authScreenErr');
+  if(!store||!phone||!email||pw.length<6||!village){ errBox.innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
+  if(!STATE.waConnected){ errBox.innerHTML = `<div class="err">ກະລຸນາກົດເຊື່ອມຕໍ່ ແລະ ຢືນຢັນເບີໂທຜ່ານ WhatsApp ກ່ອນ</div>`; return; }
+  if(!sellerIdCardFile){ errBox.innerHTML = `<div class="err">ກະລຸນາອັບໂຫລດຮູບຖ່າຍບັດປະຈຳຕົວ</div>`; return; }
+  const btn = document.getElementById('sRegSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...';
   try{
-    const s = await sbRPC('seller_register', {p_store_name:store, p_phone:phone, p_email:email||null, p_password:pw});
-    STATE.seller = s; saveSeller();
-    bootApp();
-  }catch(e){ document.getElementById('authScreenErr').innerHTML = `<div class="err">${e.message}</div>`; }
+    // KYC bucket — recommend making this a PRIVATE bucket (not "khaidee-products") with
+    // storage RLS so only the admin RPC/service role can read it, since it holds ID card photos.
+    const idCardUrl = await sbUpload('khaidee-seller-kyc', `app_${Date.now()}_${sellerIdCardFile.name}`, sellerIdCardFile);
+    // seller_application_submit must INSERT a seller row with status='pending' and must NOT
+    // return a usable session — the account only becomes usable once an admin approves it.
+    await sbRPC('seller_application_submit', {
+      p_store_name: store, p_phone: phone, p_email: email, p_password: pw,
+      p_province: province, p_district: district, p_village: village, p_id_card_url: idCardUrl
+    });
+    showAuthScreen('pending');
+  }catch(e){ errBox.innerHTML = `<div class="err">${e.message}</div>`; btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍສະໝັກ'; }
 }
 function sellerLogout(){ STATE.seller = null; saveSeller(); location.reload(); }
 
@@ -415,6 +514,7 @@ function bootApp(){
   goPage('dashboard');
 }
 (function init(){
+  loadSettings();
   setTimeout(()=>{
     document.getElementById('splashScreen').classList.add('hidden');
     if(STATE.seller){ bootApp(); }
