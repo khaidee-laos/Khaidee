@@ -1088,7 +1088,8 @@ let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeSh
 function startCheckout(){
   if(!STATE.cart.length) return;
   requireLogin(()=>{
-    checkoutState = {address:null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, bankAccountId:null};
+    const savedAddrs = getSavedAddresses();
+    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, bankAccountId:null};
     renderCheckout();
     openModal('modalCheckout');
   });
@@ -1227,6 +1228,12 @@ function selectTransferBank(id, total){
   renderTransferProofStep(total);
 }
 async function submitOrder(payment, needsSlip){
+  // Open a blank tab RIGHT NOW, synchronously, while we're still inside the click handler.
+  // Browsers only allow window.open() without a popup-block prompt when it happens in direct
+  // response to a user gesture — if we wait until after the order is saved (several `await`s
+  // later) most mobile browsers silently block it. Reserving the tab now and pointing it at
+  // wa.me once the order succeeds keeps the "auto-redirect to WhatsApp" reliable.
+  const waTab = window.open('', '_blank');
   onGuard('order', async ()=>{
     const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
     const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
@@ -1235,10 +1242,11 @@ async function submitOrder(payment, needsSlip){
     let file = null;
     if(needsSlip){
       if((STATE.bankAccounts||[]).length && !checkoutState.bankAccountId){
+        if(waTab) waTab.close();
         alert('ກະລຸນາເລືອກທະນາຄານທີ່ໂອນເງິນເຂົ້າ'); return;
       }
       file = document.getElementById('orderSlip').files[0];
-      if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
+      if(!file){ if(waTab) waTab.close(); alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
     }
     if(btn){ btn.disabled = true; btn.textContent = needsSlip ? 'ກຳລັງບີບອັດຮູບ...' : 'ກຳລັງດຳເນີນການ...'; } // onGuard() above is what actually blocks repeat taps / double-charge
     try{
@@ -1264,7 +1272,7 @@ async function submitOrder(payment, needsSlip){
       });
       STATE.cart = []; saveCart();
       closeModal('modalCheckout');
-      notifyWhatsApp(res.order_number, res.total, needsSlip);
+      notifyWhatsApp(res.order_number, res.total, needsSlip, waTab);
       playSuccessSound();
       alert(needsSlip
         ? `ສົ່ງຄຳສັ່ງຊື້ແລ້ວ! ເລກທີອໍເດີ: ${res.order_number}\nລໍຖ້າແອດມິນກວດສອບສະລິບໂອນເງິນ`
@@ -1272,6 +1280,7 @@ async function submitOrder(payment, needsSlip){
       if(STATE.customer && res.wallet_balance!=null){ STATE.customer.wallet_balance = res.wallet_balance; saveCustomer(); }
       loadProducts().then(renderProducts);
     }catch(e){
+      if(waTab) waTab.close();
       playErrorSound();
       alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
     }finally{
@@ -1279,20 +1288,65 @@ async function submitOrder(payment, needsSlip){
     }
   });
 }
-function notifyWhatsApp(orderNumber, total, pendingSlip){
+function notifyWhatsApp(orderNumber, total, pendingSlip, reservedTab){
+  const a = checkoutState.address || {};
   const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
   const bank = (STATE.bankAccounts||[]).find(b=>b.id===checkoutState.bankAccountId);
-  const msg = encodeURIComponent(`🛍️ ອໍເດີໃໝ່ KhaiDee\nເລກທີ: ${orderNumber}\nຍອດລວມ: ${fmtMoney(total)}\nລູກຄ້າ: ${STATE.customer.full_name} (${STATE.customer.phone})${bank ? `\n🏦 ໂອນຜ່ານ: ${bank.bank_name}${bank.bank_name_en?` (${bank.bank_name_en})`:''}` : ''}${pendingSlip ? '\n📎 ແນບສະລິບແລ້ວ — ລໍຖ້າກວດສອບ' : ''}`);
-  window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
+  const addrLine = [a.village,a.district,a.province].filter(Boolean).join(', ');
+  const msg = encodeURIComponent(`🛍️ ອໍເດີໃໝ່ KhaiDee\nເລກທີ: ${orderNumber}\nຍອດລວມ: ${fmtMoney(total)}\nລູກຄ້າ: ${STATE.customer.full_name} (${STATE.customer.phone})${addrLine?`\n📍 ທີ່ຢູ່ຈັດສົ່ງ: ${addrLine}`:''}${bank ? `\n🏦 ໂອນຜ່ານ: ${bank.bank_name}${bank.bank_name_en?` (${bank.bank_name_en})`:''}` : ''}${pendingSlip ? '\n📎 ແນບສະລິບແລ້ວ — ລໍຖ້າກວດສອບ' : ''}`);
+  const link = `https://wa.me/${num}?text=${msg}`;
+  // Prefer the tab we reserved synchronously at click-time (see submitOrder) so mobile browsers
+  // don't block the redirect; fall back to a fresh window.open if that tab wasn't available
+  // (e.g. reload happened in between) or was blocked, and always show a manual link as a backup.
+  if(reservedTab && !reservedTab.closed){
+    try{ reservedTab.location.href = link; }catch(e){ window.open(link, '_blank'); }
+  }else{
+    window.open(link, '_blank');
+  }
+  lastWhatsAppLink = link;
+  showWhatsAppFallbackLink(link);
+}
+// Small persistent banner with a real tappable link, in case the automatic redirect above
+// got blocked (some browsers block it even with the reserved-tab trick, e.g. in-app webviews
+// like Facebook/TikTok browsers) — this guarantees the order notification can still be sent.
+let lastWhatsAppLink = null;
+function showWhatsAppFallbackLink(link){
+  let bar = document.getElementById('waFallbackBar');
+  if(!bar){
+    bar = document.createElement('div'); bar.id = 'waFallbackBar';
+    bar.style.cssText = 'position:fixed; left:14px; right:14px; bottom:84px; z-index:60; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:10px 12px; display:flex; align-items:center; gap:8px;';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<span style="font-size:20px;">💬</span><span style="flex:1; font-size:12.5px; color:var(--ink-soft);">ຖ້າ WhatsApp ບໍ່ໄດ້ເປີດອັດຕະໂນມັດ, ແຕະບ່ອນນີ້ເພື່ອສົ່ງແຈ້ງເຕືອນອໍເດີ</span>
+    <a href="${link}" target="_blank" rel="noopener" style="background:var(--ok); color:#fff; font-size:12px; font-weight:700; padding:8px 12px; border-radius:999px; text-decoration:none; white-space:nowrap;">ເປີດ WhatsApp</a>
+    <button onclick="document.getElementById('waFallbackBar').remove()" style="background:none; border:none; font-size:16px; color:var(--ink-soft); padding:0 2px;">✕</button>`;
+  setTimeout(()=>{ const b=document.getElementById('waFallbackBar'); if(b) b.remove(); }, 30000);
 }
 
 /* ============================================================ ADDRESS ============================================================ */
 const LAOS_PROVINCES = ['ນະຄອນຫຼວງວຽງຈັນ','ຜົ້ງສາລີ','ຫຼວງນໍ້າທາ','ບໍ່ແກ້ວ','ອຸດົມໄຊ','ໄຊຍະບູລີ','ຫຼວງພະບາງ','ຫົວພັນ','ຊຽງຂວາງ','ວຽງຈັນ','ບໍລິຄຳໄຊ','ຄຳມ່ວນ','ສະຫວັນນະເຂດ','ສາລະວັນ','ເຊກອງ','ຈຳປາສັກ','ອັດຕະປື','ໄຊສົມບູນ'];
 // Official district (mueang) list per province, same index order as LAOS_PROVINCES above.
-// Source: Statoids / Wikipedia administrative divisions of Laos. District names are shown
-// in Latin transliteration (a reliable complete Lao-script list wasn't available) — the
-// customer can still add exact spelling/landmarks in "ລາຍລະອຽດເພີ່ມເຕີມ" below.
-const DISTRICTS_BY_PROVINCE = [["Chanthabuly", "Sikhottabong", "Xaysetha", "Sisattanak", "Naxaithong", "Xaythany", "Hadxaifong", "Sangthong", "Mayparkngum"], ["Phongsaly", "May", "Khua", "Samphanh", "Boon Neua", "Nhot Ou", "Boontai"], ["Namtha", "Sing", "Long", "Viengphoukha", "Nalae"], ["Houixai", "Tonpheung", "Meung", "Pha Oudom", "Paktha", "Nam You"], ["Xay", "La", "Namor", "Nga", "Beng", "Hoon", "Pakbeng"], ["Xayabury", "Khop", "Hongsa", "Ngeun", "Xienghone", "Phiang", "Parklai", "Kenethao", "Botene", "Thongmyxay"], ["Louangphrabang", "Xieng Ngeun", "Nan", "Park Ou", "Nambak", "Ngoi", "Pak Xeng", "Phonxay", "Chomphet", "Viengkham", "Phoukhoune"], ["Xamneua", "Xiengkhor", "Viengthong", "Viengxay", "Huameuang", "Xamtay", "Sop Bao", "Muang Et"], ["Pek", "Kham", "Nonghed", "Khoune", "Morkmay", "Phookood", "Phaxay"], ["Phonhong", "Thoulakhom", "Keo Oudom", "Kasy", "Vangvieng", "Feuang", "Xanakharm", "Mad", "Hinhurp", "Viengkham"], ["Paksane", "Thaphabath", "Pakkading", "Bolikhanh", "Khamkheuth", "Viengthong", "Xaychamphone"], ["Thakhek", "Mahaxay", "Nongbok", "Hinboon", "Nhommalath", "Bualapha", "Nakai", "Xebangfay", "Xaybuathong"], ["Khanthabouly", "Outhoomphone", "Atsaphangthong", "Phine", "Sepone", "Nong", "Thapangthong", "Songkhone", "Champhone", "Xonbuly", "Xaybuly", "Vilabuly", "Atsaphone", "Xayphoothong", "Thaphalanxay"], ["Saravane", "Ta Oi", "Toomlarn", "Lakhonepheng", "Vapy", "Khongxedone", "Lao Ngarm", "Samuoi"], ["Lamarm", "Kaleum", "Dakcheung", "Thateng"], ["Pakse", "Sanasomboon", "Bachiangchaleunsook", "Paksong", "Pathoomphone", "Phonthong", "Champassack", "Sukhuma", "Moonlapamok", "Khong"], ["Xaysetha", "Samakkhixay", "Sanamxay", "Sanxay", "Phouvong"], ["Xaysomboun", "Thathom", "Hom", "Phun"]];
+// Shown in Lao script (ອັກສອນລາວ) instead of the old Latin transliteration.
+const DISTRICTS_BY_PROVINCE = [
+  ["ຈັນທະບູລີ","ໄຊເສດຖາ","ສີໂຄດຕະບອງ","ສີສັດຕະນາກ","ຫາດຊາຍຟອງ","ນາຊາຍທອງ","ໄຊທານີ","ສັງທອງ","ໃໝ່ປາກງື່ມ"],
+  ["ບຸນໃຕ້","ຂວາ","ໃໝ່","ຍອດອູ","ຜົ້ງສາລີ","ສຳພັນ","ບຸນເໜືອ"],
+  ["ຫຼວງນໍ້າທາ","ສີງ","ລອງ","ວຽງພູຄາ","ນາແລ"],
+  ["ຫ້ວຍຊາຍ","ຕົ້ນເຜິ້ງ","ເມິງ","ຜາອຸດົມ","ປາກທາ"],
+  ["ໄຊ","ຫລາ","ນາໝໍ້","ງາ","ແບ່ງ","ຮຸນ","ປາກແບ່ງ"],
+  ["ບໍ່ແຕນ","ຫົງສາ","ແກ່ນທ້າວ","ຄອບ","ເງິນ","ປາກລາຍ","ພຽງ","ທົ່ງມີໄຊ","ໄຊຍະບູລີ","ຊຽງຮ່ອນ","ໄຊສະຖານ"],
+  ["ຫຼວງພະບາງ","ຊຽງເງິນ","ນານ","ປາກອູ","ນ້ຳບາກ","ງອຍ","ປາກແຊງ","ໂພນໄຊ","ຈອມເພັດ","ວຽງຄຳ","ພູຄູນ","ໂພນທອງ"],
+  ["ຊຳເໜືອ","ຊຽງຄໍ້","ຮ້ຽມ","ວຽງໄຊ","ຫົວເມືອງ","ຊຳໃຕ້","ສົບເບົາ","ແອດ","ກວັນ","ຊ່ອນ"],
+  ["ໂພນສະຫວັນ","ຄຳ","ໜອງແຮດ","ຄູນ","ໝອກໃໝ່","ພູກູດ","ຜາໄຊ"],
+  ["ເຟືອງ","ຫີນເຫີບ","ກາສີ","ແກ້ວອຸດົມ","ແມດ","ໂພນໂຮງ","ທຸລະຄົມ","ວັງວຽງ","ວຽງຄຳ","ຊະນະຄາມ","ໝື່ນ"],
+  ["ປາກຊັນ","ທ່າພະບາດ","ປາກກະດິງ","ຄຳເກີດ (ຫຼັກ20)","ບໍລິຄັນ","ວຽງທອງ","ໄຊຈຳພອນ"],
+  ["ທ່າແຂກ","ມະຫາໄຊ","ໜອງບົກ","ຫີນບູນ","ຍົມມະລາດ","ບົວລະພາ","ນາກາຍ","ເຊບັ້ງໄຟ","ໄຊບົວທອງ","ຄູນຄຳ"],
+  ["ໄກສອນ ພົມວິຫານ","ອຸທຸມພອນ","ອາດສະພັງທອງ","ພີນ","ເຊໂປນ","ນອງ","ທ່າປາງທອງ","ສອງຄອນ","ຈຳພອນ","ຊົນນະບູລີ","ໄຊບູລີ","ວິລະບູລີ","ອາດສະພອນ","ໄຊພູທອງ","ພະລານໄຊ"],
+  ["ສາລະວັນ","ລະຄອນເພັງ","ວາປີ","ເລົ່າງາມ","ຕຸ້ມລານ","ຕະໂອ້ຍ","ຄົງເຊໂດນ","ສະມ້ວຍ"],
+  ["ທ່າແຕງ","ລະມາມ","ກະລຶມ","ດັກຈຶງ"],
+  ["ປາກເຊ","ຊະນະສົມບູນ","ບາຈຽງຈະເລີນສຸກ","ປາກຊ່ອງ","ປະທຸມພອນ","ໂພນທອງ","ຈຳປາສັກ","ສຸຂຸມາ","ມູນລະປະໂມກ","ໂຂງ"],
+  ["ໄຊເຊດຖາ","ສາມັກຄີໄຊ","ສະໜາມໄຊ","ຊານໄຊ","ພູວົງ"],
+  ["ລ້ອງແຈ້ງ","ທ່າໂທມ","ອະນຸວົງ","ລ້ອງຊານ","ຮົ່ມ"]
+];
 function districtOptions(provinceName, selectedDistrict){
   const idx = LAOS_PROVINCES.indexOf(provinceName);
   const list = idx>=0 ? DISTRICTS_BY_PROVINCE[idx] : [];
@@ -1303,19 +1357,63 @@ function onAddrProvinceChange(){
   const province = document.getElementById('addrProvince').value;
   document.getElementById('addrDistrict').innerHTML = districtOptions(province, null);
 }
+/* ---- Saved address book ----
+   Keeps a small history of addresses the customer has already typed (per customer, in
+   localStorage) so they never have to retype the same house/village/city twice. Newest first,
+   deduped on province+district+village, capped at 6 entries. */
+function savedAddressesKey(){ return `khaidee_addresses_${STATE.customer?.id||'guest'}`; }
+function getSavedAddresses(){
+  try{ return JSON.parse(localStorage.getItem(savedAddressesKey())||'[]'); }catch(e){ return []; }
+}
+function rememberAddress(addr){
+  if(!addr || !(addr.village||addr.district||addr.province)) return;
+  let list = getSavedAddresses();
+  const sig = a => `${a.province}|${a.district}|${a.village}`;
+  list = list.filter(a=>sig(a)!==sig(addr));
+  list.unshift(addr);
+  list = list.slice(0,6);
+  try{ localStorage.setItem(savedAddressesKey(), JSON.stringify(list)); }catch(e){}
+}
+// distinct village names the customer has typed before, for the datalist autocomplete below
+function getSavedVillageNames(){
+  const seen = new Set();
+  getSavedAddresses().forEach(a=>{ if(a.village) seen.add(a.village); });
+  return [...seen];
+}
 function renderAddressForm(){
   const a = checkoutState.address || {};
+  const saved = getSavedAddresses();
+  const villages = getSavedVillageNames();
+  const savedPicksHtml = saved.length ? `
+    <div class="field">
+      <label>📖 ທີ່ຢູ່ທີ່ເຄີຍໃຊ້ — ແຕະເພື່ອໃຊ້ຄືນ</label>
+      <div style="display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;">
+        ${saved.map((s,i)=>`
+          <div onclick="pickSavedAddress(${i})" style="flex-shrink:0; max-width:220px; cursor:pointer; border:1px solid var(--line); border-radius:12px; padding:8px 10px; background:${(a.village===s.village&&a.district===s.district&&a.province===s.province)?'var(--gold-light)':'#fff'};">
+            <div style="font-size:12px; font-weight:700;">${s.recipient_name||'-'}</div>
+            <div style="font-size:11px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${[s.village,s.district,s.province].filter(Boolean).join(', ')}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
   document.getElementById('addressBody').innerHTML = `
+    ${savedPicksHtml}
     <div class="field"><label>ຊື່ຜູ້ຮັບ</label><input id="addrName" value="${a.recipient_name||STATE.customer?.full_name||''}"></div>
     <div class="field"><label>ເບີໂທ</label><input id="addrPhone" value="${a.phone||STATE.customer?.phone||''}"></div>
     <div class="field"><label>ແຂວງ</label><select id="addrProvince" onchange="onAddrProvinceChange()">${LAOS_PROVINCES.map(p=>`<option ${a.province===p?'selected':''}>${p}</option>`).join('')}</select></div>
     <div class="row2">
       <div class="field"><label>ເມືອງ</label><select id="addrDistrict">${districtOptions(a.province||LAOS_PROVINCES[0], a.district)}</select></div>
-      <div class="field"><label>ບ້ານ</label><input id="addrVillage" value="${a.village||''}" placeholder="ພິມຊື່ບ້ານ"></div>
+      <div class="field"><label>ບ້ານ</label><input id="addrVillage" list="addrVillageList" value="${a.village||''}" placeholder="ພິມ ຫຼື ເລືອກຊື່ບ້ານ"></div>
     </div>
-    <div class="hint" style="margin:-6px 0 12px;">📍 ເລືອກແຂວງ ແລ້ວລາຍຊື່ເມືອງຈະປ່ຽນຕາມໂດຍອັດຕະໂນມັດ — ບ້ານໃຫ້ພິມຊື່ (ມີບ້ານຫຼາຍພັນແຫ່ງທົ່ວປະເທດ)</div>
+    <datalist id="addrVillageList">${villages.map(v=>`<option value="${v}">`).join('')}</datalist>
+    <div class="hint" style="margin:-6px 0 12px;">📍 ເລືອກແຂວງ ແລ້ວລາຍຊື່ເມືອງຈະປ່ຽນຕາມໂດຍອັດຕະໂນມັດ — ຊ່ອງບ້ານຈະຈື່ຊື່ບ້ານທີ່ເຄີຍພິມໄວ້ໃຫ້ອັດຕະໂນມັດ</div>
     <div class="field"><label>ລາຍລະອຽດເພີ່ມເຕີມ</label><textarea id="addrDetail" rows="2" placeholder="ຈຸດສັງເກດ, ຊອຍ, ບ້ານເລກທີ...">${a.detail||''}</textarea></div>
     <button class="btn btn-primary" onclick="saveAddress()">ບັນທຶກທີ່ຢູ່</button>`;
+}
+function pickSavedAddress(i){
+  const s = getSavedAddresses()[i];
+  if(!s) return;
+  checkoutState.address = s;
+  renderAddressForm();
 }
 function saveAddress(){
   checkoutState.address = {
@@ -1326,6 +1424,7 @@ function saveAddress(){
     village: document.getElementById('addrVillage').value.trim(),
     detail: document.getElementById('addrDetail').value.trim()
   };
+  rememberAddress(checkoutState.address);
   closeModal('modalAddress'); renderCheckout();
 }
 
@@ -1912,7 +2011,12 @@ function adminEditProduct(id){
     <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
     <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
     <div class="field"><label>ຊື່ (English)</label><input id="pNameEn" value="${p.name_en||''}"></div>
-    <div class="field"><label>ຄຳອະທິບາຍ</label><textarea id="pDesc" rows="3">${p.description||''}</textarea></div>
+    <div class="field">
+      <label>ຄຳອະທິບາຍ</label>
+      <textarea id="pDesc" rows="4">${p.description||''}</textarea>
+      <button type="button" class="btn btn-ghost" id="pAiDescBtn" style="margin-top:6px; font-size:12.5px; padding:8px 10px;">🤖 ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ</button>
+      ${STATE.settings.anthropic_api_key?'':'<div class="hint" style="margin-top:4px;">ຕ້ອງຕັ້ງຄ່າ Anthropic API Key ໃນ ການຕັ້ງຄ່າ ► AI ຂຽນລາຍລະອຽດສິນຄ້າ ກ່ອນ ຈຶ່ງຈະໃຊ້ໄດ້</div>'}
+    </div>
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
     <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
@@ -1928,6 +2032,7 @@ function adminEditProduct(id){
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  overlay.querySelector('#pAiDescBtn').onclick = ()=>generateProductDescription(overlay);
   let pendingImages = [...(p.images||[])];
   let pendingVideoUrl = p.video_url||null;
   window.removePImage = (i)=>{ pendingImages.splice(i,1); document.getElementById('pImagePreview').innerHTML = pendingImages.map((url,j)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImage(${j})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join(''); };
@@ -1961,6 +2066,49 @@ function adminEditProduct(id){
       btn.disabled = false; btn.textContent = 'ບັນທຶກ';
     }
   };
+}
+/* ---- AI-assisted product description ----
+   Calls the Anthropic Messages API directly from the admin's browser using the key saved in
+   Settings ► AI ຂຽນລາຍລະອຽດສິນຄ້າ, so the admin doesn't have to hand-write every listing.
+   Note: this keeps the key on the client (admin panel only) for simplicity — fine as long as
+   admin access itself stays private; for a public multi-admin setup this should eventually
+   move behind a small server-side proxy instead of calling the API straight from the browser. */
+async function generateProductDescription(overlay){
+  const key = STATE.settings.anthropic_api_key;
+  if(!key){ alert('ກະລຸນາຕັ້ງຄ່າ Anthropic API Key ໃນໜ້າ "ການຕັ້ງຄ່າ" ກ່ອນ'); return; }
+  const nameLo = overlay.querySelector('#pNameLo').value.trim();
+  if(!nameLo){ alert('ກະລຸນາພິມຊື່ສິນຄ້າ (ພາສາລາວ) ກ່ອນ ເພື່ອໃຫ້ AI ຮູ້ວ່າຈະຂຽນລາຍລະອຽດຫຍັງ'); return; }
+  const catId = Number(overlay.querySelector('#pCat').value);
+  const catName = (STATE.categories.find(c=>c.id===catId)||{}).name_lo || '';
+  const price = overlay.querySelector('#pPrice').value;
+  const btn = overlay.querySelector('#pAiDescBtn');
+  btn.disabled = true; btn.textContent = '⏳ ກຳລັງຂຽນ...';
+  try{
+    const prompt = `ຂຽນລາຍລະອຽດສິນຄ້າສຳລັບຮ້ານຄ້າອອນລາຍ ເປັນພາສາລາວລ້ວນໆ, ຍາວ 3-5 ປະໂຫຍກ, ໜ້າສົນໃຈ ແລະ ຊັດເຈນ ໃຫ້ລູກຄ້າເຂົ້າໃຈງ່າຍ. ໃຫ້ກ່າວເຖິງຈຸດເດັ່ນ, ການນຳໃຊ້ ຫຼື ປະໂຫຍດຂອງສິນຄ້າ. ຫ້າມແຕ່ງຂໍ້ມູນສະເພາະ (ເຊັ່ນ: ຂະໜາດ, ວັດສະດຸ, ຈຳນວນ) ທີ່ບໍ່ໄດ້ໃຫ້ໄວ້ຂ້າງລຸ່ມ.\n\nຊື່ສິນຄ້າ: ${nameLo}\nໝວດໝູ່: ${catName||'-'}\nລາຄາ: ${price?fmtMoney(Number(price)):'-'}\n\nຕອບກັບແຕ່ຂໍ້ຄວາມລາຍລະອຽດເທົ່ານັ້ນ, ບໍ່ຕ້ອງມີຄຳນຳ ຫຼື ຫົວຂໍ້.`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 400,
+        messages: [{role:'user', content: prompt}]
+      })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data?.error?.message || 'API error');
+    const text = (data.content||[]).map(b=>b.text||'').join('').trim();
+    if(!text) throw new Error('ບໍ່ໄດ້ຮັບຄຳຕອບຈາກ AI');
+    overlay.querySelector('#pDesc').value = text;
+  }catch(e){
+    alert('ຂຽນລາຍລະອຽດບໍ່ສຳເລັດ: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = '🤖 ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ';
+  }
 }
 // reads a video file's duration client-side (no upload needed) so we can reject >10s clips early
 function getVideoDuration(file){
@@ -2429,6 +2577,12 @@ async function renderAdminSettings(){
     <button class="btn btn-primary" id="stSave">ບັນທຶກການຕັ້ງຄ່າ</button>
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
+    <h4 style="font-size:13px;">🤖 AI ຂຽນລາຍລະອຽດສິນຄ້າອັດຕະໂນມັດ</h4>
+    <div class="hint" style="margin-top:-4px;">ໃສ່ Anthropic API key ຂອງທ່ານເພື່ອເປີດໃຊ້ປຸ່ມ "ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ" ໃນໜ້າເພີ່ມ/ແກ້ໄຂສິນຄ້າ — ລະບົບຈະຂຽນລາຍລະອຽດເປັນພາສາລາວໃຫ້ຈາກຊື່ ແລະ ໝວດໝູ່ສິນຄ້າ.<br>⚠️ <b>ຄຳເຕືອນ:</b> key ນີ້ຖືກເກັບໄວ້ໃນຕາຕະລາງການຕັ້ງຄ່າດຽວກັນກັບ whatsapp_number ເຊິ່ງລູກຄ້າທົ່ວໄປສາມາດອ່ານໄດ້ (site_settings_public) — ຫາກຕ້ອງການໃຊ້ຢ່າງປອດໄພແທ້ໆ ຄວນຍ້າຍ key ນີ້ໄປໄວ້ໃນຕາຕະລາງ/Edge Function ແຍກຕ່າງຫາກທີ່ຈຳກັດໃຫ້ອ່ານໄດ້ສະເພາະແອດມິນເທົ່ານັ້ນ ກ່ອນນຳໄປໃຊ້ຈິງ.</div>
+    <div class="field"><label>Anthropic API Key</label><input type="password" id="stAiKey" value="${STATE.settings.anthropic_api_key||''}" placeholder="sk-ant-..."></div>
+    <button class="btn btn-primary" id="stAiKeySave">ບັນທຶກ API Key</button>
+
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">💰 ກະເປົາເງິນ — QR ຮັບເງິນ ແລະ ຄຳແນະນຳໂອນເງິນ</h4>
     <div class="hint" style="margin-top:-4px;">ຮູບ QR ແລະ ຂໍ້ຄວາມນີ້ຈະສະແດງໃຫ້ລູກຄ້າເຫັນຕອນເຕີມເງິນເຂົ້າກະເປົາ</div>
     ${STATE.settings.wallet_qr_url?`<img src="${STATE.settings.wallet_qr_url}" style="width:120px; height:120px; object-fit:cover; border-radius:10px; margin:8px 0; border:1px solid var(--line);">`:''}
@@ -2461,6 +2615,14 @@ async function renderAdminSettings(){
     for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
     await loadSettings();
     alert('ບັນທຶກແລ້ວ');
+  };
+  document.getElementById('stAiKeySave').onclick = async ()=>{
+    const btn = document.getElementById('stAiKeySave'); btn.disabled = true;
+    try{
+      await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:'anthropic_api_key', p_value:document.getElementById('stAiKey').value.trim()});
+      await loadSettings();
+      alert('ບັນທຶກ API Key ແລ້ວ');
+    }catch(e){ alert('ຜິດພາດ: ' + e.message); } finally { btn.disabled = false; }
   };
   document.getElementById('stWalletSave').onclick = async ()=>{
     const btn = document.getElementById('stWalletSave'); btn.disabled=true;
