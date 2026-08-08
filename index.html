@@ -2086,6 +2086,7 @@ async function renderAdminTopups(){
   STATE.adminTopupsCache = list;
   body.innerHTML = !list.length ? '<div class="empty">ບໍ່ມີຄຳຂໍເຕີມເງິນ</div>' : `<div class="tile-grid">${list.map(t=>`
     <div class="tile" onclick="adminViewTopup(${t.id})">
+      <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteTopup(${t.id})">✕</button>
       <div class="tile-dot" style="background:${adminStatusColor(t.status)}"></div>
       <div class="tile-img">${t.slip_url ? `<img src="${t.slip_url}">` : '💰'}</div>
       <div class="tile-title">${t.full_name}</div>
@@ -2102,6 +2103,7 @@ function adminViewTopup(id){
     <div class="hint">${t.phone} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
     ${t.slip_url?`<img src="${t.slip_url}" style="width:100%; border-radius:12px; margin-top:12px;">`:''}
     ${t.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+    <button class="btn btn-ghost" style="margin-top:12px; color:var(--danger); width:100%;" onclick="adminDeleteTopup(${t.id})">🗑️ ລຶບລາຍການນີ້</button>
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
@@ -2110,6 +2112,26 @@ async function adminApproveTopup(id, approve){
   onGuard('topup-approve-'+id, async ()=>{
     try{
       await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve});
+      playSuccessSound();
+      document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
+      renderAdminTopups();
+    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+  });
+}
+// Needs a new admin_delete_topup RPC (SECURITY DEFINER) that just removes the row from the
+// topup/wallet-transaction table by id — it does NOT touch the customer's wallet_balance.
+// This is for cleaning up clutter (duplicates, rejected junk, test entries), not for reversing
+// a topup that was already approved and credited — use adminApproveTopup(id, false) for that
+// while it's still pending, since deleting an already-approved row won't claw back the balance.
+async function adminDeleteTopup(id){
+  const t = (STATE.adminTopupsCache||[]).find(x=>x.id===id);
+  const warn = t && t.status==='approved'
+    ? 'ລາຍການນີ້ອະນຸມັດແລ້ວ ແລະ ຍອດເງິນໄດ້ເຂົ້າກະເປົາລູກຄ້າໄປແລ້ວ — ການລຶບຈະລຶບແຕ່ປະຫວັດ ຈະບໍ່ຫັກເງິນຄືນ. ຕ້ອງການລຶບແທ້ບໍ?'
+    : 'ລຶບຄຳຂໍເຕີມເງິນນີ້?';
+  if(!confirm(warn)) return;
+  onGuard('topup-delete-'+id, async ()=>{
+    try{
+      await sbRPC('admin_delete_topup', {p_password:STATE.adminPassword, p_txn_id:id});
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminTopups();
