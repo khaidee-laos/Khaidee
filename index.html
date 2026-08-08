@@ -254,7 +254,18 @@ nav.bottom .icon{font-size:19px;}
 .stat-card{background:#fff; border-radius:14px; padding:14px; box-shadow:var(--shadow);}
 .stat-card .n{font-size:20px; font-weight:800; color:var(--maroon);}
 .stat-card .l{font-size:11px; color:var(--ink-soft); margin-top:2px;}
-.admin-list-item{background:#fff; border-radius:12px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow);}
+.admin-list-item{background:#fff; border-radius:12px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow); position:relative;}
+.admin-list-item .del-x{position:absolute; top:10px; right:10px; width:24px; height:24px; border-radius:50%; background:var(--cream); border:none; color:var(--danger); font-size:12px; line-height:1;}
+/* ---- Compact tile grid (products / categories / carriers / coupons / topups) ---- */
+.tile-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px;}
+.tile{background:#fff; border-radius:12px; padding:8px 6px 9px; box-shadow:var(--shadow); text-align:center; cursor:pointer; position:relative;}
+.tile .tile-img{width:100%; aspect-ratio:1; border-radius:9px; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:5px; overflow:hidden;}
+.tile .tile-img img{width:100%; height:100%; object-fit:cover; display:block;}
+.tile .tile-title{font-size:10px; font-weight:700; line-height:1.25; max-height:2.5em; overflow:hidden; word-break:break-word;}
+.tile .tile-sub{font-size:9px; color:var(--ink-soft); margin-top:2px;}
+.tile .tile-dot{position:absolute; top:5px; left:5px; width:8px; height:8px; border-radius:50%; box-shadow:0 0 0 2px #fff; z-index:2;}
+.tile .tile-del{position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:rgba(43,27,20,.55); color:#fff; font-size:10px; border:none; z-index:2; display:flex; align-items:center; justify-content:center;}
+.status-select{font-size:11px; font-weight:700; padding:6px 8px; border-radius:8px; border:1.5px solid var(--line); background:#fff; color:var(--maroon); font-family:inherit;}
 .admin-list-item .top{display:flex; justify-content:space-between; align-items:center;}
 .admin-list-item .title{font-weight:700; font-size:13.5px;}
 .status-pill{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px;}
@@ -1507,6 +1518,16 @@ async function renderAdminDashboard(){
   </div>
   <div class="hint">ເຄັດລັບ: ແຕະໄອຄອນ ⚙️ ໃນໜ້າບັນຊີ 3 ຄັ້ງຕິດກັນ ເພື່ອກັບເຂົ້າໜ້ານີ້ໄດ້ທຸກເທື່ອ.</div>`;
 }
+// Small color dot used on compact tiles/list items across the admin panel.
+function adminStatusColor(status){
+  const ok = ['approved','paid','delivered','active'];
+  const warn = ['pending','packing','shipping'];
+  const bad = ['rejected','cancelled','suspended'];
+  if(ok.includes(status)) return 'var(--ok)';
+  if(warn.includes(status)) return 'var(--warn)';
+  if(bad.includes(status)) return 'var(--danger)';
+  return 'var(--ink-soft)';
+}
 async function renderAdminOrders(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
@@ -1514,29 +1535,42 @@ async function renderAdminOrders(){
   const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
   body.innerHTML = list.map(o=>`
     <div class="admin-list-item">
+      <button class="del-x" title="ລຶບອໍເດີ" onclick="adminDeleteOrder(${o.id})">✕</button>
       <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${o.status}</span></div>
       <div class="hint">${o.customer_name||'-'} • ${o.customer_phone||'-'}</div>
       <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
       <div style="font-size:12.5px; margin-top:6px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
-      <div class="chiprow">${statuses.map(s=>`<button onclick="adminSetOrderStatus(${o.id},'${s}')">${s}</button>`).join('')}</div>
+      <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
+        ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${s}</option>`).join('')}
+      </select>
     </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີ</div>';
 }
 async function adminSetOrderStatus(id, status){
   await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status});
   renderAdminOrders();
 }
+// Needs a new admin_delete_order RPC (SECURITY DEFINER) that removes the order + its
+// order_items after checking p_password. Consider only allowing this for cancelled/old
+// test orders — deleting real order history can break reporting/accounting.
+async function adminDeleteOrder(id){
+  if(!confirm('ລຶບອໍເດີນີ້ຖາວອນ? ຂໍ້ມູນຈະຫາຍໄປທັງໝົດ')) return;
+  try{ await sbRPC('admin_delete_order', {p_password:STATE.adminPassword, p_order_id:id}); renderAdminOrders(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+}
 async function renderAdminProducts(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   await loadProducts();
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditProduct(null)">➕ ເພີ່ມສິນຄ້າໃໝ່</button>` +
-    STATE.products.map(p=>`
-      <div class="admin-list-item">
-        <div class="top"><span class="title">${p.name_lo}</span><span class="hint">${p.is_active?'ເປີດ':'ປິດ'}</span></div>
-        <div class="hint">${fmtMoney(p.price)} • ຄົງເຫຼືອ ${p.stock} • ຂາຍ ${p.sold_count}</div>
-        <div class="chiprow"><button onclick="adminEditProduct(${p.id})">✏️ ແກ້ໄຂ</button><button onclick="adminDeleteProduct(${p.id})" style="color:var(--danger);">🗑️ ລຶບ</button></div>
-      </div>`).join('');
+    (!STATE.products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ</div>' : `<div class="tile-grid">${STATE.products.map(p=>`
+      <div class="tile" onclick="adminEditProduct(${p.id})">
+        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteProduct(${p.id})">✕</button>
+        <div class="tile-dot" style="background:${p.is_active?'var(--ok)':'var(--ink-soft)'}"></div>
+        <div class="tile-img">${(p.images&&p.images[0]) ? `<img src="${p.images[0]}">` : '🛍️'}</div>
+        <div class="tile-title">${p.name_lo}</div>
+        <div class="tile-sub">${fmtMoney(p.price)}</div>
+      </div>`).join('')}</div>`);
   document.querySelectorAll('.fab').forEach(f=>f.remove());
 }
 function adminEditProduct(id){
@@ -1617,8 +1651,19 @@ async function renderAdminCategories(){
   const body = document.getElementById('adminBody');
   await loadCategories();
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCategory(null)">➕ ເພີ່ມໝວດໝູ່</button>` +
-    STATE.categories.map(c=>`<div class="admin-list-item"><div class="top"><span class="title">${c.icon} ${c.name_lo}</span></div>
-    <div class="chiprow"><button onclick="adminEditCategory(${c.id})">✏️ ແກ້ໄຂ</button></div></div>`).join('');
+    (!STATE.categories.length ? '<div class="empty">ຍັງບໍ່ມີໝວດໝູ່</div>' : `<div class="tile-grid">${STATE.categories.map(c=>`
+      <div class="tile" onclick="adminEditCategory(${c.id})">
+        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCategory(${c.id})">✕</button>
+        <div class="tile-img" style="font-size:24px;">${c.icon}</div>
+        <div class="tile-title">${c.name_lo}</div>
+      </div>`).join('')}</div>`);
+}
+// Needs a new admin_delete_category RPC. Consider having it fail (or reassign products)
+// if products still reference the category, rather than silently orphaning them.
+async function adminDeleteCategory(id){
+  if(!confirm('ລຶບໝວດໝູ່ນີ້? ສິນຄ້າທີ່ຢູ່ໃນໝວດນີ້ອາດໄດ້ຮັບຜົນກະທົບ')) return;
+  try{ await sbRPC('admin_delete_category', {p_password:STATE.adminPassword, p_category_id:id}); renderAdminCategories(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditCategory(id){
   const c = id ? STATE.categories.find(x=>x.id===id) : {};
@@ -1797,24 +1842,51 @@ async function renderAdminTopups(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   const list = await sbRPC('admin_list_topups', {p_password: STATE.adminPassword});
-  body.innerHTML = list.map(t=>`
-    <div class="admin-list-item">
-      <div class="top"><span class="title">${t.full_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${t.status}</span></div>
-      <div class="hint">${t.phone} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
-      ${t.slip_url?`<img src="${t.slip_url}" style="max-width:140px; border-radius:8px; margin-top:8px;">`:''}
-      ${t.status==='pending'?`<div class="chiprow"><button onclick="adminApproveTopup(${t.id},true)">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
-    </div>`).join('') || '<div class="empty">ບໍ່ມີຄຳຂໍເຕີມເງິນ</div>';
+  STATE.adminTopupsCache = list;
+  body.innerHTML = !list.length ? '<div class="empty">ບໍ່ມີຄຳຂໍເຕີມເງິນ</div>' : `<div class="tile-grid">${list.map(t=>`
+    <div class="tile" onclick="adminViewTopup(${t.id})">
+      <div class="tile-dot" style="background:${adminStatusColor(t.status)}"></div>
+      <div class="tile-img">${t.slip_url ? `<img src="${t.slip_url}">` : '💰'}</div>
+      <div class="tile-title">${t.full_name}</div>
+      <div class="tile-sub">${fmtMoney(t.amount)}</div>
+    </div>`).join('')}</div>`;
+}
+function adminViewTopup(id){
+  const t = (STATE.adminTopupsCache||[]).find(x=>x.id===id);
+  if(!t) return;
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ຄຳຂໍເຕີມເງິນ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="top" style="margin-bottom:6px;"><span class="title">${t.full_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${t.status}</span></div>
+    <div class="hint">${t.phone} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+    ${t.slip_url?`<img src="${t.slip_url}" style="width:100%; border-radius:12px; margin-top:12px;">`:''}
+    ${t.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
 }
 async function adminApproveTopup(id, approve){
   await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve});
+  document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
   renderAdminTopups();
 }
 async function renderAdminCarriers(){
   const body = document.getElementById('adminBody');
   await loadCarriers();
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCarrier(null)">➕ ເພີ່ມບໍລິສັດຂົນສົ່ງ</button>` +
-    STATE.carriers.map(c=>`<div class="admin-list-item"><div class="top"><span class="title">${c.logo} ${c.name}</span><span>${fmtMoney(c.base_fee)}</span></div>
-    <div class="chiprow"><button onclick="adminEditCarrier(${c.id})">✏️ ແກ້ໄຂ</button></div></div>`).join('');
+    (!STATE.carriers.length ? '<div class="empty">ຍັງບໍ່ມີບໍລິສັດຂົນສົ່ງ</div>' : `<div class="tile-grid">${STATE.carriers.map(c=>`
+      <div class="tile" onclick="adminEditCarrier(${c.id})">
+        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCarrier(${c.id})">✕</button>
+        <div class="tile-img" style="font-size:22px;">${c.logo}</div>
+        <div class="tile-title">${c.name}</div>
+        <div class="tile-sub">${fmtMoney(c.base_fee)}</div>
+      </div>`).join('')}</div>`);
+}
+// Needs a new admin_delete_carrier RPC.
+async function adminDeleteCarrier(id){
+  if(!confirm('ລຶບບໍລິສັດຂົນສົ່ງນີ້?')) return;
+  try{ await sbRPC('admin_delete_carrier', {p_password:STATE.adminPassword, p_carrier_id:id}); renderAdminCarriers(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditCarrier(id){
   const c = id ? STATE.carriers.find(x=>x.id===id) : {};
@@ -1837,33 +1909,59 @@ function adminEditCarrier(id){
 }
 async function renderAdminCoupons(){
   const body = document.getElementById('adminBody');
-  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCoupon()">➕ ສ້າງຄູປອງ</button>
-  <div class="hint">ຈັດການຄູປອງ (ລະຫັດ, ສ່ວນຫຼຸດ, ວັນໝົດອາຍຸ) — ໃສ່ລະຫັດແລ້ວກົດບັນທຶກ</div>`;
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  let list = [];
+  try{ list = await sbRPC('admin_list_coupons', {p_password: STATE.adminPassword}); }catch(e){ list = []; }
+  STATE.adminCouponsCache = list;
+  const valueLabel = cp => cp.discount_type==='percent' ? `${cp.discount_value}%` : cp.discount_type==='free_shipping' ? 'ສົ່ງຟຣີ' : fmtMoney(cp.discount_value);
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCoupon()">➕ ສ້າງຄູປອງ</button>` +
+    (!list.length ? '<div class="empty">ຍັງບໍ່ມີຄູປອງ</div>' : `<div class="tile-grid">${list.map(cp=>`
+      <div class="tile" onclick="adminEditCoupon(${cp.id})">
+        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCoupon(${cp.id})">✕</button>
+        <div class="tile-dot" style="background:${cp.is_active?'var(--ok)':'var(--ink-soft)'}"></div>
+        <div class="tile-img" style="font-size:20px;">🎟️</div>
+        <div class="tile-title">${cp.code}</div>
+        <div class="tile-sub">${valueLabel(cp)}</div>
+      </div>`).join('')}</div>`);
 }
-function adminEditCoupon(){
+function adminEditCoupon(id){
+  const cp = id ? (STATE.adminCouponsCache||[]).find(x=>x.id===id) : null;
   const overlay = document.createElement('div'); overlay.className='overlay show center';
-  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ສ້າງຄູປອງ</h3><button class="closex" data-close>✕</button></div>
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂ':'ສ້າງ'}ຄູປອງ</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="field"><label>ລະຫັດຄູປອງ</label><input id="cpCode" placeholder="KHAIDEE10"></div>
-    <div class="field"><label>ປະເພດສ່ວນຫຼຸດ</label><select id="cpType" onchange="document.getElementById('cpValueField').style.display = this.value==='free_shipping'?'none':'block';"><option value="fixed">ຫຼຸດຈຳນວນເງິນ</option><option value="percent">ຫຼຸດເປັນ %</option><option value="free_shipping">🚚 ສົ່ງຟຣີ</option></select></div>
-    <div class="field" id="cpValueField"><label>ມູນຄ່າສ່ວນຫຼຸດ</label><input type="number" id="cpValue"></div>
-    <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ</label><input type="number" id="cpMin" value="0"></div>
-    <div class="field"><label>ຈຳນວນຄັ້ງທີ່ໃຊ້ໄດ້</label><input type="number" id="cpLimit"></div>
-    <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cpExpire"></div>
+    <div class="field"><label>ລະຫັດຄູປອງ</label><input id="cpCode" placeholder="KHAIDEE10" value="${cp?.code||''}"></div>
+    <div class="field"><label>ປະເພດສ່ວນຫຼຸດ</label><select id="cpType" onchange="document.getElementById('cpValueField').style.display = this.value==='free_shipping'?'none':'block';">
+      <option value="fixed" ${cp&&cp.discount_type==='fixed'?'selected':''}>ຫຼຸດຈຳນວນເງິນ</option>
+      <option value="percent" ${cp&&cp.discount_type==='percent'?'selected':''}>ຫຼຸດເປັນ %</option>
+      <option value="free_shipping" ${cp&&cp.discount_type==='free_shipping'?'selected':''}>🚚 ສົ່ງຟຣີ</option></select></div>
+    <div class="field" id="cpValueField" style="${cp&&cp.discount_type==='free_shipping'?'display:none;':''}"><label>ມູນຄ່າສ່ວນຫຼຸດ</label><input type="number" id="cpValue" value="${cp?.discount_value||''}"></div>
+    <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ</label><input type="number" id="cpMin" value="${cp?.min_order||0}"></div>
+    <div class="field"><label>ຈຳນວນຄັ້ງທີ່ໃຊ້ໄດ້</label><input type="number" id="cpLimit" value="${cp?.usage_limit||''}"></div>
+    <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cpExpire" value="${cp?.expires_at ? cp.expires_at.slice(0,10) : ''}"></div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;"><input type="checkbox" id="cpActive" ${!cp||cp.is_active?'checked':''}> ເປີດໃຊ້ງານ</label>
     <button class="btn btn-primary" id="cpSave">ບັນທຶກ</button>
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
   overlay.querySelector('#cpSave').onclick=async()=>{
     const discountType = document.getElementById('cpType').value;
-    await sbRPC('admin_upsert_coupon', {p_password:STATE.adminPassword, p_coupon:{
-      code:document.getElementById('cpCode').value, discount_type:discountType,
-      discount_value: discountType==='free_shipping' ? 0 : Number(document.getElementById('cpValue').value), min_order:Number(document.getElementById('cpMin').value)||0,
-      usage_limit:Number(document.getElementById('cpLimit').value)||null,
-      expires_at:document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
-      is_active:true}});
-    overlay.remove(); alert('ສ້າງຄູປອງແລ້ວ');
+    try{
+      await sbRPC('admin_upsert_coupon', {p_password:STATE.adminPassword, p_coupon:{
+        id: id||undefined, code:document.getElementById('cpCode').value, discount_type:discountType,
+        discount_value: discountType==='free_shipping' ? 0 : Number(document.getElementById('cpValue').value), min_order:Number(document.getElementById('cpMin').value)||0,
+        usage_limit:Number(document.getElementById('cpLimit').value)||null,
+        expires_at:document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
+        is_active:document.getElementById('cpActive').checked}});
+      overlay.remove(); renderAdminCoupons();
+    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); }
   };
+}
+// Needs new admin_list_coupons(p_password) and admin_delete_coupon(p_password, p_coupon_id) RPCs;
+// admin_upsert_coupon must also accept an optional p_coupon.id to update instead of always inserting.
+async function adminDeleteCoupon(id){
+  if(!confirm('ລຶບຄູປອງນີ້?')) return;
+  try{ await sbRPC('admin_delete_coupon', {p_password:STATE.adminPassword, p_coupon_id:id}); renderAdminCoupons(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function renderAdminAds(){
   const body = document.getElementById('adminBody');
