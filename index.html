@@ -120,6 +120,17 @@ button{font-family:inherit; cursor:pointer;}
 }
 .verified-store-badge.on-card{position:absolute; top:6px; right:6px; z-index:2;}
 
+/* ---- Shop page (public storefront) — TikTok-profile-style header ---- */
+.shop-stats{display:flex; justify-content:center; gap:22px; margin:10px 0 2px;}
+.shop-stats .stat{text-align:center; min-width:40px;}
+.shop-stats .stat .n{font-size:15px; font-weight:800; color:var(--ink);}
+.shop-stats .stat .l{font-size:9.5px; color:var(--ink-soft); margin-top:1px;}
+.shop-follow-btn{display:inline-block; margin:12px auto 0; padding:6px 24px; border-radius:999px; border:none;
+  background:var(--maroon); color:#fff; font-weight:700; font-size:12px; box-shadow:0 3px 10px rgba(122,30,43,.28);}
+.shop-follow-btn.following{background:#fff; border:1.5px solid var(--line); color:var(--ink-soft); box-shadow:none;}
+.shop-search{width:100%; padding:9px 14px; border:1.5px solid var(--line); border-radius:999px; font-size:12.5px; font-family:inherit; background:#fff;}
+.shop-search:focus{outline:none; border-color:var(--maroon);}
+
 /* ---------- HEADER ---------- */
 header.top{
   position:sticky; top:0; z-index:40; background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));
@@ -964,11 +975,16 @@ function sellerVerifiedBadge(seller, extraClass){
   return `<span class="verified-store-badge${extraClass?' '+extraClass:''}">✅ ຮ້ານຢືນຢັນ</span>`;
 }
 
-/* ============================================================ SHOP PAGE (public storefront) ============================================================ */
+/* ============================================================ SHOP PAGE (public storefront, TikTok-profile-style) ============================================================ */
+// Local view state for the shop sheet: which product tab is active + any in-shop search text.
+// Reset only when a *different* shop is opened — a follow-tap or search keystroke must not
+// throw away the customer's current tab/search.
+let SHOP_TAB_STATE = {tab:'all', search:''};
 async function openShop(sellerId){
   const body = document.getElementById('shopBody');
   body.innerHTML = '<div class="loader" style="padding:20px;">ກຳລັງໂຫລດ...</div>';
   openModal('modalShop');
+  SHOP_TAB_STATE = {tab:'all', search:''};
   let shop;
   try{
     shop = await sbRPC('seller_public_profile', {p_seller_id: sellerId, p_customer_id: STATE.customer ? STATE.customer.id : null});
@@ -980,39 +996,79 @@ function paintShop(){
   const shop = STATE.activeShop;
   const body = document.getElementById('shopBody');
   if(!shop) return;
-  const products = shop.products || [];
+  const allProducts = shop.products || [];
+  const totalSold = allProducts.reduce((s,p)=>s+(p.sold_count||0),0);
+  const rated = allProducts.filter(p=>p.rating_avg);
+  const avgRating = rated.length ? (rated.reduce((s,p)=>s+Number(p.rating_avg),0)/rated.length).toFixed(1) : null;
   body.innerHTML = `
-    <div style="height:110px; background:${shop.cover_url?`url('${shop.cover_url}') center/cover`:'linear-gradient(135deg,var(--maroon),var(--maroon-dark))'};"></div>
-    <div style="padding:0 16px 16px; margin-top:-34px;">
-      <div style="display:flex; align-items:flex-end; gap:12px;">
-        <div style="width:68px; height:68px; border-radius:16px; background:#fff; border:3px solid #fff; box-shadow:var(--shadow); overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:30px;">
-          ${shop.logo_url?`<img src="${shop.logo_url}" style="width:100%; height:100%; object-fit:cover;">`:'🏪'}
-        </div>
-        <div style="flex:1; min-width:0; padding-bottom:2px;">
-          <div style="font-size:16px; font-weight:800; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">${shop.store_name} ${sellerVerifiedBadge(shop)}</div>
-          <div class="hint" style="margin-top:2px;">👥 ${shop.follower_count||0} ຜູ້ຕິດຕາມ • 🛍️ ${products.length} ສິນຄ້າ</div>
-        </div>
+    <div style="height:96px; background:${shop.cover_url?`url('${shop.cover_url}') center/cover`:'linear-gradient(135deg,var(--maroon),var(--maroon-dark))'};"></div>
+    <div style="padding:0 16px 4px; margin-top:-42px; text-align:center;">
+      <div style="width:84px; height:84px; border-radius:50%; background:#fff; border:3px solid #fff; box-shadow:var(--shadow); overflow:hidden; margin:0 auto; display:flex; align-items:center; justify-content:center; font-size:34px;">
+        ${shop.logo_url?`<img src="${shop.logo_url}" style="width:100%; height:100%; object-fit:cover;">`:'🏪'}
       </div>
-      ${shop.description?`<p style="font-size:13px; color:var(--ink-soft); margin:12px 0 0; line-height:1.6;">${shop.description}</p>`:''}
-      <button class="btn ${shop.is_following?'btn-ghost':'btn-primary'}" style="width:100%; margin-top:12px;" id="shopFollowBtn" onclick="toggleShopFollow()">${shop.is_following?'✓ ກຳລັງຕິດຕາມ':'➕ ຕິດຕາມຮ້ານ'}</button>
+      <div style="font-size:16px; font-weight:800; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;">${shop.store_name} ${sellerVerifiedBadge(shop)}</div>
+      <div class="hint" style="margin:2px 0 0;">🏪 ຮ້ານຄ້າ KhaiDee</div>
+
+      <div class="shop-stats">
+        <div class="stat"><div class="n">${allProducts.length}</div><div class="l">ສິນຄ້າ</div></div>
+        <div class="stat"><div class="n">${shop.follower_count||0}</div><div class="l">ຜູ້ຕິດຕາມ</div></div>
+        <div class="stat"><div class="n">${totalSold}</div><div class="l">ຂາຍແລ້ວ</div></div>
+        <div class="stat"><div class="n">${avgRating?('⭐'+avgRating):'-'}</div><div class="l">ຄະແນນ</div></div>
+      </div>
+
+      <button class="shop-follow-btn ${shop.is_following?'following':''}" id="shopFollowBtn" onclick="toggleShopFollow()">${shop.is_following?'✓ ກຳລັງຕິດຕາມ':'➕ ຕິດຕາມ'}</button>
+
+      ${shop.description?`<p style="font-size:12.5px; color:var(--ink-soft); margin:12px 0 0; line-height:1.6; text-align:left;">${shop.description}</p>`:''}
     </div>
-    <div style="padding:0 16px 16px;">
-      <div style="font-size:13px; font-weight:700; margin-bottom:10px;">ສິນຄ້າຂອງຮ້ານ</div>
-      <div class="grid">${!products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ</div>' : products.map(p=>`
-        <div class="card" onclick="closeModal('modalShop'); openProduct(${p.id})">
-          <div class="imgwrap">
-            ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
-            ${sellerVerifiedBadge(shop,'on-card')}
-            <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
-          </div>
-          <div class="body">
-            <div class="name">${nameFor(p)}</div>
-            <div class="price-row"><span class="price">${fmtMoney(p.price)}</span></div>
-            <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
-          </div>
-        </div>`).join('')}</div>
-    </div>`;
+
+    <div class="pd-tabs" id="shopTabsBar" style="margin:16px 0 0;">
+      <button class="${SHOP_TAB_STATE.tab==='all'?'active':''}" data-tab="all" onclick="switchShopTab('all')">ທັງໝົດ</button>
+      <button class="${SHOP_TAB_STATE.tab==='hot'?'active':''}" data-tab="hot" onclick="switchShopTab('hot')">🔥 ຂາຍດີ</button>
+      <button class="${SHOP_TAB_STATE.tab==='new'?'active':''}" data-tab="new" onclick="switchShopTab('new')">🆕 ມາໃໝ່</button>
+    </div>
+
+    <div style="padding:12px 16px 0;">
+      <input id="shopSearchInput" class="shop-search" placeholder="🔍 ຄົ້ນຫາສິນຄ້າໃນຮ້ານນີ້..." value="${SHOP_TAB_STATE.search||''}" oninput="onShopSearch(this.value)">
+    </div>
+
+    <div style="padding:10px 16px 16px;" id="shopProductsWrap"></div>`;
+  renderShopGrid();
 }
+// Applies the active tab (ທັງໝົດ/🔥ຂາຍດີ/🆕ມາໃໝ່) plus any in-shop search text on top of the
+// shop's product list. Kept separate from paintShop() so typing in the search box or switching
+// tabs only repaints the grid — not the whole header — and never steals input focus.
+function filterShopProducts(list){
+  let out = list;
+  if(SHOP_TAB_STATE.tab==='hot') out = out.filter(p=>p.is_featured);
+  else if(SHOP_TAB_STATE.tab==='new') out = [...out].sort((a,b)=>(b.id||0)-(a.id||0));
+  const q = (SHOP_TAB_STATE.search||'').trim().toLowerCase();
+  if(q) out = out.filter(p=>(nameFor(p)||'').toLowerCase().includes(q));
+  return out;
+}
+function renderShopGrid(){
+  const shop = STATE.activeShop; const wrap = document.getElementById('shopProductsWrap');
+  if(!shop || !wrap) return;
+  const products = filterShopProducts(shop.products || []);
+  wrap.innerHTML = `<div class="grid">${!products.length ? '<div class="empty">ບໍ່ພົບສິນຄ້າ</div>' : products.map(p=>`
+    <div class="card" onclick="closeModal('modalShop'); openProduct(${p.id})">
+      <div class="imgwrap">
+        ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+        ${sellerVerifiedBadge(shop,'on-card')}
+        <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+      </div>
+      <div class="body">
+        <div class="name">${nameFor(p)}</div>
+        <div class="price-row"><span class="price">${fmtMoney(p.price)}</span></div>
+        <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
+      </div>
+    </div>`).join('')}</div>`;
+}
+function switchShopTab(tab){
+  SHOP_TAB_STATE.tab = tab;
+  document.querySelectorAll('#shopTabsBar button').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+  renderShopGrid();
+}
+function onShopSearch(v){ SHOP_TAB_STATE.search = v; renderShopGrid(); }
 async function toggleShopFollow(){
   if(!STATE.customer){ closeModal('modalShop'); openModal('modalAuth'); return; }
   const shop = STATE.activeShop; if(!shop) return;
