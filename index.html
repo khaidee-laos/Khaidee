@@ -203,6 +203,13 @@ nav.bottom button.active{color:var(--maroon);}
 nav.bottom .icon{font-size:19px;}
 .cart-count{position:absolute; top:-2px; right:22%; background:var(--danger); color:#fff; font-size:9px; font-weight:700; border-radius:999px; min-width:15px; height:15px; display:flex; align-items:center; justify-content:center; padding:0 3px;}
 
+/* ---- "Fly to cart" mini icon — small clone that arcs from the tapped add-to-cart button
+   over to the 🛒 tab in the bottom nav, then the cart badge pulses once it lands. ---- */
+.fly-to-cart{position:fixed; z-index:9998; pointer-events:none; border-radius:50%; background:var(--maroon);
+  color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px;
+  box-shadow:0 4px 12px rgba(43,27,20,.35); overflow:hidden; will-change:transform,opacity;}
+.fly-to-cart img{width:100%; height:100%; object-fit:cover; border-radius:50%;}
+
 /* ---------- MODAL / POPUP ---------- */
 .overlay{position:fixed; inset:0; background:rgba(30,15,10,.5); z-index:100; display:none; align-items:flex-end; justify-content:center;}
 .overlay.show{display:flex;}
@@ -1145,7 +1152,7 @@ function renderProducts(){
         <div class="price-row"><span class="price">${fmtMoney(p.price)}</span>${p.compare_price?`<span class="compare">${fmtMoney(p.compare_price)}</span>`:''}</div>
         <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
       </div>
-      <button class="addbtn" onclick="event.stopPropagation(); quickAdd(${p.id})">+</button>
+      <button class="addbtn" onclick="event.stopPropagation(); quickAdd(${p.id}, event, '${((p.images&&p.images[0])||'').replace(/'/g,"\\'")}')">+</button>
     </div>`).join('');
   // same product list is mirrored on the Home page (productGrid) and the Categories page (catPageGrid)
   ['productGrid','catPageGrid'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML = html; });
@@ -1387,7 +1394,7 @@ function paintBuyOptions(id){
       </div>
     </div>
     <div class="bo-footer">
-      <button class="btn ${boAction==='buy'?'btn-primary':'btn-ghost'}" onclick="confirmBuyOptions(${p.id})">${boAction==='buy'?'⚡ ຊື້ເລີຍ':'🛒 ເພີ່ມໃສ່ກະຕ່າ'}</button>
+      <button class="btn ${boAction==='buy'?'btn-primary':'btn-ghost'}" onclick="confirmBuyOptions(${p.id}, event)">${boAction==='buy'?'⚡ ຊື້ເລີຍ':'🛒 ເພີ່ມໃສ່ກະຕ່າ'}</button>
     </div>`;
 }
 function boSelectValue(groupId, valueId){
@@ -1409,17 +1416,20 @@ function boSelectValue(groupId, valueId){
   if(pdStock) pdStock.innerHTML = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}`;
 }
 function changeBoQty(d){ detailQty = Math.max(1, detailQty+d); const el=document.getElementById('boQtyLabel'); if(el) el.textContent = detailQty; }
-function confirmBuyOptions(id){
+function confirmBuyOptions(id, evt){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   const actionLabel = boAction==='buy' ? 'ຊື້ເລີຍ' : 'ເພີ່ມໃສ່ກະຕ່າ';
   const r = resolveDetailVariantOrAlert(actionLabel); if(!r.ok) return;
-  closeModal('modalBuyOptions');
+  const thumb = selectedVariantThumb() || (p.images && p.images[0]) || '';
+  const btnEl = evt && evt.currentTarget;
   if(boAction==='buy'){
+    closeModal('modalBuyOptions');
     closeModal('modalProduct');
     buyNow(id, detailQty, r.variant);
   }else{
     addToCart(id, detailQty, r.variant);
-    pulseCart();
+    flyToCart(btnEl, thumb); // capture the button's position & spawn the flying icon BEFORE the sheet closes/hides it
+    closeModal('modalBuyOptions');
   }
 }
 function onPdGalleryScroll(){
@@ -1503,7 +1513,35 @@ async function submitComment(productId){
     loadComments(productId);
   }catch(e){ showToast('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
 }
-function quickAdd(id){ addToCart(id, 1); pulseCart(); }
+function quickAdd(id, evt, imgUrl){ addToCart(id, 1); flyToCart(evt && evt.currentTarget, imgUrl); }
+// Small clone of the tapped button arcs across the screen to the 🛒 tab, then the cart badge
+// pulses once it "lands" — purely cosmetic feedback so adding to cart feels tactile even
+// though the button itself sits far from the cart icon (grid cards, buy-options sheet, etc).
+function flyToCart(fromEl, imgUrl){
+  const target = document.querySelector('nav.bottom .navbtn[data-page="cart"] .icon');
+  if(!fromEl || !target || typeof fromEl.getBoundingClientRect !== 'function'){ pulseCart(); return; }
+  try{
+    const startRect = fromEl.getBoundingClientRect();
+    const endRect = target.getBoundingClientRect();
+    const size = 26;
+    const el = document.createElement('div');
+    el.className = 'fly-to-cart';
+    el.style.left = (startRect.left + startRect.width/2 - size/2) + 'px';
+    el.style.top = (startRect.top + startRect.height/2 - size/2) + 'px';
+    el.style.width = size+'px'; el.style.height = size+'px';
+    el.innerHTML = imgUrl ? `<img src="${imgUrl}">` : '🛒';
+    document.body.appendChild(el);
+    const dx = (endRect.left + endRect.width/2) - (startRect.left + startRect.width/2);
+    const dy = (endRect.top + endRect.height/2) - (startRect.top + startRect.height/2);
+    const arcUp = Math.min(dy, -70); // always hops upward first, like Shopee/Lazada's add-to-cart animation
+    const anim = el.animate([
+      {transform:'translate(0,0) scale(1)', opacity:1, offset:0},
+      {transform:`translate(${dx*0.5}px, ${arcUp}px) scale(.8)`, opacity:1, offset:.55},
+      {transform:`translate(${dx}px, ${dy}px) scale(.15)`, opacity:.25, offset:1}
+    ], {duration:600, easing:'cubic-bezier(.3,.05,.55,1)'});
+    anim.onfinish = ()=>{ el.remove(); pulseCart(); };
+  }catch(e){ pulseCart(); }
+}
 function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
 
 /* ============================================================ CART ============================================================ */
