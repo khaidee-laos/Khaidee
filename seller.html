@@ -448,11 +448,45 @@ function renderGroupsBox(){
     <div style="background:var(--cream); border-radius:10px; padding:10px; margin-bottom:8px;">
       <div class="row2">
         <div class="field" style="margin-bottom:6px;"><label>ຊື່ກຸ່ມ (ເຊັ່ນ: ໄຊສ໌, ສີ)</label><input value="${g.name}" oninput="pGroups[${i}].name=this.value"></div>
-        <div class="field" style="margin-bottom:6px;"><label>ຄ່າ (ຄັ້ນດ້ວຍ ,)</label><input value="${(g.values||[]).map(v=>v.value).join(', ')}" oninput="pGroups[${i}].values=this.value.split(',').map(s=>({value:s.trim()})).filter(v=>v.value)"></div>
+        <div class="field" style="margin-bottom:6px;"><label>ຄ່າ (ຄັ້ນດ້ວຍ ,)</label><input value="${(g.values||[]).map(v=>v.value).join(', ')}" onchange="updateGroupValues(${i}, this.value)"></div>
       </div>
-      <button type="button" class="btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger);" onclick="removeVariantGroup(${i})">🗑️ ລຶບກຸ່ມນີ້</button>
+      ${(g.values||[]).length ? `
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+        ${g.values.map((v,j)=>`
+          <div style="text-align:center;">
+            <label style="cursor:pointer; display:block;" title="ອັບໂຫລດຮູບນ້ອຍສຳລັບ &quot;${v.value}&quot;">
+              <img src="${v.image_url||'https://placehold.co/56x56/F1DFAE/7A1E2B?text=%2B'}" style="width:48px; height:48px; object-fit:cover; border-radius:8px; border:1.5px solid var(--line);">
+              <input type="file" accept="image/*" style="display:none;" onchange="uploadGroupValueImage(${i},${j},this.files[0])">
+            </label>
+            <div style="font-size:10px; margin-top:3px; max-width:54px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${v.value}</div>
+          </div>`).join('')}
+      </div>
+      <div class="hint" style="margin-top:2px;">📷 ແຕະຮູບຂ້າງເທິງເພື່ອອັບໂຫລດຮູບນ້ອຍປະຈຳຕົວເລືອກນີ້ (ເຊັ່ນ: ສີແດງ, ຮຸ່ນ A) — ລູກຄ້າຈະເຫັນຕອນເລືອກຊື້ • ບໍ່ບັງຄັບ</div>
+      ` : ''}
+      <button type="button" class="btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger); margin-top:8px;" onclick="removeVariantGroup(${i})">🗑️ ລຶບກຸ່ມນີ້</button>
     </div>`).join('') +
     `<button type="button" class="btn-sm btn-ghost" onclick="rebuildVariants()">🔄 ສ້າງຕາຕະລາງລາຄາ/ສະຕັອກ</button>`;
+}
+// Re-splits the comma-separated value list, preserving any image_url already uploaded for a
+// value whose text didn't change (matched by exact name) instead of wiping it out.
+function updateGroupValues(i, text){
+  const names = text.split(',').map(s=>s.trim()).filter(Boolean);
+  const old = pGroups[i].values || [];
+  pGroups[i].values = names.map(name=>{
+    const existing = old.find(v=>v.value===name);
+    return existing || {value:name, image_url:null};
+  });
+  renderGroupsBox();
+}
+// Uploads a small thumbnail image for one specific variant value (e.g. the swatch shown for
+// "ສີແດງ" or "ຮຸ່ນ A") so customers see which color/model they're picking, Lazada-style.
+async function uploadGroupValueImage(i, j, file){
+  if(!file) return;
+  try{
+    const url = await sbUpload('khaidee-products', `variant_${STATE.seller.id}_${Date.now()}_${file.name}`, file);
+    pGroups[i].values[j].image_url = url;
+    renderGroupsBox();
+  }catch(e){ alert('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function cartesian(arrs){
   return arrs.reduce((acc,cur)=> acc.flatMap(a=>cur.map(c=>[...a,c])), [[]]);

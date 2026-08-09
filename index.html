@@ -268,6 +268,36 @@ nav.bottom .icon{font-size:19px;}
 .pd-sticky-bar{position:sticky; bottom:0; background:#fff; padding:10px 16px; display:flex; gap:10px; border-top:1px solid var(--line); margin:16px -16px -16px;}
 .pd-sticky-bar button{flex:1;}
 
+/* ---- Product detail: FULL PAGE (Lazada-style) instead of a bottom-sheet popup ---- */
+#modalProduct.overlay{align-items:stretch; justify-content:stretch;}
+#modalProduct .sheet{width:100%; max-width:100%; height:100%; max-height:100%; border-radius:0; margin:0; animation:pdPageIn .2s ease; display:flex; flex-direction:column; overflow:hidden;}
+@keyframes pdPageIn{from{opacity:0; transform:translateX(14px);} to{opacity:1; transform:translateX(0);}}
+#modalProduct .sheet-handle{display:none;}
+#modalProduct .sheet-header{flex:0 0 auto;}
+#modalProduct .sheet-body{flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+#productDetailBody{margin:0;}
+
+/* ---- Buy Options: variant + qty picker sheet, shown when tapping Add-to-cart / Buy-now
+   (this is the separate popup the customer sees, like Lazada's "select options" sheet). ---- */
+#modalBuyOptions .sheet{max-height:88vh; position:relative; padding-top:4px;}
+.bo-close{position:absolute; top:12px; right:12px; width:28px; height:28px; border-radius:50%; background:var(--cream); border:none; color:var(--ink-soft); font-size:14px; z-index:3; line-height:1;}
+.bo-body{padding:16px 16px 0;}
+.bo-head{display:flex; gap:12px; padding:2px 46px 14px 0; border-bottom:1px solid var(--line);}
+.bo-head img{width:76px; height:76px; border-radius:10px; object-fit:cover; background:var(--gold-light); flex-shrink:0;}
+.bo-head .price{font-size:19px; font-weight:800; color:var(--maroon);}
+.bo-head .stockline{font-size:11.5px; color:var(--ink-soft); margin-top:6px;}
+.bo-group{margin-top:14px;}
+.bo-group label{display:block; font-size:12.5px; font-weight:700; color:var(--ink-soft); margin-bottom:8px;}
+.bo-swatches{display:flex; gap:8px; flex-wrap:wrap;}
+.bo-swatch{display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px; border:1.5px solid var(--line); border-radius:10px; background:#fff; min-width:58px;}
+.bo-swatch img{width:42px; height:42px; border-radius:7px; object-fit:cover; background:var(--gold-light);}
+.bo-swatch .txt{font-size:10.5px; font-weight:600; max-width:70px; text-align:center; line-height:1.25;}
+.bo-swatch.active{border-color:var(--maroon); background:rgba(122,30,43,.06);}
+.bo-swatch.active .txt{color:var(--maroon);}
+.bo-qtyrow{display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); padding-bottom:14px;}
+.bo-qtyrow label{font-size:12.5px; font-weight:700; color:var(--ink-soft);}
+.bo-footer{position:sticky; bottom:0; background:#fff; padding:12px 0 16px; margin:0 -16px; padding-left:16px; padding-right:16px; border-top:1px solid var(--line);}
+
 /* ---------- CARRIER / RADIO CARDS ---------- */
 .optcard{display:flex; align-items:center; gap:10px; border:1.5px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; margin-bottom:9px;}
 .optcard.selected{border-color:var(--maroon); background:rgba(122,30,43,.04);}
@@ -461,11 +491,17 @@ nav.bottom .icon{font-size:19px;}
 
 <!-- ============================================================ MODALS ============================================================ -->
 
-<!-- Product Detail -->
+<!-- Product Detail (full page, not a popup — swipe/back-button style like Lazada) -->
 <div class="overlay" id="modalProduct"><div class="sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-header"><h3 data-i18n="product_detail">ລາຍລະອຽດສິນຄ້າ</h3><button class="closex" onclick="closeModal('modalProduct')">✕</button></div>
+  <div class="sheet-header"><button class="closex" onclick="closeModal('modalProduct')" aria-label="back">←</button><h3 data-i18n="product_detail">ລາຍລະອຽດສິນຄ້າ</h3><span style="width:30px;"></span></div>
   <div class="sheet-body" id="productDetailBody"></div>
+</div></div>
+
+<!-- Buy Options: separate popup shown when tapping "ເພີ່ມໃສ່ກະຕ່າ" / "ຊື້ເລີຍ" so the customer
+     picks color/size (with seller-uploaded thumbnail images) and quantity — Lazada-style. -->
+<div class="overlay" id="modalBuyOptions"><div class="sheet">
+  <button class="bo-close" onclick="closeModal('modalBuyOptions')" aria-label="close">✕</button>
+  <div class="bo-body" id="buyOptionsBody"></div>
 </div></div>
 
 <!-- Shop / Store page -->
@@ -1078,15 +1114,7 @@ function paintProductDetail(id){
       <div class="meta" style="margin:8px 0 0;" id="pdStockLine">ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
 
       ${detailGroups.length ? `
-      <div id="pdVariantGroups">
-        ${detailGroups.map(g=>`
-        <div class="field" style="margin:10px 0 0;">
-          <label>${g.name}</label>
-          <div class="chiprow" data-group="${g.id}">
-            ${(g.values||[]).map(v=>`<button type="button" onclick="selectDetailVariantValue(${g.id},${v.id})" data-value="${v.id}" class="${detailSelection[g.id]===v.id?'active':''}">${v.value}</button>`).join('')}
-          </div>
-        </div>`).join('')}
-      </div>` : ''}
+      <div class="hint" style="margin-top:8px;">🎛️ ມີຕົວເລືອກ: ${detailGroups.map(g=>g.name).join(', ')} — ເລືອກຕອນກົດ “ເພີ່ມໃສ່ກະຕ່າ” ຫຼື “ຊື້ເລີຍ” ຂ້າງລຸ່ມ</div>` : ''}
 
       ${(()=>{ const seller = sellerById(p.seller_id); return seller ? `
       <div class="pd-storerow" style="cursor:pointer;" onclick="closeModal('modalProduct'); openShop('${seller.id}')">
@@ -1130,30 +1158,13 @@ function paintProductDetail(id){
     </div>
 
     <div class="pd-sticky-bar">
-      <div class="qty-select" style="margin:0;">
-        <button onclick="changeDetailQty(-1)">−</button><span id="detailQtyLabel">1</span><button onclick="changeDetailQty(1)">+</button>
-      </div>
-      <button class="btn btn-ghost" onclick="confirmAddToCart(${p.id})">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
-      <button class="btn btn-primary" onclick="confirmBuyNow(${p.id})">⚡ ຊື້ເລີຍ</button>
+      <button class="btn btn-ghost" onclick="openBuyOptions(${p.id}, 'cart')">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
+      <button class="btn btn-primary" onclick="openBuyOptions(${p.id}, 'buy')">⚡ ຊື້ເລີຍ</button>
     </div>`;
 }
-function selectDetailVariantValue(groupId, valueId){
-  detailSelection[groupId] = valueId;
-  document.querySelectorAll(`.chiprow[data-group="${groupId}"] button`).forEach(b=> b.classList.toggle('active', Number(b.dataset.value)===valueId));
-  const mv = matchedDetailVariant();
-  const p = STATE.products.find(x=>x.id===detailProductId);
-  if(p){
-    const priceEl = document.getElementById('pdPrice'), stockEl = document.getElementById('pdStockLine');
-    const displayPrice = mv ? (mv.price ?? p.price) : p.price;
-    const displayCompare = mv ? mv.compare_price : p.compare_price;
-    const displayStock = mv ? mv.stock : p.stock;
-    if(priceEl) priceEl.innerHTML = `${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}`;
-    if(stockEl) stockEl.innerHTML = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}`;
-  }
-}
-// Shared by confirmAddToCart() and confirmBuyNow() — validates that a full variant selection
-// has been made (when the product has variant groups) and resolves it to the matched variant
-// row + a human-readable label. Returns {ok:false} (after alerting) if the selection is invalid,
+// Shared by confirmBuyOptions() — validates that a full variant selection has been made
+// (when the product has variant groups) and resolves it to the matched variant row + a
+// human-readable label. Returns {ok:false} (after alerting) if the selection is invalid,
 // or {ok:true, variant} — variant is null for products with no variant groups at all.
 function resolveDetailVariantOrAlert(actionLabel){
   if(!detailGroups.length) return {ok:true, variant:null};
@@ -1168,19 +1179,93 @@ function resolveDetailVariantOrAlert(actionLabel){
   }).filter(Boolean).join(' / ');
   return {ok:true, variant:{...variant, label}};
 }
-function confirmAddToCart(id){
-  const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  const r = resolveDetailVariantOrAlert('ເພີ່ມໃສ່ກະຕ່າ'); if(!r.ok) return;
-  addToCart(id, detailQty, r.variant);
-  closeModal('modalProduct');
+/* ============================================================ BUY OPTIONS POPUP ============================================================
+   Separate sheet (Lazada-style) that appears on top of the full-page product detail when the
+   customer taps "🛒 ເພີ່ມໃສ່ກະຕ່າ" or "⚡ ຊື້ເລີຍ". This is where color/size etc. (with the small
+   thumbnail images sellers upload per option) and quantity are actually picked. */
+let boAction = 'cart'; // 'cart' | 'buy' — which sticky-bar button opened this popup
+// Returns the thumbnail image for whichever variant value is currently selected (first group
+// that has one wins), so the popup — and the product photo — can reflect "this is the red one".
+function selectedVariantThumb(){
+  for(const g of detailGroups){
+    const val = (g.values||[]).find(v=>v.id===detailSelection[g.id]);
+    if(val && val.image_url) return val.image_url;
+  }
+  return null;
 }
-// "ຊື້ເລີຍ" — skips the cart entirely and jumps straight to checkout for just this product,
-// while leaving whatever is already in the customer's real cart untouched.
-function confirmBuyNow(id){
+function openBuyOptions(id, action){
+  boAction = action;
+  detailQty = 1;
+  paintBuyOptions(id);
+  openModal('modalBuyOptions');
+}
+function paintBuyOptions(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  const r = resolveDetailVariantOrAlert('ຊື້ເລີຍ'); if(!r.ok) return;
-  closeModal('modalProduct');
-  buyNow(id, detailQty, r.variant);
+  const mv = matchedDetailVariant();
+  const displayPrice = mv ? (mv.price ?? p.price) : p.price;
+  const displayCompare = mv ? mv.compare_price : p.compare_price;
+  const displayStock = mv ? mv.stock : p.stock;
+  const thumb = selectedVariantThumb() || (p.images && p.images[0]) || 'https://placehold.co/200x200/F1DFAE/7A1E2B?text=KhaiDee';
+  document.getElementById('buyOptionsBody').innerHTML = `
+    <div class="bo-head">
+      <img id="boThumb" src="${thumb}">
+      <div>
+        <div class="price" id="boPrice">${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:12px;">${fmtMoney(displayCompare)}</span>`:''}</div>
+        <div class="stockline" id="boStockLine">ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ</div>
+      </div>
+    </div>
+    ${detailGroups.map(g=>`
+      <div class="bo-group">
+        <label>${g.name}</label>
+        <div class="bo-swatches" data-group="${g.id}">
+          ${(g.values||[]).map(v=>`
+            <button type="button" class="bo-swatch ${detailSelection[g.id]===v.id?'active':''}" data-value="${v.id}" onclick="boSelectValue(${g.id},${v.id})">
+              ${v.image_url?`<img src="${v.image_url}">`:''}
+              <span class="txt">${v.value}</span>
+            </button>`).join('')}
+        </div>
+      </div>`).join('')}
+    <div class="bo-qtyrow">
+      <label>ຈຳນວນ</label>
+      <div class="qty-select" style="margin:0;">
+        <button onclick="changeBoQty(-1)">−</button><span id="boQtyLabel">${detailQty}</span><button onclick="changeBoQty(1)">+</button>
+      </div>
+    </div>
+    <div class="bo-footer">
+      <button class="btn ${boAction==='buy'?'btn-primary':'btn-ghost'}" onclick="confirmBuyOptions(${p.id})">${boAction==='buy'?'⚡ ຊື້ເລີຍ':'🛒 ເພີ່ມໃສ່ກະຕ່າ'}</button>
+    </div>`;
+}
+function boSelectValue(groupId, valueId){
+  detailSelection[groupId] = valueId;
+  document.querySelectorAll(`.bo-swatches[data-group="${groupId}"] .bo-swatch`).forEach(b=> b.classList.toggle('active', Number(b.dataset.value)===valueId));
+  const p = STATE.products.find(x=>x.id===detailProductId); if(!p) return;
+  const mv = matchedDetailVariant();
+  const displayPrice = mv ? (mv.price ?? p.price) : p.price;
+  const displayCompare = mv ? mv.compare_price : p.compare_price;
+  const displayStock = mv ? mv.stock : p.stock;
+  const priceEl = document.getElementById('boPrice'), stockEl = document.getElementById('boStockLine'), thumbEl = document.getElementById('boThumb');
+  if(priceEl) priceEl.innerHTML = `${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:12px;">${fmtMoney(displayCompare)}</span>`:''}`;
+  if(stockEl) stockEl.textContent = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ`;
+  const thumb = selectedVariantThumb();
+  if(thumbEl && thumb) thumbEl.src = thumb;
+  // keep the full-page price/stock line in sync too, in case the customer goes back to look
+  const pdPrice = document.getElementById('pdPrice'), pdStock = document.getElementById('pdStockLine');
+  if(pdPrice) pdPrice.innerHTML = `${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}`;
+  if(pdStock) pdStock.innerHTML = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}`;
+}
+function changeBoQty(d){ detailQty = Math.max(1, detailQty+d); const el=document.getElementById('boQtyLabel'); if(el) el.textContent = detailQty; }
+function confirmBuyOptions(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  const actionLabel = boAction==='buy' ? 'ຊື້ເລີຍ' : 'ເພີ່ມໃສ່ກະຕ່າ';
+  const r = resolveDetailVariantOrAlert(actionLabel); if(!r.ok) return;
+  closeModal('modalBuyOptions');
+  if(boAction==='buy'){
+    closeModal('modalProduct');
+    buyNow(id, detailQty, r.variant);
+  }else{
+    addToCart(id, detailQty, r.variant);
+    pulseCart();
+  }
 }
 function onPdGalleryScroll(){
   const track = document.getElementById('pdGalleryTrack');
@@ -1263,7 +1348,6 @@ async function submitComment(productId){
     loadComments(productId);
   }catch(e){ alert('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
 }
-function changeDetailQty(d){ detailQty = Math.max(1, detailQty+d); document.getElementById('detailQtyLabel').textContent = detailQty; }
 function quickAdd(id){ addToCart(id, 1); pulseCart(); }
 function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
 
