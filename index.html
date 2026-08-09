@@ -40,6 +40,34 @@ body{
 img{max-width:100%; display:block;}
 button{font-family:inherit; cursor:pointer;}
 
+/* ---------- INSTALL APP BANNER (shown when the PWA isn't installed yet) ---------- */
+#installBanner{
+  position:fixed; left:12px; right:12px; bottom:88px; z-index:120;
+  background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); color:#fff;
+  border-radius:var(--r-lg); padding:12px 14px; display:flex; align-items:center; gap:12px;
+  box-shadow:0 10px 28px rgba(0,0,0,.28); transform:translateY(120%); opacity:0; transition:transform .4s cubic-bezier(.2,1,.3,1), opacity .4s ease;
+}
+#installBanner.show{transform:translateY(0); opacity:1;}
+#installBanner .ib-icon{width:42px; height:42px; border-radius:12px; background:var(--gold); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:20px; overflow:hidden;}
+#installBanner .ib-icon img{width:100%; height:100%; object-fit:cover;}
+#installBanner .ib-text{flex:1; min-width:0;}
+#installBanner .ib-title{font-size:13.5px; font-weight:800;}
+#installBanner .ib-sub{font-size:11px; opacity:.85; margin-top:1px;}
+#installBanner .ib-btn{background:var(--gold); color:var(--maroon-dark); border:none; border-radius:999px; padding:8px 14px; font-size:12.5px; font-weight:800; white-space:nowrap;}
+#installBanner .ib-close{background:none; border:none; color:rgba(255,255,255,.7); font-size:16px; padding:2px 4px; flex-shrink:0;}
+
+/* iOS Safari can't trigger an install prompt programmatically — this sheet walks the user
+   through "Share -> Add to Home Screen" instead of a native button. */
+#iosInstallSheet{position:fixed; inset:0; z-index:130; display:none; align-items:flex-end; justify-content:center; background:rgba(43,27,20,.55);}
+#iosInstallSheet.show{display:flex;}
+#iosInstallSheet .sheet{background:var(--cream); width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:22px 20px calc(22px + env(safe-area-inset-bottom));}
+#iosInstallSheet h3{margin:0 0 4px; font-size:16px; color:var(--maroon-dark);}
+#iosInstallSheet .step{display:flex; align-items:center; gap:12px; margin-top:14px;}
+#iosInstallSheet .step .num{width:26px; height:26px; border-radius:999px; background:var(--gold-light); color:var(--maroon-dark); font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+#iosInstallSheet .step .txt{font-size:13.5px; line-height:1.5;}
+#iosInstallSheet .share-ico{display:inline-block; transform:translateY(2px);}
+#iosInstallSheet .closebtn{margin-top:18px; width:100%; background:var(--maroon); color:#fff; border:none; border-radius:999px; padding:12px; font-size:13.5px; font-weight:800;}
+
 /* ---------- SPLASH SCREEN ---------- */
 #splashScreen{
   position:fixed; inset:0; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -342,6 +370,28 @@ nav.bottom .icon{font-size:19px;}
   <div class="splash-name-lo">ຂາຍດີ</div>
   <div class="splash-tag">ຊື້ງ່າຍ ໄດ້ໄວ ສົ່ງທົ່ວ ສປປ ລາວ</div>
   <div class="splash-dots"><span></span><span></span><span></span></div>
+</div>
+
+<!-- ---- Install-app banner: shown once the app is confirmed not already installed.
+     Android/Chrome -> triggers the native beforeinstallprompt. iOS Safari -> opens the
+     manual "Add to Home Screen" instructions sheet below, since Safari has no install API. ---- -->
+<div id="installBanner">
+  <div class="ib-icon" id="ibIcon">📲</div>
+  <div class="ib-text">
+    <div class="ib-title">ຕິດຕັ້ງແອັບ KhaiDee</div>
+    <div class="ib-sub">ໃຊ້ງານໄວຂຶ້ນ ເໝືອນແອັບຈິງ</div>
+  </div>
+  <button class="ib-btn" id="ibInstallBtn">ຕິດຕັ້ງ</button>
+  <button class="ib-close" id="ibCloseBtn" aria-label="close">✕</button>
+</div>
+<div id="iosInstallSheet">
+  <div class="sheet">
+    <h3>ຕິດຕັ້ງແອັບ KhaiDee</h3>
+    <div class="step"><div class="num">1</div><div class="txt">ກົດປຸ່ມ <b>ແບ່ງປັນ (Share)</b> <span class="share-ico">⬆️</span> ທາງລຸ່ມຂອງ Safari</div></div>
+    <div class="step"><div class="num">2</div><div class="txt">ເລື່ອນລົງ ແລະ ເລືອກ <b>"ເພີ່ມໄປໜ້າຈໍຫຼັກ" (Add to Home Screen)</b></div></div>
+    <div class="step"><div class="num">3</div><div class="txt">ກົດ <b>"ເພີ່ມ" (Add)</b> ຢູ່ມຸມຂວາເທິງ — ແອັບຈະປາກົດຢູ່ໜ້າຈໍຫຼັກທັນທີ</div></div>
+    <button class="closebtn" id="iosSheetClose">ເຂົ້າໃຈແລ້ວ</button>
+  </div>
 </div>
 
 <!-- ============================================================ CUSTOMER APP ============================================================ -->
@@ -3413,7 +3463,10 @@ function hideSplash(){
   applyI18n();
   try{
     await loadSettings();
-    if(STATE.settings.logo_url){ document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`; }
+    if(STATE.settings.logo_url){
+      document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`;
+      const ibIcon = document.getElementById('ibIcon'); if(ibIcon) ibIcon.innerHTML = `<img src="${STATE.settings.logo_url}">`;
+    }
     await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts(), loadSellersPublic()]);
     renderProducts();
     updateCartBadge();
@@ -3434,6 +3487,62 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline shell caching is a nice-to-have, ignore failures */ });
   });
 }
+
+/* ---- INSTALL PROMPT ----------------------------------------------------------------
+   Goal: whoever scans the QR code and lands here sees a "install now" button right away,
+   on both Android/Chrome (native beforeinstallprompt) and iOS/Safari (no install API, so
+   we walk them through Share -> Add to Home Screen instead). Hidden entirely if the app
+   is already running installed (standalone / iOS's navigator.standalone). ------------- */
+(function initInstallPrompt(){
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if(isStandalone) return; // already installed — nothing to prompt
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && 'ontouchend' in document);
+  const isSafari = isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+
+  const banner = document.getElementById('installBanner');
+  const installBtn = document.getElementById('ibInstallBtn');
+  const closeBtn = document.getElementById('ibCloseBtn');
+  const iosSheet = document.getElementById('iosInstallSheet');
+  const iosSheetClose = document.getElementById('iosSheetClose');
+  if(!banner) return;
+
+  const dismissedAt = Number(localStorage.getItem('kd_install_dismissed')||0);
+  const dismissedRecently = dismissedAt && (Date.now() - dismissedAt < 7*24*60*60*1000); // 7-day snooze after "not now"
+
+  function showBanner(){ if(!dismissedRecently) banner.classList.add('show'); }
+  function hideBanner(){ banner.classList.remove('show'); }
+
+  closeBtn.onclick = ()=>{ hideBanner(); localStorage.setItem('kd_install_dismissed', String(Date.now())); };
+  iosSheetClose.onclick = ()=> iosSheet.classList.remove('show');
+
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    e.preventDefault();
+    deferredPrompt = e;
+    showBanner(); // Android/Chrome (and Chromium desktop) fire this when installable
+  });
+  window.addEventListener('appinstalled', hideBanner);
+
+  installBtn.onclick = async ()=>{
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      hideBanner();
+      if(outcome==='accepted') playSuccessSound && playSuccessSound();
+    }else if(isIOS && isSafari){
+      iosSheet.classList.add('show');
+    }
+  };
+
+  // iOS Safari never fires beforeinstallprompt, so show the banner ourselves after
+  // the splash finishes, offering the manual-instructions sheet on tap.
+  if(isIOS && isSafari){
+    setTimeout(showBanner, 1500);
+  }
+})();
 </script>
 </body>
 </html>
