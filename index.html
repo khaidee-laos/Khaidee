@@ -270,11 +270,11 @@ nav.bottom .icon{font-size:19px;}
 
 /* ---- Product detail: FULL PAGE (Lazada-style) instead of a bottom-sheet popup ---- */
 #modalProduct.overlay{align-items:stretch; justify-content:stretch;}
-#modalProduct .sheet{width:100%; max-width:100%; height:100%; max-height:100%; border-radius:0; margin:0; animation:pdPageIn .2s ease; display:flex; flex-direction:column; overflow:hidden;}
+#modalProduct .sheet{width:100%; max-width:100%; height:100%; max-height:100%; border-radius:0; margin:0; animation:pdPageIn .2s ease; display:flex; flex-direction:column; overflow:hidden; min-height:0;}
 @keyframes pdPageIn{from{opacity:0; transform:translateX(14px);} to{opacity:1; transform:translateX(0);}}
 #modalProduct .sheet-handle{display:none;}
 #modalProduct .sheet-header{flex:0 0 auto;}
-#modalProduct .sheet-body{flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+#modalProduct .sheet-body{flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;}
 #productDetailBody{margin:0;}
 
 /* ---- Buy Options: variant + qty picker sheet, shown when tapping Add-to-cart / Buy-now
@@ -831,8 +831,14 @@ function saveCustomer(){ localStorage.setItem('kd_customer', JSON.stringify(STAT
 function fmtMoney(n){ return (STATE.settings.currency||'₭') + ' ' + Number(n||0).toLocaleString('en-US'); }
 
 /* ============================================================ MODALS ============================================================ */
-function openModal(id){ document.getElementById(id).classList.add('show'); }
-function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function openModal(id){
+  document.getElementById(id).classList.add('show');
+  if(id==='modalProduct') document.body.style.overflow = 'hidden';
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('show');
+  if(id==='modalProduct') document.body.style.overflow = '';
+}
 document.querySelectorAll('.overlay').forEach(ov=>{
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('show'); });
 });
@@ -1051,17 +1057,29 @@ let detailGroups = [];      // [{id, name, values:[{id, value, image_url}]}] fro
 let detailVariants = [];    // [{id, value_ids:[...], price, compare_price, stock, sku}]
 let detailSelection = {};   // {group_id: value_id}
 let detailSpecs = [];       // [{label, value}] from product_attribute_values (joined category_attributes)
-// Finds the variant (if any) whose value_ids exactly match the customer's current selection
-// across every group. Returns null while the selection is incomplete or doesn't match a row.
+// Finds the variant that best matches whatever the customer has ticked so far. Tries an exact
+// full match first (every group selected — the normal "one group, several values" case behaves
+// exactly as before), then falls back to whichever variant overlaps the current selection the
+// most, so ticking just a single option is always enough — nothing forces every group to be filled.
 function matchedDetailVariant(){
-  if(!detailGroups.length) return null;
-  const selectedIds = detailGroups.map(g=> detailSelection[g.id]);
-  if(selectedIds.some(v=>v===undefined || v===null)) return null;
-  const wanted = [...selectedIds].sort((a,b)=>a-b);
-  return detailVariants.find(v=>{
-    const have = [...(v.value_ids||[])].sort((a,b)=>a-b);
-    return have.length===wanted.length && have.every((x,i)=>x===wanted[i]);
-  }) || null;
+  if(!detailGroups.length || !detailVariants.length) return null;
+  const selectedIds = Object.values(detailSelection).filter(v=>v!==undefined && v!==null);
+  if(!selectedIds.length) return null;
+  if(selectedIds.length===detailGroups.length){
+    const wanted = [...selectedIds].sort((a,b)=>a-b);
+    const exact = detailVariants.find(v=>{
+      const have = [...(v.value_ids||[])].sort((a,b)=>a-b);
+      return have.length===wanted.length && have.every((x,i)=>x===wanted[i]);
+    });
+    if(exact) return exact;
+  }
+  let best = null, bestScore = 0;
+  detailVariants.forEach(v=>{
+    const have = v.value_ids || [];
+    const overlap = have.filter(id=> selectedIds.includes(id)).length;
+    if(overlap > bestScore){ bestScore = overlap; best = v; }
+  });
+  return bestScore > 0 ? best : null;
 }
 async function openProduct(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
@@ -1114,7 +1132,7 @@ function paintProductDetail(id){
       <div class="meta" style="margin:8px 0 0;" id="pdStockLine">ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
 
       ${detailGroups.length ? `
-      <div class="hint" style="margin-top:8px;">🎛️ ມີຕົວເລືອກ: ${detailGroups.map(g=>g.name).join(', ')} — ເລືອກຕອນກົດ “ເພີ່ມໃສ່ກະຕ່າ” ຫຼື “ຊື້ເລີຍ” ຂ້າງລຸ່ມ</div>` : ''}
+      <div class="hint" style="margin-top:8px;">🎛️ ມີຕົວເລືອກ: ${detailGroups.map(g=>g.name).join(', ')} — ເລືອກໄດ້ຕາມໃຈມັກ (ບໍ່ບັງຄັບ) ຕອນກົດ “ເພີ່ມໃສ່ກະຕ່າ” ຫຼື “ຊື້ເລີຍ” ຂ້າງລຸ່ມ</div>` : ''}
 
       ${(()=>{ const seller = sellerById(p.seller_id); return seller ? `
       <div class="pd-storerow" style="cursor:pointer;" onclick="closeModal('modalProduct'); openShop('${seller.id}')">
@@ -1142,7 +1160,7 @@ function paintProductDetail(id){
         <div class="pd-spec-table" style="margin:12px 0; border:1px solid var(--line); border-radius:10px; overflow:hidden;">
           ${detailSpecs.map(a=>`<div style="display:flex; justify-content:space-between; gap:10px; padding:8px 12px; font-size:12.5px; border-bottom:1px solid var(--line);"><span class="hint" style="margin:0;">${a.label}</span><span style="font-weight:600; text-align:right;">${a.value}</span></div>`).join('')}
         </div>` : ''}
-        <p style="font-size:13px; color:var(--ink-soft); line-height:1.6; margin:12px 0;">${p.description||'ບໍ່ມີລາຍລະອຽດເພີ່ມເຕີມ'}</p>
+        <p style="font-size:13px; color:var(--ink-soft); line-height:1.7; margin:12px 0; white-space:pre-line;">${p.description||'ບໍ່ມີລາຍລະອຽດເພີ່ມເຕີມ'}</p>
       </div>
       <div id="pdTabReviews" class="hidden">
         <div id="pdCommentsList" style="margin:10px 0;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
@@ -1162,22 +1180,19 @@ function paintProductDetail(id){
       <button class="btn btn-primary" onclick="openBuyOptions(${p.id}, 'buy')">⚡ ຊື້ເລີຍ</button>
     </div>`;
 }
-// Shared by confirmBuyOptions() — validates that a full variant selection has been made
-// (when the product has variant groups) and resolves it to the matched variant row + a
-// human-readable label. Returns {ok:false} (after alerting) if the selection is invalid,
-// or {ok:true, variant} — variant is null for products with no variant groups at all.
+// Shared by confirmBuyOptions() — resolves whatever the customer has (optionally) ticked to a
+// variant row + a human-readable label. Selecting is never mandatory: if nothing matches a
+// specific variant, the product's normal price/stock is used instead of blocking the purchase.
 function resolveDetailVariantOrAlert(actionLabel){
   if(!detailGroups.length) return {ok:true, variant:null};
-  if(detailGroups.some(g=>detailSelection[g.id]===undefined)){ alert(`ກະລຸນາເລືອກຕົວເລືອກສິນຄ້າໃຫ້ຄົບກ່ອນ${actionLabel}`); return {ok:false}; }
-  let variant = matchedDetailVariant();
-  if(!variant){ alert('ບໍ່ພົບຕົວເລືອກສິນຄ້ານີ້'); return {ok:false}; }
-  if((variant.stock??0) <= 0){ alert('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return {ok:false}; }
+  const variant = matchedDetailVariant();
+  if(variant && (variant.stock??0) <= 0){ alert('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return {ok:false}; }
   const label = detailGroups.map(g=>{
     const valId = detailSelection[g.id];
     const val = (g.values||[]).find(v=>v.id===valId);
     return val ? val.value : '';
   }).filter(Boolean).join(' / ');
-  return {ok:true, variant:{...variant, label}};
+  return {ok:true, variant: variant ? {...variant, label} : null};
 }
 /* ============================================================ BUY OPTIONS POPUP ============================================================
    Separate sheet (Lazada-style) that appears on top of the full-page product detail when the

@@ -527,7 +527,7 @@ async function editProduct(id){
     <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
     <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
     <div class="field"><label>ຊື່ (English)</label><input id="pNameEn" value="${p.name_en||''}"></div>
-    <div class="field"><label>ຄຳອະທິບາຍ</label><textarea id="pDesc" rows="3">${p.description||''}</textarea></div>
+    <div class="field"><label>ຄຳອະທິບາຍ (ຂຽນລາຍລະອຽດຍາວໆໄດ້ຕາມທີ່ຕ້ອງການ — ຂຶ້ນແຖວໃໝ່ໄດ້)</label><textarea id="pDesc" rows="8" style="min-height:150px; resize:vertical;">${p.description||''}</textarea></div>
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
     <div class="row2"><div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
