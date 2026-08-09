@@ -3304,6 +3304,18 @@ let pAttrDefs = [];      // category_attributes for the currently selected categ
 let pAttrValues = {};    // {attribute_id: value}
 let pGroups = [];        // [{name, values:[{value,image_url}]}]
 let pVariants = [];      // [{value_labels:[...], price, compare_price, stock, sku}]
+
+// Per-category suggested option groups, shown as one-tap buttons + pick-chips so sellers/admin
+// pick from a list instead of free-typing (which is how "19550000" ended up as a color name once).
+// Groups with no presets (color/shade/pattern) still let you type + upload a swatch photo.
+const VARIANT_TEMPLATES = {
+  1: [ {name:'ໄຊສ໌', presets:['Free Size','S','M','L','XL','XXL','3XL']}, {name:'ສີ', presets:[]} ],                      // ແຟຊັນ / Fashion
+  2: [ {name:'ສີ', presets:[]}, {name:'ຄວາມຈຸ', presets:['64GB','128GB','256GB','512GB','1TB']} ],                        // ມືຖື & ອຸປະກອນ / Mobile
+  3: [ {name:'ເສດສີ/ກິ່ນ', presets:[]}, {name:'ຂະໜາດ', presets:['30ml','50ml','100ml','150ml','200ml']} ],                // ຄວາມງາມ / Beauty
+  4: [ {name:'ສີ/ລາຍ', presets:[]} ],                                                                                       // ເຄື່ອງໃຊ້ໃນເຮືອນ / Home
+  5: [ {name:'ລົດຊາດ/ແບບ', presets:[]}, {name:'ຂະໜາດ/ນ້ຳໜັກ', presets:['ນ້ອຍ','ກາງ','ໃຫຍ່']} ],                          // ອາຫານ & ເຄື່ອງດື່ມ / Food
+};
+
 async function loadCategoryAttrs(categoryId){
   try{ pAttrDefs = await sbSelect('category_attributes', `category_id=eq.${categoryId}&order=sort_order.asc`); }
   catch(e){ pAttrDefs = []; }
@@ -3332,22 +3344,94 @@ function renderAttrsBox(){
       return `<div class="field"><label>${a.name_lo}${req}</label>${inputHtml}</div>`;
     }).join('');
 }
-function addVariantGroup(){
-  pGroups.push({name:'', values:[]});
+function currentCategoryTemplates(){
+  const catId = Number(document.getElementById('pCat')?.value);
+  return VARIANT_TEMPLATES[catId] || [];
+}
+function addVariantGroup(presetName){
+  pGroups.push({name:presetName||'', values:[]});
   renderGroupsBox();
 }
 function removeVariantGroup(i){ pGroups.splice(i,1); rebuildVariants(); renderGroupsBox(); }
+// A typed-in option value that's just a large number is almost always a price typed into the
+// wrong field. Catch it before it's saved instead of after a customer sees a swatch labelled
+// with a raw price.
+function looksLikePrice(text){ return /^\d+$/.test(text) && Number(text) >= 1000; }
+function toggleGroupPreset(i, presetValue){
+  const g = pGroups[i]; g.values = g.values || [];
+  const idx = g.values.findIndex(v=>v.value===presetValue);
+  if(idx>=0) g.values.splice(idx,1);
+  else g.values.push({value:presetValue, image_url:null});
+  renderGroupsBox();
+}
+function addCustomGroupValue(i, text){
+  const parts = text.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!parts.length) return;
+  const priceLooking = parts.filter(looksLikePrice);
+  if(priceLooking.length){
+    const ok = confirm(`"${priceLooking.join(', ')}" ຄືຕົວເລກຄ້າຍລາຄາ ບໍ່ຄືຊື່ຕົວເລືອກ (ເຊັ່ນ ສີ/ໄຊສ໌) — ຢືນຢັນວ່າຕ້ອງການໃຊ້ຄ່ານີ້ແທ້ບໍ?`);
+    if(!ok) return;
+  }
+  const g = pGroups[i]; g.values = g.values || [];
+  parts.forEach(name=>{ if(!g.values.find(v=>v.value===name)) g.values.push({value:name, image_url:null}); });
+  renderGroupsBox();
+}
+function removeGroupValue(i,j){ pGroups[i].values.splice(j,1); renderGroupsBox(); }
+async function uploadGroupValueImage(i, j, file){
+  if(!file) return;
+  try{
+    const url = await sbUpload('khaidee-products', `variant_admin_${Date.now()}_${file.name}`, file);
+    pGroups[i].values[j].image_url = url;
+    renderGroupsBox();
+  }catch(e){ showToast('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message); }
+}
 function renderGroupsBox(){
   const box = document.getElementById('pGroupsBox');
   if(!box) return;
-  box.innerHTML = pGroups.map((g,i)=>`
+  const templates = currentCategoryTemplates();
+  const usedNames = pGroups.map(g=>g.name);
+  const suggestions = templates.filter(t=>!usedNames.includes(t.name));
+  const suggestHtml = suggestions.length ? `
+    <div class="hint" style="margin-bottom:6px;">✨ ແນະນຳສຳລັບໝວດໝູ່ນີ້ — ກົດເພື່ອເພີ່ມ:</div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
+      ${suggestions.map(t=>`<button type="button" class="btn-sm btn-gold" onclick='addVariantGroup(${JSON.stringify(t.name)})'>+ ${t.name}</button>`).join('')}
+    </div>` : '';
+  box.innerHTML = suggestHtml + pGroups.map((g,i)=>{
+    const tmpl = templates.find(t=>t.name===g.name);
+    const presets = tmpl ? tmpl.presets : [];
+    const chosen = new Set((g.values||[]).map(v=>v.value));
+    return `
     <div style="background:var(--cream); border-radius:10px; padding:10px; margin-bottom:8px;">
-      <div class="row2">
-        <div class="field" style="margin-bottom:6px;"><label>ຊື່ກຸ່ມ (ເຊັ່ນ: ໄຊສ໌, ສີ)</label><input value="${g.name}" oninput="pGroups[${i}].name=this.value"></div>
-        <div class="field" style="margin-bottom:6px;"><label>ຄ່າ (ຄັ້ນດ້ວຍ ,)</label><input value="${(g.values||[]).map(v=>v.value).join(', ')}" oninput="pGroups[${i}].values=this.value.split(',').map(s=>({value:s.trim()})).filter(v=>v.value)"></div>
+      <div class="field" style="margin-bottom:6px;"><label>ຊື່ກຸ່ມ (ເຊັ່ນ: ໄຊສ໌, ສີ)</label><input value="${g.name}" oninput="pGroups[${i}].name=this.value; renderGroupsBox();"></div>
+      ${presets.length ? `
+      <div class="hint" style="margin-bottom:4px;">ກົດເລືອກ (ເລືອກໄດ້ຫຼາຍອັນ):</div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+        ${presets.map(p=>`<button type="button" class="btn-sm ${chosen.has(p)?'btn-primary':'btn-ghost'}" style="padding:5px 10px; font-size:12px;" onclick='toggleGroupPreset(${i}, ${JSON.stringify(p)})'>${p}</button>`).join('')}
+      </div>` : ''}
+      <div class="field" style="margin-bottom:6px;">
+        <label>${presets.length ? 'ເພີ່ມຄ່າອື່ນ (ບໍ່ມີໃນລາຍການຂ້າງເທິງ)' : 'ຄ່າ (ພິມແລ້ວກົດ ເພີ່ມ — ໃສ່ໄດ້ຫຼາຍອັນຄັ້ນດ້ວຍ ,)'}</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="pGroupCustomInput${i}" placeholder="${presets.length?'ພິມ ແລ້ວກົດ ເພີ່ມ':'ເຊັ່ນ: ແດງ, ຂຽວ, ຂາວ'}" style="flex:1;">
+          <button type="button" class="btn-sm btn-ghost" onclick="addCustomGroupValue(${i}, document.getElementById('pGroupCustomInput${i}').value); document.getElementById('pGroupCustomInput${i}').value='';">➕ ເພີ່ມ</button>
+        </div>
       </div>
-      <button type="button" class="btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger);" onclick="removeVariantGroup(${i})">🗑️ ລຶບກຸ່ມນີ້</button>
-    </div>`).join('') +
+      ${(g.values||[]).length ? `
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+        ${g.values.map((v,j)=>`
+          <div style="text-align:center; position:relative;">
+            <button type="button" onclick="removeGroupValue(${i},${j})" title="ລຶບ" style="position:absolute; top:-6px; right:-6px; width:16px; height:16px; border-radius:50%; background:var(--danger); color:#fff; font-size:9px; border:none; z-index:2; line-height:1;">✕</button>
+            <label style="cursor:pointer; display:block;" title="ອັບໂຫລດຮູບນ້ອຍສຳລັບ &quot;${v.value}&quot;">
+              <img src="${v.image_url||'https://placehold.co/56x56/F1DFAE/7A1E2B?text=%2B'}" style="width:48px; height:48px; object-fit:cover; border-radius:8px; border:1.5px solid var(--line);">
+              <input type="file" accept="image/*" style="display:none;" onchange="uploadGroupValueImage(${i},${j},this.files[0])">
+            </label>
+            <div style="font-size:10px; margin-top:3px; max-width:54px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${v.value}</div>
+          </div>`).join('')}
+      </div>
+      <div class="hint" style="margin-top:2px;">📷 ແຕະຮູບຂ້າງເທິງເພື່ອອັບໂຫລດຮູບນ້ອຍປະຈຳຕົວເລືອກນີ້ — ບໍ່ບັງຄັບ</div>
+      ` : ''}
+      <button type="button" class="btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger); margin-top:8px;" onclick="removeVariantGroup(${i})">🗑️ ລຶບກຸ່ມນີ້</button>
+    </div>`;
+  }).join('') +
     `<button type="button" class="btn-sm btn-ghost" onclick="rebuildVariants()">🔄 ສ້າງຕາຕະລາງລາຄາ/ສະຕັອກ</button>`;
 }
 function cartesian(arrs){
@@ -3368,15 +3452,35 @@ function rebuildVariants(){
 function renderVariantsBox(){
   const box = document.getElementById('pVariantsBox');
   if(!box) return;
-  if(!pVariants.length){ box.innerHTML=''; return; }
+  if(!pVariants.length){ box.innerHTML=''; syncProductStockFromVariants(); return; }
   box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
     <tr style="text-align:left; color:var(--ink-soft);"><th style="padding:4px;">ຕົວເລືອກ</th><th style="padding:4px;">ລາຄາ</th><th style="padding:4px;">ສະຕັອກ</th></tr>
     ${pVariants.map((v,i)=>`<tr>
       <td style="padding:4px; font-weight:600;">${v.value_labels.join(' / ')}</td>
       <td style="padding:4px;"><input type="number" value="${v.price??''}" style="width:80px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].price=Number(this.value)||0"></td>
-      <td style="padding:4px;"><input type="number" value="${v.stock??0}" style="width:60px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].stock=Number(this.value)||0"></td>
+      <td style="padding:4px;"><input type="number" value="${v.stock??0}" style="width:60px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].stock=Number(this.value)||0; syncProductStockFromVariants();"></td>
     </tr>`).join('')}
   </table>`;
+  syncProductStockFromVariants();
+}
+// Each color/size can sell out at a different rate, so stock is tracked per-variant. The
+// product's overall "ຈຳນວນສະຕັອກ" field is then just the sum of those — no separate manual
+// total to keep in sync by hand.
+function syncProductStockFromVariants(){
+  const stockInput = document.getElementById('pStock');
+  const hint = document.getElementById('pStockHint');
+  if(!stockInput) return;
+  if(pVariants.length){
+    const total = pVariants.reduce((sum,v)=> sum + (Number(v.stock)||0), 0);
+    stockInput.value = total;
+    stockInput.readOnly = true;
+    stockInput.style.background = 'var(--line)';
+    if(hint) hint.textContent = `🔒 ຄິດໄລ່ອັດຕະໂນມັດ = ຜົນລວມສະຕັອກຂອງທຸກຕົວເລືອກ (${pVariants.length} ຕົວເລືອກ)`;
+  }else{
+    stockInput.readOnly = false;
+    stockInput.style.background = '';
+    if(hint) hint.textContent = '';
+  }
 }
 async function adminEditProduct(id){
   const p = id ? STATE.products.find(x=>x.id===id) : {};
@@ -3397,7 +3501,7 @@ async function adminEditProduct(id){
     </div>
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
-    <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
+    <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"><div class="hint" id="pStockHint"></div></div>
     <div class="field"><label>ນ້ຳໜັກ (ກິໂລ ຕໍ່ 1 ຊິ້ນ, ໃຊ້ຄິດໄລ່ຄ່າສົ່ງ)</label><input type="number" step="0.1" min="0.1" id="pWeight" value="${p.weight_kg||1}"></div>
     <div class="field"><label>ຮູບພາບສິນຄ້າ (ອັບໂຫລດໄດ້ຫຼາຍໆຮູບ)</label><input type="file" id="pImageFiles" accept="image/*" multiple></div>
     <div id="pImagePreview" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
@@ -3427,6 +3531,7 @@ async function adminEditProduct(id){
     const catId = Number(document.getElementById('pCat').value);
     await loadCategoryAttrs(catId);
     renderAttrsBox();
+    renderGroupsBox();
   };
   // Load category attributes + existing attribute values + existing variants (edit mode)
   const initialAdminCat = p.category_id || (STATE.categories[0] && STATE.categories[0].id);
@@ -3451,6 +3556,7 @@ async function adminEditProduct(id){
   renderAttrsBox(); renderGroupsBox(); renderVariantsBox();
   overlay.querySelector('#pSaveBtn').onclick = async ()=>{
     const btn = overlay.querySelector('#pSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    syncProductStockFromVariants();
     try{
       const imgFiles = document.getElementById('pImageFiles').files;
       for(const file of imgFiles){
