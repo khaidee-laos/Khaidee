@@ -2359,7 +2359,19 @@ async function adminSetOrderStatus(id, status){
       if(!ok) return;
     }
     try{
-      await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status, p_release_funds: status==='delivered'});
+      await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status});
+      if(status==='delivered'){
+        // Release seller payouts for this order's items that the seller has already marked
+        // delivered (order_items.seller_status='delivered') and that haven't been paid out yet.
+        const order = adminOrdersList.find(o=>o.id===id);
+        const items = (order && order.items) || [];
+        for(const it of items){
+          if(it.seller_status==='delivered' && !it.payout_released){
+            try{ await sbRPC('admin_release_payout', {p_password:STATE.adminPassword, p_order_item_id:it.id}); }
+            catch(e){ /* not eligible yet or already released — safe to skip */ }
+          }
+        }
+      }
       playSuccessSound(); renderAdminOrders();
     }
     catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
@@ -2854,7 +2866,7 @@ function renderAdminSellerList(){
 // admin-only via the same p_password check every other admin_* RPC here uses.
 async function adminToggleSellerVerified(id, verified){
   try{
-    await sbRPC('admin_set_seller_verified', {p_password:STATE.adminPassword, p_seller_id:id, p_verified:verified});
+    await sbRPC('admin_seller_set_verified', {p_password:STATE.adminPassword, p_seller_id:id, p_verified:verified});
     const s = STATE.adminSellers.find(x=>x.id===id); if(s) s.is_verified = verified;
     const pub = sellerById(id); if(pub) pub.is_verified = verified;
     renderAdminSellerList();
@@ -3031,7 +3043,11 @@ function adminViewPayout(id){
 async function adminApprovePayout(id, approve){
   onGuard('payout-approve-'+id, async ()=>{
     try{
-      await sbRPC('admin_approve_seller_withdrawal', {p_password:STATE.adminPassword, p_withdrawal_id:id, p_approve:approve});
+      if(approve){
+        await sbRPC('admin_approve_withdrawal', {p_password:STATE.adminPassword, p_id:id});
+      }else{
+        await sbRPC('admin_reject_withdrawal', {p_password:STATE.adminPassword, p_id:id, p_reason:''});
+      }
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminPayouts();
