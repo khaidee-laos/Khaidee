@@ -40,33 +40,36 @@ body{
 img{max-width:100%; display:block;}
 button{font-family:inherit; cursor:pointer;}
 
-/* ---------- INSTALL APP BANNER (shown when the PWA isn't installed yet) ---------- */
-#installBanner{
-  position:fixed; left:12px; right:12px; bottom:88px; z-index:120;
-  background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); color:#fff;
-  border-radius:var(--r-lg); padding:12px 14px; display:flex; align-items:center; gap:12px;
-  box-shadow:0 10px 28px rgba(0,0,0,.28); transform:translateY(120%); opacity:0; transition:transform .4s cubic-bezier(.2,1,.3,1), opacity .4s ease;
+/* ---------- INSTALL APP TUTORIAL POPUP (auto-shown on first open, e.g. right after QR scan) ---------- */
+#installTutorial{position:fixed; inset:0; z-index:130; display:none; align-items:flex-end; justify-content:center; background:rgba(43,27,20,.6); backdrop-filter:blur(1px);}
+#installTutorial.show{display:flex;}
+#installTutorial .sheet{
+  background:var(--cream); width:100%; max-width:480px; border-radius:22px 22px 0 0;
+  padding:24px 20px calc(20px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto;
+  animation:itSheetUp .35s cubic-bezier(.2,1,.3,1) both;
 }
-#installBanner.show{transform:translateY(0); opacity:1;}
-#installBanner .ib-icon{width:42px; height:42px; border-radius:12px; background:var(--gold); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:20px; overflow:hidden;}
-#installBanner .ib-icon img{width:100%; height:100%; object-fit:cover;}
-#installBanner .ib-text{flex:1; min-width:0;}
-#installBanner .ib-title{font-size:13.5px; font-weight:800;}
-#installBanner .ib-sub{font-size:11px; opacity:.85; margin-top:1px;}
-#installBanner .ib-btn{background:var(--gold); color:var(--maroon-dark); border:none; border-radius:999px; padding:8px 14px; font-size:12.5px; font-weight:800; white-space:nowrap;}
-#installBanner .ib-close{background:none; border:none; color:rgba(255,255,255,.7); font-size:16px; padding:2px 4px; flex-shrink:0;}
+@keyframes itSheetUp{from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+#installTutorial .it-icon{width:64px; height:64px; border-radius:18px; background:var(--gold); margin:0 auto 12px; display:flex; align-items:center; justify-content:center; font-size:30px; overflow:hidden; box-shadow:0 6px 16px rgba(122,30,43,.2);}
+#installTutorial .it-icon img{width:100%; height:100%; object-fit:cover;}
+#installTutorial h3{margin:0; font-size:18px; text-align:center; color:var(--maroon-dark);}
+#installTutorial .it-sub{font-size:12.5px; text-align:center; color:var(--ink-soft); margin-top:4px; margin-bottom:18px;}
+#installTutorial .step{display:flex; align-items:flex-start; gap:12px; margin-top:14px;}
+#installTutorial .step .num{width:26px; height:26px; border-radius:999px; background:var(--gold-light); color:var(--maroon-dark); font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;}
+#installTutorial .step .txt{font-size:13.5px; line-height:1.55; padding-top:2px;}
+#installTutorial .share-ico, #installTutorial .dots-ico{display:inline-block;}
+#installTutorial .it-primary{margin-top:20px; width:100%; background:var(--maroon); color:#fff; border:none; border-radius:999px; padding:13px; font-size:14px; font-weight:800;}
+#installTutorial .it-secondary{margin-top:10px; width:100%; background:none; color:var(--ink-soft); border:none; padding:6px; font-size:12px; text-decoration:underline;}
+#installTutorial .it-neveragain{display:flex; align-items:center; gap:7px; justify-content:center; margin-top:16px; font-size:11.5px; color:var(--ink-soft);}
+#installTutorial .it-neveragain input{width:14px; height:14px; accent-color:var(--maroon);}
 
-/* iOS Safari can't trigger an install prompt programmatically — this sheet walks the user
-   through "Share -> Add to Home Screen" instead of a native button. */
-#iosInstallSheet{position:fixed; inset:0; z-index:130; display:none; align-items:flex-end; justify-content:center; background:rgba(43,27,20,.55);}
-#iosInstallSheet.show{display:flex;}
-#iosInstallSheet .sheet{background:var(--cream); width:100%; max-width:480px; border-radius:20px 20px 0 0; padding:22px 20px calc(22px + env(safe-area-inset-bottom));}
-#iosInstallSheet h3{margin:0 0 4px; font-size:16px; color:var(--maroon-dark);}
-#iosInstallSheet .step{display:flex; align-items:center; gap:12px; margin-top:14px;}
-#iosInstallSheet .step .num{width:26px; height:26px; border-radius:999px; background:var(--gold-light); color:var(--maroon-dark); font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
-#iosInstallSheet .step .txt{font-size:13.5px; line-height:1.5;}
-#iosInstallSheet .share-ico{display:inline-block; transform:translateY(2px);}
-#iosInstallSheet .closebtn{margin-top:18px; width:100%; background:var(--maroon); color:#fff; border:none; border-radius:999px; padding:12px; font-size:13.5px; font-weight:800;}
+/* Small persistent reminder chip for return visits after the tutorial has been dismissed once —
+   keeps install discoverable without re-showing the full popup every time. */
+#installChip{
+  position:fixed; right:12px; bottom:88px; z-index:110; background:var(--maroon); color:#fff;
+  border:none; border-radius:999px; padding:10px 14px; font-size:12px; font-weight:800;
+  display:none; align-items:center; gap:6px; box-shadow:0 8px 20px rgba(0,0,0,.25);
+}
+#installChip.show{display:inline-flex;}
 
 /* ---------- SPLASH SCREEN ---------- */
 #splashScreen{
@@ -372,27 +375,17 @@ nav.bottom .icon{font-size:19px;}
   <div class="splash-dots"><span></span><span></span><span></span></div>
 </div>
 
-<!-- ---- Install-app banner: shown once the app is confirmed not already installed.
-     Android/Chrome -> triggers the native beforeinstallprompt. iOS Safari -> opens the
-     manual "Add to Home Screen" instructions sheet below, since Safari has no install API. ---- -->
-<div id="installBanner">
-  <div class="ib-icon" id="ibIcon">📲</div>
-  <div class="ib-text">
-    <div class="ib-title">ຕິດຕັ້ງແອັບ KhaiDee</div>
-    <div class="ib-sub">ໃຊ້ງານໄວຂຶ້ນ ເໝືອນແອັບຈິງ</div>
-  </div>
-  <button class="ib-btn" id="ibInstallBtn">ຕິດຕັ້ງ</button>
-  <button class="ib-close" id="ibCloseBtn" aria-label="close">✕</button>
-</div>
-<div id="iosInstallSheet">
-  <div class="sheet">
-    <h3>ຕິດຕັ້ງແອັບ KhaiDee</h3>
-    <div class="step"><div class="num">1</div><div class="txt">ກົດປຸ່ມ <b>ແບ່ງປັນ (Share)</b> <span class="share-ico">⬆️</span> ທາງລຸ່ມຂອງ Safari</div></div>
-    <div class="step"><div class="num">2</div><div class="txt">ເລື່ອນລົງ ແລະ ເລືອກ <b>"ເພີ່ມໄປໜ້າຈໍຫຼັກ" (Add to Home Screen)</b></div></div>
-    <div class="step"><div class="num">3</div><div class="txt">ກົດ <b>"ເພີ່ມ" (Add)</b> ຢູ່ມຸມຂວາເທິງ — ແອັບຈະປາກົດຢູ່ໜ້າຈໍຫຼັກທັນທີ</div></div>
-    <button class="closebtn" id="iosSheetClose">ເຂົ້າໃຈແລ້ວ</button>
+<!-- ---- Install-app tutorial: auto-shown right after the splash on first open (e.g. straight
+     off a QR-code scan), walking the visitor through installing the app on their own device.
+     Content is filled in by JS based on detected platform (Android / iOS / other). ---- -->
+<div id="installTutorial">
+  <div class="sheet" id="installTutorialSheet">
+    <!-- filled by JS -->
   </div>
 </div>
+<!-- ---- Small floating reminder shown on later visits after the tutorial's been dismissed once,
+     so installing stays one tap away without nagging with the full popup every time. ---- -->
+<button id="installChip">📲 ຕິດຕັ້ງແອັບ</button>
 
 <!-- ============================================================ CUSTOMER APP ============================================================ -->
 <div id="customerApp">
@@ -3465,7 +3458,6 @@ function hideSplash(){
     await loadSettings();
     if(STATE.settings.logo_url){
       document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`;
-      const ibIcon = document.getElementById('ibIcon'); if(ibIcon) ibIcon.innerHTML = `<img src="${STATE.settings.logo_url}">`;
     }
     await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts(), loadSellersPublic()]);
     renderProducts();
@@ -3488,59 +3480,126 @@ if('serviceWorker' in navigator){
   });
 }
 
-/* ---- INSTALL PROMPT ----------------------------------------------------------------
-   Goal: whoever scans the QR code and lands here sees a "install now" button right away,
-   on both Android/Chrome (native beforeinstallprompt) and iOS/Safari (no install API, so
-   we walk them through Share -> Add to Home Screen instead). Hidden entirely if the app
-   is already running installed (standalone / iOS's navigator.standalone). ------------- */
-(function initInstallPrompt(){
+/* ---- INSTALL TUTORIAL POPUP -----------------------------------------------------------
+   Shows a full step-by-step "how to install" popup automatically after the splash screen,
+   e.g. the moment someone scans the QR code and lands here for the first time. Detects the
+   platform (Android/Chrome, iOS/Safari, or other) and renders the matching instructions.
+   On Android, the "install now" button fires the real native install prompt directly from
+   inside this popup when it's available; otherwise it falls back to written steps so the
+   visitor is never left with a dead button. -------------------------------------------- */
+(function initInstallTutorial(){
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if(isStandalone) return; // already installed — nothing to prompt
+  if(isStandalone) return; // already installed — nothing to teach
 
   const ua = navigator.userAgent;
   const isIOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && 'ontouchend' in document);
+  const isAndroid = /Android/.test(ua);
   const isSafari = isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS/.test(ua);
+  const isChromeAndroid = isAndroid && /Chrome/.test(ua);
 
-  const banner = document.getElementById('installBanner');
-  const installBtn = document.getElementById('ibInstallBtn');
-  const closeBtn = document.getElementById('ibCloseBtn');
-  const iosSheet = document.getElementById('iosInstallSheet');
-  const iosSheetClose = document.getElementById('iosSheetClose');
-  if(!banner) return;
-
-  const dismissedAt = Number(localStorage.getItem('kd_install_dismissed')||0);
-  const dismissedRecently = dismissedAt && (Date.now() - dismissedAt < 7*24*60*60*1000); // 7-day snooze after "not now"
-
-  function showBanner(){ if(!dismissedRecently) banner.classList.add('show'); }
-  function hideBanner(){ banner.classList.remove('show'); }
-
-  closeBtn.onclick = ()=>{ hideBanner(); localStorage.setItem('kd_install_dismissed', String(Date.now())); };
-  iosSheetClose.onclick = ()=> iosSheet.classList.remove('show');
+  const modal = document.getElementById('installTutorial');
+  const sheet = document.getElementById('installTutorialSheet');
+  const chip = document.getElementById('installChip');
+  if(!modal || !sheet) return;
 
   let deferredPrompt = null;
   window.addEventListener('beforeinstallprompt', (e)=>{
     e.preventDefault();
     deferredPrompt = e;
-    showBanner(); // Android/Chrome (and Chromium desktop) fire this when installable
+    const btn = document.getElementById('itPrimaryBtn');
+    if(btn) btn.textContent = 'ຕິດຕັ້ງດຽວນີ້'; // swap to "install now" once the real prompt is ready
   });
-  window.addEventListener('appinstalled', hideBanner);
+  window.addEventListener('appinstalled', ()=>{ hideModal(); hideChip(); });
 
-  installBtn.onclick = async ()=>{
-    if(deferredPrompt){
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      hideBanner();
-      if(outcome==='accepted') playSuccessSound && playSuccessSound();
-    }else if(isIOS && isSafari){
-      iosSheet.classList.add('show');
+  function iconHtml(){
+    const logo = (window.STATE && STATE.settings && STATE.settings.logo_url) ? STATE.settings.logo_url : null;
+    return logo ? `<img src="${logo}">` : '📲';
+  }
+
+  function contentFor(platform){
+    if(platform==='ios'){
+      return `
+        <div class="it-icon">${iconHtml()}</div>
+        <h3>ຕິດຕັ້ງແອັບ KhaiDee</h3>
+        <div class="it-sub">ໃຊ້ງານໄວຂຶ້ນ ເໝືອນແອັບຈິງ ບໍ່ຕ້ອງເປີດ Safari ອີກ</div>
+        <div class="step"><div class="num">1</div><div class="txt">ກົດປຸ່ມ <b>ແບ່ງປັນ (Share)</b> <span class="share-ico">⬆️</span> ທາງລຸ່ມຂອງໜ້າຈໍ Safari</div></div>
+        <div class="step"><div class="num">2</div><div class="txt">ເລື່ອນລົງ ແລະ ເລືອກ <b>"ເພີ່ມໄປໜ້າຈໍຫຼັກ"</b> (Add to Home Screen)</div></div>
+        <div class="step"><div class="num">3</div><div class="txt">ກົດ <b>"ເພີ່ມ"</b> (Add) ຢູ່ມຸມຂວາເທິງ — ໄອຄອນແອັບຈະປາກົດຢູ່ໜ້າຈໍຫຼັກທັນທີ</div></div>
+        <button class="it-primary" id="itPrimaryBtn" onclick="document.getElementById('installTutorial').classList.remove('show')">ເຂົ້າໃຈແລ້ວ</button>
+        <div class="it-neveragain"><input type="checkbox" id="itNeverAgain"><label for="itNeverAgain">ບໍ່ຕ້ອງເຕືອນອີກ</label></div>`;
     }
-  };
+    if(platform==='android'){
+      return `
+        <div class="it-icon">${iconHtml()}</div>
+        <h3>ຕິດຕັ້ງແອັບ KhaiDee</h3>
+        <div class="it-sub">ໃຊ້ງານໄວຂຶ້ນ ເໝືອນແອັບຈິງ ບໍ່ຕ້ອງເປີດເບຣົາເຊີອີກ</div>
+        <div class="step"><div class="num">1</div><div class="txt">ກົດປຸ່ມສີຄຳລຸ່ມນີ້ — ລະບົບຈະຖາມວ່າ "ຕິດຕັ້ງແອັບບໍ?"</div></div>
+        <div class="step"><div class="num">2</div><div class="txt">ຖ້າບໍ່ຂຶ້ນອັດຕະໂນມັດ: ກົດ <b>⋮ ເມນູ 3 ຈຸດ</b> <span class="dots-ico">⋮</span> ມຸມຂວາເທິງ Chrome</div></div>
+        <div class="step"><div class="num">3</div><div class="txt">ເລືອກ <b>"ຕິດຕັ້ງແອັບ"</b> ຫຼື <b>"ເພີ່ມໄປໜ້າຈໍຫຼັກ"</b></div></div>
+        <button class="it-primary" id="itPrimaryBtn">ຕິດຕັ້ງແອັບ</button>
+        <div class="it-neveragain"><input type="checkbox" id="itNeverAgain"><label for="itNeverAgain">ບໍ່ຕ້ອງເຕືອນອີກ</label></div>`;
+    }
+    // desktop / unknown browser fallback
+    return `
+      <div class="it-icon">${iconHtml()}</div>
+      <h3>ຕິດຕັ້ງແອັບ KhaiDee</h3>
+      <div class="it-sub">ເປີດລິ້ງນີ້ໃນມືຖື (Chrome ຫຼື Safari) ເພື່ອຕິດຕັ້ງເປັນແອັບ</div>
+      <div class="step"><div class="num">1</div><div class="txt">ຖ້າໃຊ້ຄອມພິວເຕີ Chrome: ກົດໄອຄອນ <b>⊕ ຕິດຕັ້ງ</b> ຢູ່ໃນຊ່ອງທີ່ຢູ່ URL</div></div>
+      <div class="step"><div class="num">2</div><div class="txt">ຫຼືສະແກນ QR Code ອີກຄັ້ງດ້ວຍມືຖືເພື່ອຮັບຄຳແນະນຳສະເພາະສຳລັບອຸປະກອນນັ້ນ</div></div>
+      <button class="it-primary" id="itPrimaryBtn" onclick="document.getElementById('installTutorial').classList.remove('show')">ເຂົ້າໃຈແລ້ວ</button>
+      <div class="it-neveragain"><input type="checkbox" id="itNeverAgain"><label for="itNeverAgain">ບໍ່ຕ້ອງເຕືອນອີກ</label></div>`;
+  }
 
-  // iOS Safari never fires beforeinstallprompt, so show the banner ourselves after
-  // the splash finishes, offering the manual-instructions sheet on tap.
-  if(isIOS && isSafari){
-    setTimeout(showBanner, 1500);
+  const platform = isIOS ? 'ios' : (isChromeAndroid || isAndroid ? 'android' : 'other');
+
+  function showModal(){
+    sheet.innerHTML = contentFor(platform);
+    modal.classList.add('show');
+    const btn = document.getElementById('itPrimaryBtn');
+    const neverAgain = document.getElementById('itNeverAgain');
+    if(platform==='android' && btn){
+      btn.onclick = async ()=>{
+        if(deferredPrompt){
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          if(outcome==='accepted'){ playSuccessSound && playSuccessSound(); }
+        }
+        modal.classList.remove('show');
+      };
+    }
+    modal.onclick = (e)=>{ if(e.target===modal) closeModal(); };
+    function closeModal(){
+      modal.classList.remove('show');
+      if(neverAgain && neverAgain.checked){ localStorage.setItem('kd_install_never', '1'); hideChip(); }
+      else{ localStorage.setItem('kd_install_last_shown', String(Date.now())); showChip(); }
+    }
+    // clicking outside or the "understood" buttons above already closes it; also catch the
+    // primary button on ios/other variants which call closeModal via inline onclick already,
+    // but we still want the never-again + chip bookkeeping, so wrap those too:
+    if(platform!=='android' && btn){
+      btn.addEventListener('click', ()=>{
+        if(neverAgain && neverAgain.checked){ localStorage.setItem('kd_install_never', '1'); hideChip(); }
+        else{ localStorage.setItem('kd_install_last_shown', String(Date.now())); showChip(); }
+      });
+    }
+  }
+
+  function showChip(){ if(localStorage.getItem('kd_install_never')!=='1') chip.classList.add('show'); }
+  function hideChip(){ chip.classList.remove('show'); }
+  chip.onclick = showModal;
+
+  const neverAgainFlag = localStorage.getItem('kd_install_never')==='1';
+  const lastShown = Number(localStorage.getItem('kd_install_last_shown')||0);
+  const shownRecently = lastShown && (Date.now() - lastShown < 24*60*60*1000); // once/day max for the full popup
+
+  if(neverAgainFlag){
+    // fully opted out of the popup, but keep the tiny chip available in case they change their mind
+    setTimeout(showChip, 1500);
+  }else if(shownRecently){
+    setTimeout(showChip, 1500);
+  }else{
+    setTimeout(showModal, 1500); // let the splash finish fading first
   }
 })();
 </script>
