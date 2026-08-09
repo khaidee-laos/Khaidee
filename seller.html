@@ -817,6 +817,27 @@ async function deleteProduct(id){
 
 /* ============================================================ ORDERS (order items belonging to this seller's products) ============================================================ */
 const STATUS_LABEL = {pending:'ລໍຖ້າແພັກ', confirmed:'ແພັກແລ້ວ', shipping:'ກຳລັງສົ່ງ', delivered:'ສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກ'};
+// Real Lao courier companies with a base tracking/branch-lookup URL, so the seller can just pick
+// a name from a dropdown instead of hunting the courier's website themselves. "ອື່ນໆ" (other) falls
+// back to a free-text carrier name + manual tracking link, for couriers not in this short list.
+const CARRIER_PRESETS = [
+  {name:'HAL Express', url:'https://www.halexpress.la/'},
+  {name:'Anousith Express', url:'https://anousith.express/'},
+  {name:'ໄປສະນີລາວ (Lao Post / EMS)', url:'http://www.laopost.com.la/'},
+  {name:'ອື່ນໆ (ລະບຸເອງ)', url:''}
+];
+// True when this order item is safe for the seller to start packing/shipping: either the customer
+// has already paid (bank transfer/QR — confirmed by admin or auto-confirmed), or it's a
+// cash-on-delivery item where payment only happens once the courier hands it over, so there's
+// nothing to wait for. Requires seller_order_items_list to return payment_status/payment_method
+// (or is_cod) per item — missing/older data defaults to "not yet payable" so unpaid orders never
+// slip through, matching the "don't ship until payment is confirmed, except COD" rule.
+function canArrangeShipment(i){
+  const method = (i.payment_method||'').toLowerCase();
+  const isCod = i.is_cod === true || method==='cod' || method==='cash_on_delivery' || method==='collect';
+  if(isCod) return true;
+  return i.payment_status === 'paid' || i.is_paid === true;
+}
 let ORDERS_CACHE = [];
 async function renderOrders(){
   const wrap = document.getElementById('ordersBody');
@@ -833,8 +854,9 @@ async function renderOrders(){
             <div style="flex:1;"><div style="font-size:13px; font-weight:600;">${i.product_name}</div><div class="hint">x${i.qty} • ${fmtMoney(i.price)}</div></div>
           </div>
           <div class="hint" style="margin-top:6px;">📍 ${i.recipient_name||'-'} • ${i.recipient_phone||'-'}</div>
+          ${(!canArrangeShipment(i) && (i.seller_status==='pending'||i.seller_status==='confirmed')) ? `<div class="hint" style="margin-top:4px; color:var(--warn); font-weight:600;">⏳ ລໍຖ້າຢືນຢັນການຊຳລະເງິນກ່ອນ ຈຶ່ງຈະຈັດການການສົ່ງໄດ້</div>` : ''}
           <div class="chiprow">
-            ${i.seller_status==='pending'||i.seller_status==='confirmed' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">📦 ຈັດການການສົ່ງ</button>` : ''}
+            ${(i.seller_status==='pending'||i.seller_status==='confirmed') ? (canArrangeShipment(i) ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">📦 ຈັດການການສົ່ງ</button>` : '') : ''}
             ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markDelivered(${i.order_item_id})">✅ ລູກຄ້າໄດ້ຮັບແລ້ວ</button>` : ''}
             ${(i.seller_status==='pending') ? `<button onclick="setItemStatus(${i.order_item_id},'cancelled')" style="color:var(--danger);">✕ ຍົກເລີກ</button>` : ''}
           </div>
@@ -898,23 +920,60 @@ async function openShipmentSheet(itemId){
       <div style="font-weight:700; font-size:13px; margin-bottom:6px;">${url?'✅':'⬜'} ຂັ້ນຕອນ ${n}: ${label}</div>
       ${url?`<img src="${url}" style="width:100%; max-width:200px; border-radius:8px; margin-bottom:8px;">`:''}
       <input type="file" accept="image/*" capture="environment" id="shipStep${n}File">
-      ${n===2?`<div class="row2" style="margin-top:8px;">
-        <div class="field" style="margin-bottom:0;"><label>ບໍລິສັດຂົນສົ່ງ</label><input id="shipCarrierName" value="${item.carrier_name||''}" placeholder="ເຊັ່ນ: ຂົນສົ່ງ A"></div>
+      ${n===2?`
+      <div class="field" style="margin-top:8px; margin-bottom:0;">
+        <label>ບໍລິສັດຂົນສົ່ງ</label>
+        <select id="shipCarrierSelect" onchange="onCarrierPresetChange()">
+          ${CARRIER_PRESETS.map(c=>`<option value="${c.name}" data-url="${c.url}" ${item.carrier_name===c.name?'selected':''}>${c.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="row2" style="margin-top:8px;">
+        <div class="field" style="margin-bottom:0;" id="shipCarrierCustomWrap">
+          <label>ຊື່ຂົນສົ່ງ (ຖ້າ "ອື່ນໆ")</label><input id="shipCarrierName" value="${item.carrier_name||''}" placeholder="ເຊັ່ນ: ຂົນສົ່ງ A">
+        </div>
         <div class="field" style="margin-bottom:0;"><label>ລິ້ງຕິດຕາມພັດສະດຸ</label><input id="shipTrackingUrl" value="${item.tracking_url||''}" placeholder="https://..."></div>
+      </div>
+      <div class="hint" style="margin-top:4px;">ເລືອກຂົນສົ່ງຈາກລາຍການ ລິ້ງເວັບໄຊທ໌ຈະຖືກໃສ່ໃຫ້ອັດຕະໂນມັດ ບໍ່ຕ້ອງໄປຄົ້ນຫາເອງ</div>`:''}
+      ${n===3?`
+      <div class="row2" style="margin-top:8px;">
+        <div class="field" style="margin-bottom:0;"><label>ຄາດວ່າຈະຮອດພາຍໃນ (ມື້)</label>
+          <select id="shipEtaDays">
+            ${[1,2,3,4,5,7,10].map(d=>`<option value="${d}" ${Number(item.estimated_delivery_days||3)===d?'selected':''}>${d} ມື້</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0; display:flex; align-items:flex-end;"><div class="hint">ລູກຄ້າຈະເຫັນນັບຖອຍຫລັງໄປຫາວັນທີ່ກຳນົດນີ້ ທັນທີທີ່ທ່ານກົດຢືນຢັນຈັດສົ່ງລຸ່ມນີ້</div></div>
       </div>`:''}
       <button type="button" class="btn btn-gold btn-sm" style="margin-top:8px;" onclick="uploadShipStep(${itemId},${n})">📤 ອັບໂຫລດຮູບຂັ້ນຕອນ ${n}</button>
     </div>`;
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📦 ຈັດການການສົ່ງ #${item.id}</h3><button class="closex" data-close>✕</button></div>
     <div class="sheet-body">
-      <div class="hint" style="margin-bottom:10px;">ຖ່າຍຮູບໃຫ້ຄົບ 3 ຂັ້ນຕອນ ແລ້ວກົດຢືນຢັນ ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມຫຼັກຖານ ແລະ ລິ້ງຕິດຕາມພັດສະດຸທັນທີ</div>
+      <div class="hint" style="margin-bottom:10px;">ຖ່າຍຮູບໃຫ້ຄົບ 3 ຂັ້ນຕອນ ແລ້ວກົດຢືນຢັນ ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມຫຼັກຖານ ແລະ ລິ້ງຕິດຕາມພັດສະດຸທັນທີ — ຮູບແຕ່ລະຂັ້ນຕອນຈະຂຶ້ນໃຫ້ລູກຄ້າເຫັນທັນທີທີ່ອັບໂຫລດ ບໍ່ຕ້ອງລໍຄົບ 3 ຮູບ</div>
       ${stepBox(1,'ຖ່າຍຮູບແພັກສິນຄ້າ', item.step1_photo_url)}
       ${stepBox(2,'ສົ່ງໃຫ້ຂົນສົ່ງ (ຖ່າຍຮູບ)', item.step2_photo_url)}
-      ${stepBox(3,'ຮູບຢືນຢັນຂຶ້ນລົດ/ອອກເດີນທາງ', item.step3_photo_url)}
+      ${stepBox(3,'ຮູບໃບບິນພັດສະດຸ (ໃບຕິດໜ້າກ່ອງ/ໃບຂົນສົ່ງ)', item.step3_photo_url)}
       <button class="btn btn-primary" id="shipConfirmBtn" ${(!item.step1_photo_url||!item.step2_photo_url||!item.step3_photo_url)?'disabled style="opacity:.5;"':''} onclick="confirmShipment(${itemId})">✅ ຢືນຢັນຈັດສົ່ງ ແລະ ແຈ້ງເຕືອນລູກຄ້າ</button>
     </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
   window._closeShipSheet = ()=> overlay.remove();
+  onCarrierPresetChange();
+}
+// Auto-fills the tracking-link field with the picked courier's own site so the seller doesn't have
+// to go find it themselves, and shows/hides the free-text carrier name field depending on whether
+// "ອື່ນໆ" (other) is selected.
+function onCarrierPresetChange(){
+  const sel = document.getElementById('shipCarrierSelect');
+  if(!sel) return;
+  const opt = sel.options[sel.selectedIndex];
+  const isOther = opt.text.indexOf('ອື່ນໆ')===0;
+  const nameField = document.getElementById('shipCarrierName');
+  const urlField = document.getElementById('shipTrackingUrl');
+  const customWrap = document.getElementById('shipCarrierCustomWrap');
+  if(customWrap) customWrap.style.display = isOther ? '' : 'none';
+  if(!isOther){
+    if(nameField) nameField.value = opt.value;
+    if(urlField && !urlField.value) urlField.value = opt.getAttribute('data-url') || '';
+  }
 }
 async function uploadShipStep(itemId, step){
   const fileInput = document.getElementById(`shipStep${step}File`);
@@ -924,10 +983,18 @@ async function uploadShipStep(itemId, step){
     const url = await sbUpload('khaidee-products', `shipment_${itemId}_step${step}_${Date.now()}_${file.name}`, file);
     const body = {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_step: step, p_photo_url: url};
     if(step===2){
-      body.p_carrier_name = document.getElementById('shipCarrierName').value || null;
+      const sel = document.getElementById('shipCarrierSelect');
+      const isOther = sel && sel.options[sel.selectedIndex].text.indexOf('ອື່ນໆ')===0;
+      body.p_carrier_name = (isOther ? document.getElementById('shipCarrierName').value : (sel?sel.value:document.getElementById('shipCarrierName').value)) || null;
       body.p_tracking_url = document.getElementById('shipTrackingUrl').value || null;
     }
     await sbRPC('seller_order_item_update_shipment', body);
+    // Step 1 (packing photo) uploaded → immediately flip the order to "ແພັກແລ້ວ" (packed) so both
+    // the seller's list and the customer's order status reflect real progress right away, instead
+    // of sitting on "ລໍຖ້າແພັກ" until all 3 photos + final confirm are done.
+    if(step===1){
+      try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'confirmed'}); }catch(e){ /* non-fatal — confirmShipment will still flip it later */ }
+    }
     if(window._closeShipSheet) window._closeShipSheet();
     openShipmentSheet(itemId);
     renderOrders();
@@ -935,9 +1002,19 @@ async function uploadShipStep(itemId, step){
 }
 async function confirmShipment(itemId){
   try{
-    await sbRPC('seller_order_item_confirm_shipment', {p_seller_id: STATE.seller.id, p_order_item_id: itemId});
+    const etaSel = document.getElementById('shipEtaDays');
+    const days = etaSel ? Number(etaSel.value) : 3;
+    const target = new Date(); target.setDate(target.getDate() + days);
+    await sbRPC('seller_order_item_confirm_shipment', {
+      p_seller_id: STATE.seller.id, p_order_item_id: itemId,
+      // Sent so the customer sees a live countdown to the date the seller actually committed to,
+      // instead of only a generic carrier-average estimate. If the RPC doesn't accept these two
+      // extra params yet, add p_estimated_delivery_days/p_estimated_delivery_date to
+      // seller_order_item_confirm_shipment server-side.
+      p_estimated_delivery_days: days, p_estimated_delivery_date: target.toISOString()
+    });
     if(window._closeShipSheet) window._closeShipSheet();
-    showToast('ຢືນຢັນແລ້ວ! ລູກຄ້າໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມລິ້ງຕິດຕາມແລ້ວ');
+    showToast(`ຢືນຢັນແລ້ວ! ອໍເດີປ່ຽນເປັນ "ກຳລັງສົ່ງ" — ລູກຄ້າຈະເຫັນນັບຖອຍຫລັງ ${days} ມື້ ພ້ອມລິ້ງຕິດຕາມທັນທີ`);
     renderOrders();
   }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
@@ -1369,7 +1446,7 @@ function showSellerGuide(){
       </ul>
       <b>📦 ການສົ່ງສິນຄ້າ</b>
       <ul style="padding-left:18px; margin:8px 0 0;">
-        <li>ຕ້ອງຖ່າຍຮູບ 3 ຂັ້ນຕອນ (ແພັກ → ສົ່ງໃຫ້ຂົນສົ່ງ → ຢືນຢັນອອກເດີນທາງ) ທຸກອໍເດີ ເພື່ອເປັນຫຼັກຖານໃຫ້ລູກຄ້າ</li>
+        <li>ຕ້ອງຖ່າຍຮູບ 3 ຂັ້ນຕອນ (ແພັກ → ສົ່ງໃຫ້ຂົນສົ່ງ → ໃບບິນພັດສະດຸ) ທຸກອໍເດີ ເພື່ອເປັນຫຼັກຖານໃຫ້ລູກຄ້າ</li>
       </ul>
     </div></div>`;
   document.body.appendChild(overlay);

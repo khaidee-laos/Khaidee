@@ -1185,7 +1185,7 @@ function couponBannerHtml(productId){
 }
 // Ticks every active .coupon-cd element on screen once a second so countdowns stay live without re-rendering whole cards.
 setInterval(()=>{
-  document.querySelectorAll('.coupon-cd').forEach(el=>{
+  document.querySelectorAll('.coupon-cd, .delivery-cd').forEach(el=>{
     const exp = el.getAttribute('data-expires'); if(!exp) return;
     el.textContent = fmtCountdown(exp);
   });
@@ -2640,6 +2640,7 @@ function paintCustomerOrders(){
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         <div style="margin-top:6px; font-size:12.5px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
         ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
+        ${deliveryCountdownHtml(o)}
         <div style="margin-top:6px; display:flex; align-items:center; justify-content:space-between;">
           <span style="font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</span>
           <span class="hint">ເບິ່ງລາຍລະອຽດ ›</span>
@@ -2699,13 +2700,38 @@ const ORDER_STATUS_STEPS = [
 // public API today — it's the same "estimated to arrive by ..." approach Shopee/Lazada use for
 // small couriers that don't have live tracking either. Matches by carrier_name since that's
 // what order_detail_for_customer/admin_list_orders already return.
-function estimateDeliveryDate(order){
+// Returns the ISO timestamp we should count down / display to for "expected arrival".
+// Priority: a date the SELLER explicitly set when they confirmed shipment (order.estimated_delivery_date,
+// or order.estimated_delivery_days counted from when the order started shipping) — this is what the
+// seller actually promised, so it should win. Falls back to the old rule-of-thumb (order date + that
+// carrier's average delivery days) for orders/sellers that never set an explicit date.
+function estimateDeliveryTargetIso(order){
+  if(order.estimated_delivery_date) return order.estimated_delivery_date;
+  if(order.estimated_delivery_days && order.shipped_at){
+    const d = new Date(order.shipped_at);
+    d.setDate(d.getDate() + Number(order.estimated_delivery_days));
+    return d.toISOString();
+  }
   if(!order.carrier_name || !order.created_at) return null;
   const carrier = STATE.carriers.find(c=>c.name===order.carrier_name);
   const days = carrier ? Number(carrier.avg_delivery_days||3) : 3;
   const d = new Date(order.created_at);
   d.setDate(d.getDate() + days);
-  return d.toLocaleDateString('lo-LA', {day:'numeric', month:'long', year:'numeric'});
+  return d.toISOString();
+}
+function estimateDeliveryDate(order){
+  const iso = estimateDeliveryTargetIso(order);
+  if(!iso) return null;
+  return new Date(iso).toLocaleDateString('lo-LA', {day:'numeric', month:'long', year:'numeric'});
+}
+// Live "X ມື້ HH:MM ຈົນຮອດ" countdown chip shown once the seller has actually dispatched the order
+// (status shipping) and we know/estimated a target date — reuses the same .coupon-cd-style ticking
+// element pattern (see the setInterval below) so it updates every second with no re-render needed.
+function deliveryCountdownHtml(order){
+  if(order.status!=='shipping') return '';
+  const iso = estimateDeliveryTargetIso(order);
+  if(!iso) return '';
+  return `<div class="hint" style="margin-top:4px; font-weight:700; color:var(--ok);">🚚 ຄາດວ່າຈະຮອດໃນ <span class="delivery-cd" data-expires="${iso}">${fmtCountdown(iso)}</span></div>`;
 }
 async function openOrderDetail(orderId){
   requireLogin(async ()=>{
@@ -2726,6 +2752,7 @@ async function openOrderDetail(orderId){
           <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
         <div id="orderDetailQrBox"></div>
         ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:8px; font-weight:600; color:var(--maroon);">📅 ຄາດວ່າຈະຮອດປະມານ ${estimateDeliveryDate(o)}</div>` : ''}
+        ${deliveryCountdownHtml(o)}
         ${(o.fulfillment_steps && o.fulfillment_steps.length) ? `
         <h4 style="font-size:13px; margin:14px 0 4px;">📦 ຂັ້ນຕອນການສົ່ງ (ຫຼັກຖານຈາກຮ້ານ)</h4>
         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">
@@ -3324,6 +3351,7 @@ function paintAdminOrders(){
       ${(o.fulfillment_steps && o.fulfillment_steps.length) ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📦 ຮູບຂັ້ນຕອນສົ່ງ (ຈາກຮ້ານ):</div><div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">${o.fulfillment_steps.map(s=>`<img src="${s.photo_url}" title="${s.label||''}" onclick="window.open('${s.photo_url}','_blank')" style="width:44px; height:44px; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid var(--line);">`).join('')}</div>` : ''}
       ${o.tracking_url ? `<a href="${o.tracking_url}" target="_blank" style="font-size:11.5px; color:var(--maroon); font-weight:600; display:inline-block; margin-top:4px;">🔗 ລິງກ໌ຕິດຕາມພັດສະດຸ</a>` : ''}
       ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
+      ${deliveryCountdownHtml(o)}
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
         ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${orderStatusLabel(s)}</option>`).join('')}
