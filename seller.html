@@ -1019,6 +1019,7 @@ async function renderWallet(){
             <div class="top"><span class="title">${fmtMoney(w.amount)}</span><span class="status-pill status-${w.status}">${w.status}</span></div>
             <div class="hint">${new Date(w.created_at).toLocaleString('lo-LA')}</div>
             ${w.admin_note?`<div class="hint">ໝາຍເຫດແອດມິນ: ${w.admin_note}</div>`:''}
+            ${w.status==='approved' && w.slip_url?`<div class="hint" style="margin-top:6px;">📎 ສະລິບການໂອນເງິນຈາກແອດມິນ:</div><img src="${w.slip_url}" style="width:120px; border-radius:8px; margin-top:4px; border:1px solid var(--line); cursor:pointer;" onclick="window.open('${w.slip_url}','_blank')">`:''}
           </div>`).join(''))
       }`;
   }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນກະເປົາເງິນໄດ້</div>'; }

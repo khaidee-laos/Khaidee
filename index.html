@@ -3532,13 +3532,15 @@ async function adminDeleteTopup(id){
 }
 /* ============================================================ SELLER PAYOUTS (withdraw requests) ============================================================
    Needs on the Supabase side:
-   - admin_list_seller_withdrawals(p_password) -> [{id, seller_id, store_name, amount, qr_url, status, requested_at}]
+   - admin_list_seller_withdrawals(p_password) -> [{id, seller_id, store_name, amount, qr_url, status, slip_url, admin_note, requested_at}]
        status: 'pending' | 'approved' | 'rejected'. Seller submits the request + their own payout
        QR (bank/mobile money) from seller.html once they have enough wallet_balance to withdraw.
    - admin_approve_seller_withdrawal(p_password, p_withdrawal_id, p_approve, p_reason?)
        On approve: admin has already paid the seller by scanning their QR — this just deducts the
        amount from seller.wallet_balance and logs a seller_wallet_transactions row (type='withdrawal').
        On reject: just marks the request rejected, wallet_balance untouched.
+       admin_approve_withdrawal also now takes p_slip_url (proof-of-transfer photo the admin uploads
+       at approval time) so the seller can see confirmation of payment in their withdrawal history.
    All payouts flow through the admin this way — no direct seller-to-customer money movement — same
    principle as the existing customer topup approval flow just mirrored on the seller side. */
 async function renderAdminPayouts(){
@@ -3563,23 +3565,30 @@ function adminViewPayout(id){
     <div class="top" style="margin-bottom:6px;"><span class="title">${w.store_name} • ${fmtMoney(w.amount)}</span><span class="status-pill status-${w.status}">${w.status}</span></div>
     <div class="hint">${w.requested_at ? new Date(w.requested_at).toLocaleString('lo-LA') : ''}</div>
     ${w.qr_url?`<div class="hint" style="margin-top:10px;">QR ຂອງຮ້ານ (ໂອນຫາອັນນີ້ໃຫ້ຜູ້ຂາຍ):</div><img src="${w.qr_url}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; margin-top:6px; display:block;">`:''}
-    ${w.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApprovePayout(${w.id},true)" style="color:var(--ok);">✅ ຈ່າຍແລ້ວ / ອະນຸມັດ</button><button onclick="adminApprovePayout(${w.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+    ${w.status==='approved' && w.slip_url ? `<div class="hint" style="margin-top:14px;">📎 ສະລິບການໂອນທີ່ອັບໂຫລດໄວ້:</div><img src="${w.slip_url}" style="width:180px; border-radius:12px; margin-top:6px; display:block; cursor:pointer;" onclick="window.open('${w.slip_url}','_blank')">`:''}
+    ${w.status==='pending' ? `
+    <div class="field" style="margin-top:16px;"><label>📎 ອັບໂຫລດສະລິບການໂອນເງິນ (ຫຼັງໂອນຫາ QR ຮ້ານແລ້ວ)</label><input type="file" id="payoutSlipFile" accept="image/*"></div>
+    <div class="chiprow" style="margin-top:8px;"><button onclick="adminApprovePayout(${w.id},true,this)" style="color:var(--ok);">✅ ຈ່າຍແລ້ວ / ອະນຸມັດ</button><button onclick="adminApprovePayout(${w.id},false,this)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>` : ''}
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
 }
-async function adminApprovePayout(id, approve){
+async function adminApprovePayout(id, approve, btn){
   onGuard('payout-approve-'+id, async ()=>{
     try{
       if(approve){
-        await sbRPC('admin_approve_withdrawal', {p_password:STATE.adminPassword, p_id:id});
+        const slipFile = document.getElementById('payoutSlipFile')?.files[0];
+        if(!slipFile){ showToast('ກະລຸນາອັບໂຫລດຮູບສະລິບການໂອນເງິນກ່ອນອະນຸມັດ'); return; }
+        if(btn){ btn.disabled = true; btn.textContent = 'ກຳລັງອັບໂຫລດ...'; }
+        const slipUrl = await sbUpload('khaidee-products', `payout_slip_${id}_${Date.now()}_${slipFile.name}`, slipFile);
+        await sbRPC('admin_approve_withdrawal', {p_password:STATE.adminPassword, p_id:id, p_slip_url:slipUrl});
       }else{
         await sbRPC('admin_reject_withdrawal', {p_password:STATE.adminPassword, p_id:id, p_reason:''});
       }
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminPayouts();
-    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); if(btn){ btn.disabled=false; btn.textContent='✅ ຈ່າຍແລ້ວ / ອະນຸມັດ'; } }
   });
 }
 async function renderAdminCarriers(){
