@@ -2433,7 +2433,7 @@ async function submitOrder(payment, needsSlip){
           p_coupon_code: checkoutState.coupon,
           p_discount: groupDiscounts[gi],
           p_payment_slip_url: slipUrl,
-          p_bank_account_id: needsSlip ? checkoutState.bankAccountId : null
+          p_bank_account_id: (needsSlip || payment==='qr') ? checkoutState.bankAccountId : null
         });
         results.push(res);
       }
@@ -2759,6 +2759,7 @@ async function openOrderDetail(orderId){
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
         ${o.status==='cancelled' ? '' : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
           <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
+        <div id="orderDetailQrBox"></div>
         ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:8px; font-weight:600; color:var(--maroon);">📅 ຄາດວ່າຈະຮອດປະມານ ${estimateDeliveryDate(o)}</div>` : ''}
         ${(o.fulfillment_steps && o.fulfillment_steps.length) ? `
         <h4 style="font-size:13px; margin:14px 0 4px;">📦 ຂັ້ນຕອນການສົ່ງ (ຫຼັກຖານຈາກຮ້ານ)</h4>
@@ -2784,9 +2785,75 @@ async function openOrderDetail(orderId){
         <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
         <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
         ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}`;
+      // Still-pending QR-pay orders: re-fetch and show a live, re-scannable QR right inside the
+      // detail sheet, and poll here too — same "stays visible until actually paid, then vanishes
+      // and the status flips" behavior as the checkout flow, but reachable any time the customer
+      // reopens this order instead of only right after placing it.
+      if(o.status==='pending' && o.payment_method==='qr'){
+        renderOrderDetailQr(orderId, o.order_number, o.total, o.bank_name_en);
+      }
     }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດລາຍລະອຽດຄຳສັ່ງຊື້ໄດ້</div>'; }
   });
 }
+let orderDetailQrPollTimer = null;
+async function renderOrderDetailQr(orderId, orderNumber, total, bankNameEn){
+  const box = document.getElementById('orderDetailQrBox');
+  if(!box) return;
+  box.innerHTML = `<div class="hint" style="text-align:center; padding:16px 0;">⏳ ກຳລັງໂຫລດ QR ...</div>`;
+  // Older pending orders created before bank_account_id was saved for the QR flow won't have a
+  // bank on file — fall back to the first bank PhaJay supports so the QR can still be regenerated.
+  const bankCode = bankNameEn || ((STATE.bankAccounts||[]).find(b=>b.is_active && QR_BANKS.includes(b.bank_name_en))||{}).bank_name_en || 'BCEL';
+  try{
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/phajay-generate-qr`, {
+      method:'POST', headers: sbHeaders(),
+      body: JSON.stringify({order_number: orderNumber, bank: bankCode})
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'ສ້າງ QR ບໍ່ສຳເລັດ');
+    const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qrCode)}`;
+    box.innerHTML = `
+      <div style="text-align:center; margin-top:10px; padding:14px; border:1.5px dashed var(--line); border-radius:12px;">
+        <div class="hint" style="font-weight:700; color:var(--maroon); margin-bottom:6px;">📱 ຍັງບໍ່ໄດ້ຊຳລະ — ສະແກນ QR ນີ້ເພື່ອຈ່າຍ</div>
+        <img src="${qrImg}" style="width:200px; height:200px; border-radius:14px; border:1.5px solid var(--line);">
+        <div class="hint" style="margin-top:8px;">ເປີດແອັບທະນາຄານ (${bankCode}) ແລ້ວສະແກນ QR ນີ້</div>
+        <div style="margin-top:8px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
+      </div>`;
+    startOrderDetailQrPolling(orderId, orderNumber);
+  }catch(e){
+    box.innerHTML = `<div class="hint" style="color:var(--danger); margin-top:8px;">ບໍ່ສາມາດໂຫລດ QR ໄດ້: ${e.message}</div>`;
+  }
+}
+function startOrderDetailQrPolling(orderId, orderNumber){
+  if(orderDetailQrPollTimer) clearInterval(orderDetailQrPollTimer);
+  let tries = 0;
+  orderDetailQrPollTimer = setInterval(async ()=>{
+    tries++;
+    try{
+      const rows = await sbSelect('orders', `order_number=eq.${orderNumber}&select=status`);
+      const status = rows && rows[0] && rows[0].status;
+      if(status === 'paid'){
+        clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null;
+        playSuccessSound();
+        showToast(`✅ ຊຳລະເງິນສຳເລັດ! ອໍເດີເລກທີ: ${orderNumber}`);
+        // Reload the whole sheet so the status pill/track flips to paid and the QR box disappears
+        // (openOrderDetail only re-renders the QR box when status is still 'pending').
+        openOrderDetail(orderId);
+        loadProducts().then(()=>renderProducts());
+        renderOrders && renderOrders();
+      }
+    }catch(e){ /* transient network hiccup — just try again next tick */ }
+    if(tries > 180){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; } // ~15 min
+  }, 5000);
+}
+// Stop polling if the customer closes the order detail sheet without paying, so it doesn't keep
+// hitting the DB in the background after they've navigated away.
+(function(){
+  const origCloseModal = window.closeModal;
+  window.closeModal = function(id){
+    if(id==='modalOrderDetail' && orderDetailQrPollTimer){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; }
+    return origCloseModal.apply(this, arguments);
+  };
+})();
 
 /* ============================================================ WALLET ============================================================ */
 async function showWallet(){
