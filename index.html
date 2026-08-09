@@ -321,6 +321,11 @@ nav.bottom .icon{font-size:19px;}
 .bo-swatch .txt{font-size:10.5px; font-weight:600; max-width:70px; text-align:center; line-height:1.25;}
 .bo-swatch.active{border-color:var(--maroon); background:rgba(122,30,43,.06);}
 .bo-swatch.active .txt{color:var(--maroon);}
+.bo-terms{margin-top:16px; background:var(--cream); border-radius:12px; padding:12px 13px;}
+.bo-terms .tt{font-size:12.5px; font-weight:800; color:var(--maroon-dark); margin-bottom:7px; display:flex; align-items:center; gap:6px;}
+.bo-terms ul{margin:0; padding-left:0; list-style:none; display:flex; flex-direction:column; gap:6px;}
+.bo-terms li{font-size:11.5px; color:var(--ink-soft); line-height:1.4; display:flex; gap:6px; align-items:flex-start;}
+.bo-terms li .ic{flex-shrink:0;}
 .bo-qtyrow{display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:14px; border-top:1px solid var(--line); padding-bottom:14px;}
 .bo-qtyrow label{font-size:12.5px; font-weight:700; color:var(--ink-soft);}
 .bo-footer{position:sticky; bottom:0; background:#fff; padding:12px 0 16px; margin:0 -16px; padding-left:16px; padding-right:16px; border-top:1px solid var(--line);}
@@ -931,6 +936,35 @@ function nameFor(obj){ // pick localized name from a product/category row
   if(LANG==='th' && obj.name_th) return obj.name_th;
   if(LANG==='en' && obj.name_en) return obj.name_en;
   return obj.name_lo;
+}
+// Static order/shipping/return terms shown in the Buy Options sheet (fills the space next to
+// the variant swatches). Not tied to any product — same wording for every item — so it's kept
+// as a small localized lookup here rather than fetched per-product.
+const BO_TERMS = {
+  lo:{title:'ເງື່ອນໄຂການສັ່ງຊື້', items:[
+    {ic:'📦', t:'ຈັດສົ່ງທົ່ວ ສປປ ລາວ ໄວທີ່ສຸດ 2-5 ວັນ ນັບຈາກຢືນຢັນອໍເດີ້'},
+    {ic:'🔄', t:'ປ່ຽນ/ຄືນສິນຄ້າໄດ້ພາຍໃນ 7 ວັນ (ສິນຄ້າຕ້ອງບໍ່ຜ່ານການໃຊ້ງານ ແລະຄົບຊຸດ)'},
+    {ic:'✅', t:'ກະລຸນາກວດສອບສິນຄ້າຕໍ່ໜ້າພະນັກງານກ່ອນຮັບ (ສຳລັບອໍເດີ້ເກັບເງິນປາຍທາງ)'},
+    {ic:'📞', t:'ຕິດຕໍ່ຮ້ານຄ້າໄດ້ໂດຍກົງຜ່ານແຊັດ ຫາກມີຄຳຖາມກ່ຽວກັບສິນຄ້າ ຫຼື ອໍເດີ້'}
+  ]},
+  th:{title:'เงื่อนไขการสั่งซื้อ', items:[
+    {ic:'📦', t:'จัดส่งทั่ว สปป ลาว ไวสุด 2-5 วัน นับจากยืนยันออเดอร์'},
+    {ic:'🔄', t:'เปลี่ยน/คืนสินค้าได้ภายใน 7 วัน (สินค้าต้องไม่ผ่านการใช้งานและครบชุด)'},
+    {ic:'✅', t:'กรุณาตรวจสอบสินค้าต่อหน้าพนักงานก่อนรับ (สำหรับออเดอร์เก็บเงินปลายทาง)'},
+    {ic:'📞', t:'ติดต่อร้านค้าได้โดยตรงผ่านแชท หากมีคำถามเกี่ยวกับสินค้าหรือออเดอร์'}
+  ]},
+  en:{title:'Order & Shipping Terms', items:[
+    {ic:'📦', t:'Delivered nationwide in Laos, usually within 2-5 days after order confirmation'},
+    {ic:'🔄', t:'Exchange/return accepted within 7 days (item must be unused and complete)'},
+    {ic:'✅', t:'Please check the item with the delivery staff before accepting (cash-on-delivery orders)'},
+    {ic:'📞', t:'Message the shop directly in chat for any questions about the item or your order'}
+  ]}
+};
+function boTermsHtml(){
+  const d = BO_TERMS[LANG] || BO_TERMS.lo;
+  return `<div class="bo-terms"><div class="tt">📋 ${d.title}</div><ul>${
+    d.items.map(i=>`<li><span class="ic">${i.ic}</span><span>${i.t}</span></li>`).join('')
+  }</ul></div>`;
 }
 function setLang(lang){
   LANG = lang;
@@ -1662,6 +1696,7 @@ function paintBuyOptions(id){
             </button>`).join('')}
         </div>
       </div>`).join('')}
+    ${boTermsHtml()}
     <div class="bo-qtyrow">
       <label>ຈຳນວນ</label>
       <div class="qty-select" style="margin:0;">
