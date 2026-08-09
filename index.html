@@ -804,11 +804,27 @@ function playSuccessSound(){
   const t = ctx.currentTime;
   _tone(ctx, 880, t, 0.12, 0.15);       // two quick rising notes — same pattern as a payment-app "done" chime
   _tone(ctx, 1318.5, t+0.09, 0.18, 0.15);
+  vibrate(30);
 }
 function playErrorSound(){
   const ctx = _getAudioCtx(); if(!ctx) return;
   const t = ctx.currentTime;
   _tone(ctx, 220, t, 0.2, 0.12);        // single low tone — distinct from success so they're never confused
+  vibrate([25,40,25]);
+}
+// Light "pop" used specifically for adding an item to the cart — quieter/shorter than the
+// fuller two-note chime above (playSuccessSound, used for completed orders/logins/etc.) so
+// tapping "+" on a product card never feels as heavy as actually finishing a purchase.
+function playCartSound(){
+  const ctx = _getAudioCtx(); if(!ctx) return;
+  const t = ctx.currentTime;
+  _tone(ctx, 1046.5, t, 0.09, 0.12);
+  vibrate(15);
+}
+// Thin wrapper around the Vibration API (Android Chrome supports it; iOS Safari silently has
+// no navigator.vibrate, so this just no-ops there — sound still plays either way).
+function vibrate(pattern){
+  try{ if(navigator.vibrate) navigator.vibrate(pattern); }catch(e){}
 }
 
 
@@ -1428,6 +1444,7 @@ function confirmBuyOptions(id, evt){
     buyNow(id, detailQty, r.variant);
   }else{
     addToCart(id, detailQty, r.variant);
+    playCartSound();
     flyToCart(btnEl, thumb); // capture the button's position & spawn the flying icon BEFORE the sheet closes/hides it
     closeModal('modalBuyOptions');
   }
@@ -1513,7 +1530,7 @@ async function submitComment(productId){
     loadComments(productId);
   }catch(e){ showToast('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
 }
-function quickAdd(id, evt, imgUrl){ addToCart(id, 1); flyToCart(evt && evt.currentTarget, imgUrl); }
+function quickAdd(id, evt, imgUrl){ addToCart(id, 1); playCartSound(); flyToCart(evt && evt.currentTarget, imgUrl); }
 // Small clone of the tapped button arcs across the screen to the 🛒 tab, then the cart badge
 // pulses once it "lands" — purely cosmetic feedback so adding to cart feels tactile even
 // though the button itself sits far from the cart icon (grid cards, buy-options sheet, etc).
