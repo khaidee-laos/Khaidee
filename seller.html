@@ -737,8 +737,44 @@ async function setItemStatus(itemId, status){
 }
 async function markDelivered(itemId){
   if(!confirm('ຢືນຢັນວ່າລູກຄ້າໄດ້ຮັບສິນຄ້ານີ້ແລ້ວບໍ? (ແອດມິນຈະກວດສອບ ແລະ ໂອນເງິນເຂົ້າກະເປົາຂອງທ່ານຫລັງຈາກນີ້)')) return;
-  try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'delivered'}); renderOrders(); }
-  catch(e){ showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+  // Reserve a blank tab RIGHT NOW, synchronously, inside the click handler — same trick used on
+  // the customer storefront for the new-order WhatsApp redirect — so the tab isn't blocked by
+  // mobile browsers once we open it a moment later after the RPC call finishes.
+  const waTab = window.open('', '_blank');
+  try{
+    await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'delivered'});
+    renderOrders();
+    notifyAdminReleasePayment(itemId, waTab);
+  }catch(e){ if(waTab) waTab.close(); showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+}
+// After the seller confirms a customer received their item, ping the admin on WhatsApp to
+// review and release the payout — same pattern as the customer→admin "new order" notification
+// on the main storefront, just aimed at the seller-payout step instead.
+function notifyAdminReleasePayment(itemId, reservedTab){
+  const item = ORDERS_CACHE.find(i=>i.order_item_id===itemId);
+  const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
+  const msg = encodeURIComponent(`💰 ຂໍໃຫ້ກວດສອບ ແລະ ໂອນເງິນເຂົ້າຮ້ານຄ້າ\nອໍເດີ: #${item?item.order_number:''}\nສິນຄ້າ: ${item?item.product_name:''} x${item?item.qty:''}\nຮ້ານ: ${STATE.seller.store_name}\nລູກຄ້າຢືນຢັນວ່າໄດ້ຮັບເຄື່ອງແລ້ວ ກະລຸນາກວດສອບ ແລະ ໂອນເງິນເຂົ້າ Wallet ຂອງຮ້ານ`);
+  const link = `https://wa.me/${num}?text=${msg}`;
+  if(reservedTab && !reservedTab.closed){
+    try{ reservedTab.location.href = link; }catch(e){ window.open(link, '_blank'); }
+  }else{
+    window.open(link, '_blank');
+  }
+  showSellerWaFallback(link);
+}
+// Small persistent banner with a real tappable link in case the automatic redirect above got
+// blocked (in-app webviews like Facebook/TikTok browsers block it even with the reserved-tab trick).
+function showSellerWaFallback(link){
+  let bar = document.getElementById('waFallbackBar');
+  if(!bar){
+    bar = document.createElement('div'); bar.id = 'waFallbackBar';
+    bar.style.cssText = 'position:fixed; left:14px; right:14px; bottom:84px; z-index:60; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:10px 12px; display:flex; align-items:center; gap:8px;';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<span style="font-size:20px;">💬</span><span style="flex:1; font-size:12.5px; color:var(--ink-soft);">ຖ້າ WhatsApp ບໍ່ໄດ້ເປີດອັດຕະໂນມັດ, ແຕະບ່ອນນີ້ເພື່ອແຈ້ງແອດມິນ</span>
+    <a href="${link}" target="_blank" rel="noopener" style="background:var(--ok); color:#fff; font-size:12px; font-weight:700; padding:8px 12px; border-radius:999px; text-decoration:none; white-space:nowrap;">ເປີດ WhatsApp</a>
+    <button onclick="document.getElementById('waFallbackBar').remove()" style="background:none; border:none; font-size:16px; color:var(--ink-soft); padding:0 2px;">✕</button>`;
+  setTimeout(()=>{ const b=document.getElementById('waFallbackBar'); if(b) b.remove(); }, 30000);
 }
 /* ---- 3-step packing / shipping photo flow ---- */
 async function openShipmentSheet(itemId){
