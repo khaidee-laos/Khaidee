@@ -107,6 +107,7 @@ nav.bottom .icon{font-size:19px;}
 .wa-connect-box{display:flex; align-items:center; gap:8px; margin:-4px 0 12px;}
 .wa-connect-box .hint{margin:0;}
 #sRegIdPreview img{width:100%; max-width:220px; border-radius:10px; border:1.5px solid var(--line); margin-top:6px;}
+#sRegQrPreview img{width:120px; border-radius:10px; border:1.5px solid var(--line); margin-top:6px;}
 .pending-icon{width:64px; height:64px; border-radius:50%; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:28px; margin:4px auto 14px;}
 
 /* ---- Login screen ---- */
@@ -316,6 +317,9 @@ function showAuthScreen(mode){
       </div>
       <div class="field"><label>ຮູບຖ່າຍບັດປະຈຳຕົວ (ຖືບັດຄູ່ກັບໜ້າ) *</label><input type="file" id="sRegIdCard" accept="image/*" capture="environment" onchange="onSellerIdCardChange()"></div>
       <div id="sRegIdPreview"></div>
+      <div class="field"><label>ຮູບ QR Code ຮັບເງິນ (ສຳລັບຖອນເງິນ)</label><input type="file" id="sRegQr" accept="image/*" onchange="onSellerQrChange()"></div>
+      <div id="sRegQrPreview"></div>
+      <div class="hint" style="margin:-6px 0 12px;">💡 ໃສ່ໄວ້ນຳຕັ້ງແຕ່ຕອນສະໝັກ ຈະຊ່ວຍໃຫ້ຖອນເງິນຄັ້ງຕໍ່ໄປໄວຂຶ້ນ ບໍ່ຕ້ອງຄົ້ນຫາຮູບໃໝ່ທຸກຄັ້ງ (ຫຼືຈະໃສ່ພາຍຫຼັງຢູ່ໜ້າ "ບັນຊີ" ກໍໄດ້)</div>
       <div class="hint" style="margin:10px 0 12px;">📌 ຂໍ້ມູນທັງໝົດຈະຖືກສົ່ງໃຫ້ແອດມິນຫລັງບ້ານກວດສອບ ແລະ ຢືນຢັນຕົວຕົນກ່ອນ — ໄດ້ຮັບອະນຸມັດແລ້ວທ່ານຈຶ່ງຈະໃຊ້ອີເມວ/ລະຫັດຜ່ານຂ້າງເທິງເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້</div>
       <button type="button" class="btn btn-ghost" style="margin-bottom:10px;" onclick="showSellerGuide()">📖 ອ່ານຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍກ່ອນ</button>
       <button class="btn btn-primary" id="sRegSubmitBtn" onclick="doSellerRegister()">📤 ສົ່ງຄຳຂໍສະໝັກ</button>
@@ -366,6 +370,14 @@ function onSellerIdCardChange(){
   if(!f){ prev.innerHTML=''; return; }
   prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="ຮູບບັດປະຈຳຕົວ">`;
 }
+let sellerQrFile = null;
+function onSellerQrChange(){
+  const f = document.getElementById('sRegQr').files[0];
+  sellerQrFile = f || null;
+  const prev = document.getElementById('sRegQrPreview');
+  if(!f){ prev.innerHTML=''; return; }
+  prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="ຮູບ QR Code ຮັບເງິນ">`;
+}
 async function doSellerLogin(){
   const id = document.getElementById('sLoginId').value.trim();
   const pw = document.getElementById('sLoginPw').value;
@@ -393,12 +405,16 @@ async function doSellerRegister(){
     // KYC bucket — recommend making this a PRIVATE bucket (not "khaidee-products") with
     // storage RLS so only the admin RPC/service role can read it, since it holds ID card photos.
     const idCardUrl = await sbUpload('khaidee-seller-kyc', `app_${Date.now()}_${sellerIdCardFile.name}`, sellerIdCardFile);
+    let qrUrl = null;
+    if(sellerQrFile){ qrUrl = await sbUpload('khaidee-products', `seller_qr_reg_${Date.now()}_${sellerQrFile.name}`, sellerQrFile); }
     // seller_application_submit must INSERT a seller row with status='pending' and must NOT
     // return a usable session — the account only becomes usable once an admin approves it.
     await sbRPC('seller_application_submit', {
       p_store_name: store, p_phone: phone, p_email: email, p_password: pw,
-      p_province: province, p_district: district, p_village: village, p_id_card_url: idCardUrl
+      p_province: province, p_district: district, p_village: village, p_id_card_url: idCardUrl,
+      p_withdraw_qr_url: qrUrl
     });
+    sellerIdCardFile = null; sellerQrFile = null;
     showAuthScreen('pending');
   }catch(e){ errBox.innerHTML = `<div class="err">${e.message}</div>`; btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍສະໝັກ'; }
 }
@@ -870,6 +886,13 @@ async function renderAccount(){
       <div style="padding:0 14px 14px;"><button class="btn btn-primary" onclick="saveAccount()">ບັນທຶກ</button></div>
     </div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
+      <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">💳 QR Code ຮັບເງິນ (ໃຊ້ຕອນຖອນເງິນ)</label>
+      <div class="hint" style="margin:4px 0 10px;">ໃສ່ໄວ້ຄັ້ງດຽວ ຄັ້ງຕໍ່ໄປຕອນຖອນເງິນຈະບໍ່ຕ້ອງຄົ້ນຫາຮູບໃໝ່ອີກ</div>
+      ${s.withdraw_qr_url?`<img src="${s.withdraw_qr_url}" style="width:120px; border-radius:10px; margin-bottom:10px; border:1px solid var(--line); display:block;">`:''}
+      <div class="field"><input type="file" id="accQrFile" accept="image/*"></div>
+      <button class="btn btn-gold" id="accQrSaveBtn" onclick="saveAccountQr()">${s.withdraw_qr_url?'ປ່ຽນ QR Code':'ບັນທຶກ QR Code'}</button>
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
       <div class="field" style="margin-bottom:8px;"><label>🚚 ອັດຕາຄ່າສົ່ງ (₭/ກກ ພາຍໃນແຂວງດຽວກັນ)</label><input type="number" id="accShipRate" value="${s.shipping_rate_per_kg||8000}"></div>
       <div class="hint" style="margin-bottom:8px;">ສົ່ງອອກນອກແຂວງຄ່າສົ່ງຈະຄິດ x2 ອັດຕະໂນມັດ</div>
       <button class="btn btn-ghost" onclick="saveShipRate()">ບັນທຶກອັດຕາຄ່າສົ່ງ</button>
@@ -930,6 +953,19 @@ async function saveAccount(){
     saveSeller(); renderAccount();
     showToast('ບັນທຶກແລ້ວ');
   }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function saveAccountQr(){
+  const btn = document.getElementById('accQrSaveBtn');
+  const qrFile = document.getElementById('accQrFile').files[0];
+  if(!qrFile){ showToast('ກະລຸນາເລືອກຮູບ QR Code ກ່ອນ'); return; }
+  btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+  try{
+    const qrUrl = await sbUpload('khaidee-products', `seller_qr_${STATE.seller.id}_${Date.now()}_${qrFile.name}`, qrFile);
+    await sbRPC('seller_update_profile', {p_seller_id: STATE.seller.id, p_phone:null, p_email:null, p_logo_url:null, p_cover_url:null, p_withdraw_qr_url: qrUrl});
+    STATE.seller.withdraw_qr_url = qrUrl;
+    saveSeller(); renderAccount();
+    showToast('ບັນທຶກ QR Code ແລ້ວ');
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ QR Code'; }
 }
 async function saveShipRate(){
   const rate = Number(document.getElementById('accShipRate').value);
