@@ -946,17 +946,56 @@ document.getElementById('searchInput').addEventListener('input', renderProducts)
 
 /* ============================================================ PRODUCT DETAIL ============================================================ */
 let detailQty = 1;
-let detailSelectedSize = null;
-function openProduct(id){
+let detailProductId = null;
+let detailGroups = [];      // [{id, name, values:[{id, value, image_url}]}] from product_variants_get
+let detailVariants = [];    // [{id, value_ids:[...], price, compare_price, stock, sku}]
+let detailSelection = {};   // {group_id: value_id}
+let detailSpecs = [];       // [{label, value}] from product_attribute_values (joined category_attributes)
+// Finds the variant (if any) whose value_ids exactly match the customer's current selection
+// across every group. Returns null while the selection is incomplete or doesn't match a row.
+function matchedDetailVariant(){
+  if(!detailGroups.length) return null;
+  const selectedIds = detailGroups.map(g=> detailSelection[g.id]);
+  if(selectedIds.some(v=>v===undefined || v===null)) return null;
+  const wanted = [...selectedIds].sort((a,b)=>a-b);
+  return detailVariants.find(v=>{
+    const have = [...(v.value_ids||[])].sort((a,b)=>a-b);
+    return have.length===wanted.length && have.every((x,i)=>x===wanted[i]);
+  }) || null;
+}
+async function openProduct(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   detailQty = 1;
-  detailSelectedSize = null;
+  detailProductId = id;
+  detailGroups = []; detailVariants = []; detailSelection = {}; detailSpecs = [];
   STATE.activeDetailTab = 'details';
+  // Fetch real variant options + spec attributes for this product (size_options/attributes
+  // used to be free-text fields on products that were never actually saved by any form —
+  // the real data lives in product_variants/product_option_groups and product_attribute_values).
+  try{
+    const vg = await sbRPC('product_variants_get', {p_product_id: id});
+    detailGroups = vg.groups || [];
+    detailVariants = vg.variants || [];
+  }catch(e){ console.warn('product_variants_get failed', e); }
+  try{
+    const vals = await sbSelect('product_attribute_values', `product_id=eq.${id}&select=value,category_attributes(name_lo,name_th,name_en)`);
+    detailSpecs = vals.filter(v=>v.category_attributes && String(v.value||'').trim()!=='').map(v=>({label: nameFor(v.category_attributes), value: v.value}));
+  }catch(e){ console.warn('product_attribute_values failed', e); }
+  paintProductDetail(id);
+  loadComments(id);
+  openModal('modalProduct');
+}
+function paintProductDetail(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
   const media = [];
   (p.images||[]).forEach(url=> media.push({type:'image', url}));
   if(p.video_url) media.push({type:'video', url:p.video_url});
   if(!media.length) media.push({type:'image', url:'https://placehold.co/400x400/F1DFAE/7A1E2B?text=KhaiDee'});
   const related = STATE.products.filter(x=>x.id!==p.id && x.category_id===p.category_id).slice(0,4);
+  const mv = matchedDetailVariant();
+  const displayPrice = mv ? (mv.price ?? p.price) : p.price;
+  const displayCompare = mv ? mv.compare_price : p.compare_price;
+  const displayStock = mv ? mv.stock : p.stock;
   document.getElementById('productDetailBody').innerHTML = `
     <div class="pd-gallery">
       <div class="pd-gallery-track" id="pdGalleryTrack" onscroll="onPdGalleryScroll()">
@@ -969,15 +1008,18 @@ function openProduct(id){
     </div>
     <div style="padding:14px 16px 0;">
       <h2 style="font-size:16px;margin:0 0 4px;">${nameFor(p)}</h2>
-      <div class="price" style="font-size:20px;">${fmtMoney(p.price)} ${p.compare_price?`<span class="compare" style="font-size:13px;">${fmtMoney(p.compare_price)}</span>`:''}</div>
-      <div class="meta" style="margin:8px 0 0;">ຄົງເຫຼືອ ${p.stock} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
+      <div class="price" style="font-size:20px;" id="pdPrice">${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}</div>
+      <div class="meta" style="margin:8px 0 0;" id="pdStockLine">ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
 
-      ${(p.size_options && p.size_options.length) ? `
-      <div class="field" style="margin:10px 0 0;">
-        <label>ເລືອກໄຊ້</label>
-        <div class="chiprow" id="pdSizeChips">
-          ${p.size_options.map(sz=>`<button type="button" onclick="selectDetailSize('${String(sz).replace(/'/g,"\\'")}')" data-size="${sz}">${sz}</button>`).join('')}
-        </div>
+      ${detailGroups.length ? `
+      <div id="pdVariantGroups">
+        ${detailGroups.map(g=>`
+        <div class="field" style="margin:10px 0 0;">
+          <label>${g.name}</label>
+          <div class="chiprow" data-group="${g.id}">
+            ${(g.values||[]).map(v=>`<button type="button" onclick="selectDetailVariantValue(${g.id},${v.id})" data-value="${v.id}" class="${detailSelection[g.id]===v.id?'active':''}">${v.value}</button>`).join('')}
+          </div>
+        </div>`).join('')}
       </div>` : ''}
 
       ${(()=>{ const seller = sellerById(p.seller_id); return seller ? `
@@ -1002,9 +1044,9 @@ function openProduct(id){
         <button data-tab="reviews" onclick="switchPdTab('reviews')">ຄວາມຄິດເຫັນ</button>
       </div>
       <div id="pdTabDetails">
-        ${(p.attributes && p.attributes.length) ? `
+        ${detailSpecs.length ? `
         <div class="pd-spec-table" style="margin:12px 0; border:1px solid var(--line); border-radius:10px; overflow:hidden;">
-          ${p.attributes.map(a=>`<div style="display:flex; justify-content:space-between; gap:10px; padding:8px 12px; font-size:12.5px; border-bottom:1px solid var(--line);"><span class="hint" style="margin:0;">${a.label}</span><span style="font-weight:600; text-align:right;">${a.value}</span></div>`).join('')}
+          ${detailSpecs.map(a=>`<div style="display:flex; justify-content:space-between; gap:10px; padding:8px 12px; font-size:12.5px; border-bottom:1px solid var(--line);"><span class="hint" style="margin:0;">${a.label}</span><span style="font-weight:600; text-align:right;">${a.value}</span></div>`).join('')}
         </div>` : ''}
         <p style="font-size:13px; color:var(--ink-soft); line-height:1.6; margin:12px 0;">${p.description||'ບໍ່ມີລາຍລະອຽດເພີ່ມເຕີມ'}</p>
       </div>
@@ -1030,17 +1072,37 @@ function openProduct(id){
       </div>
       <button class="btn btn-primary" onclick="confirmAddToCart(${p.id})">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
     </div>`;
-  loadComments(p.id);
-  openModal('modalProduct');
 }
-function selectDetailSize(sz){
-  detailSelectedSize = sz;
-  document.querySelectorAll('#pdSizeChips button').forEach(b=> b.classList.toggle('active', b.dataset.size===sz));
+function selectDetailVariantValue(groupId, valueId){
+  detailSelection[groupId] = valueId;
+  document.querySelectorAll(`.chiprow[data-group="${groupId}"] button`).forEach(b=> b.classList.toggle('active', Number(b.dataset.value)===valueId));
+  const mv = matchedDetailVariant();
+  const p = STATE.products.find(x=>x.id===detailProductId);
+  if(p){
+    const priceEl = document.getElementById('pdPrice'), stockEl = document.getElementById('pdStockLine');
+    const displayPrice = mv ? (mv.price ?? p.price) : p.price;
+    const displayCompare = mv ? mv.compare_price : p.compare_price;
+    const displayStock = mv ? mv.stock : p.stock;
+    if(priceEl) priceEl.innerHTML = `${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}`;
+    if(stockEl) stockEl.innerHTML = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}`;
+  }
 }
 function confirmAddToCart(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  if(p.size_options && p.size_options.length && !detailSelectedSize){ alert('ກະລຸນາເລືອກໄຊ້ກ່ອນເພີ່ມໃສ່ກະຕ່າ'); return; }
-  addToCart(id, detailQty, detailSelectedSize);
+  let variant = null;
+  if(detailGroups.length){
+    if(detailGroups.some(g=>detailSelection[g.id]===undefined)){ alert('ກະລຸນາເລືອກຕົວເລືອກສິນຄ້າໃຫ້ຄົບກ່ອນເພີ່ມໃສ່ກະຕ່າ'); return; }
+    variant = matchedDetailVariant();
+    if(!variant){ alert('ບໍ່ພົບຕົວເລືອກສິນຄ້ານີ້'); return; }
+    if((variant.stock??0) <= 0){ alert('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return; }
+    const label = detailGroups.map(g=>{
+      const valId = detailSelection[g.id];
+      const val = (g.values||[]).find(v=>v.id===valId);
+      return val ? val.value : '';
+    }).filter(Boolean).join(' / ');
+    variant = {...variant, label};
+  }
+  addToCart(id, detailQty, variant);
   closeModal('modalProduct');
 }
 function onPdGalleryScroll(){
@@ -1098,14 +1160,17 @@ function quickAdd(id){ addToCart(id, 1); pulseCart(); }
 function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
 
 /* ============================================================ CART ============================================================ */
-function addToCart(id, qty, size){
+function addToCart(id, qty, variant){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  size = size || null;
-  // Same product in a different size is a separate cart line (can't merge qty across sizes).
-  const existing = STATE.cart.find(i=>i.product_id===id && i.size===size);
+  const variantId = variant ? variant.id : null;
+  const variantLabel = variant ? variant.label : null;
+  const price = variant ? (variant.price ?? p.price) : p.price;
+  // Same product with a different variant is a separate cart line (can't merge qty across variants).
+  const existing = STATE.cart.find(i=>i.product_id===id && i.variant_id===variantId);
   if(existing) existing.qty += qty;
   else STATE.cart.push({
-    product_id:id, name: nameFor(p) + (size?` (${size})`:''), price:p.price, qty, size,
+    product_id:id, name: nameFor(p) + (variantLabel?` (${variantLabel})`:''), price, qty,
+    variant_id: variantId, variant_label: variantLabel,
     image:(p.images&&p.images[0])||'',
     seller_id: p.seller_id || null,        // which shop this item belongs to — drives per-seller shipping & wallet split
     weight: Number(p.weight_kg)||1          // kg per unit — drives shipping calc
@@ -1463,7 +1528,7 @@ async function submitOrder(payment, needsSlip){
         const res = await sbRPC('order_create', {
           p_customer_id: STATE.customer.id,
           p_seller_id: g.sellerId, // null = official KhaiDee store
-          p_items: g.items.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty, size:i.size||null})),
+          p_items: g.items.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty, variant_id:i.variant_id||null, variant_label:i.variant_label||null})),
           p_address: checkoutState.address,
           p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
           p_shipping_fee: fee,
@@ -2242,12 +2307,91 @@ async function renderAdminProducts(){
       </div>`).join('')}</div>`);
   document.querySelectorAll('.fab').forEach(f=>f.remove());
 }
-function adminEditProduct(id){
+let pAttrDefs = [];      // category_attributes for the currently selected category
+let pAttrValues = {};    // {attribute_id: value}
+let pGroups = [];        // [{name, values:[{value,image_url}]}]
+let pVariants = [];      // [{value_labels:[...], price, compare_price, stock, sku}]
+async function loadCategoryAttrs(categoryId){
+  try{ pAttrDefs = await sbSelect('category_attributes', `category_id=eq.${categoryId}&order=sort_order.asc`); }
+  catch(e){ pAttrDefs = []; }
+}
+function renderAttrsBox(){
+  const box = document.getElementById('pAttrsBox');
+  if(!box) return;
+  if(!pAttrDefs.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div style="border-top:1px dashed var(--line); margin:14px 0 10px; padding-top:12px;">
+    <label style="font-weight:700; font-size:13px;">📋 ລາຍລະອຽດຕາມໝວດໝູ່ (ຍີ່ຫໍ້ / ຮຸ່ນ / ຂະໜາດ ...)</label></div>` +
+    pAttrDefs.map(a=>{
+      const val = pAttrValues[a.id] ?? '';
+      const req = a.is_required ? ' *' : '';
+      let inputHtml;
+      if(a.input_type==='select'){
+        const opts = (a.options||[]);
+        inputHtml = `<select data-attr="${a.id}" onchange="pAttrValues[${a.id}]=this.value">
+          <option value="">— ເລືອກ —</option>
+          ${opts.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
+        </select>`;
+      }else if(a.input_type==='number'){
+        inputHtml = `<input type="number" data-attr="${a.id}" value="${val}" oninput="pAttrValues[${a.id}]=this.value">`;
+      }else{
+        inputHtml = `<input type="text" data-attr="${a.id}" value="${val}" oninput="pAttrValues[${a.id}]=this.value">`;
+      }
+      return `<div class="field"><label>${a.name_lo}${req}</label>${inputHtml}</div>`;
+    }).join('');
+}
+function addVariantGroup(){
+  pGroups.push({name:'', values:[]});
+  renderGroupsBox();
+}
+function removeVariantGroup(i){ pGroups.splice(i,1); rebuildVariants(); renderGroupsBox(); }
+function renderGroupsBox(){
+  const box = document.getElementById('pGroupsBox');
+  if(!box) return;
+  box.innerHTML = pGroups.map((g,i)=>`
+    <div style="background:var(--cream); border-radius:10px; padding:10px; margin-bottom:8px;">
+      <div class="row2">
+        <div class="field" style="margin-bottom:6px;"><label>ຊື່ກຸ່ມ (ເຊັ່ນ: ໄຊສ໌, ສີ)</label><input value="${g.name}" oninput="pGroups[${i}].name=this.value"></div>
+        <div class="field" style="margin-bottom:6px;"><label>ຄ່າ (ຄັ້ນດ້ວຍ ,)</label><input value="${(g.values||[]).map(v=>v.value).join(', ')}" oninput="pGroups[${i}].values=this.value.split(',').map(s=>({value:s.trim()})).filter(v=>v.value)"></div>
+      </div>
+      <button type="button" class="btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger);" onclick="removeVariantGroup(${i})">🗑️ ລຶບກຸ່ມນີ້</button>
+    </div>`).join('') +
+    `<button type="button" class="btn-sm btn-ghost" onclick="rebuildVariants()">🔄 ສ້າງຕາຕະລາງລາຄາ/ສະຕັອກ</button>`;
+}
+function cartesian(arrs){
+  return arrs.reduce((acc,cur)=> acc.flatMap(a=>cur.map(c=>[...a,c])), [[]]);
+}
+function rebuildVariants(){
+  const validGroups = pGroups.filter(g=>g.name && g.values && g.values.length);
+  if(!validGroups.length){ pVariants = []; renderVariantsBox(); return; }
+  const combos = cartesian(validGroups.map(g=>g.values.map(v=>v.value)));
+  const basePrice = Number(document.getElementById('pPrice')?.value)||0;
+  const baseStock = Number(document.getElementById('pStock')?.value)||0;
+  pVariants = combos.map(labels=>{
+    const existing = pVariants.find(v=> JSON.stringify(v.value_labels)===JSON.stringify(labels));
+    return existing || {value_labels:labels, price:basePrice, compare_price:null, stock:baseStock, sku:''};
+  });
+  renderVariantsBox();
+}
+function renderVariantsBox(){
+  const box = document.getElementById('pVariantsBox');
+  if(!box) return;
+  if(!pVariants.length){ box.innerHTML=''; return; }
+  box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <tr style="text-align:left; color:var(--ink-soft);"><th style="padding:4px;">ຕົວເລືອກ</th><th style="padding:4px;">ລາຄາ</th><th style="padding:4px;">ສະຕັອກ</th></tr>
+    ${pVariants.map((v,i)=>`<tr>
+      <td style="padding:4px; font-weight:600;">${v.value_labels.join(' / ')}</td>
+      <td style="padding:4px;"><input type="number" value="${v.price??''}" style="width:80px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].price=Number(this.value)||0"></td>
+      <td style="padding:4px;"><input type="number" value="${v.stock??0}" style="width:60px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].stock=Number(this.value)||0"></td>
+    </tr>`).join('')}
+  </table>`;
+}
+async function adminEditProduct(id){
   const p = id ? STATE.products.find(x=>x.id===id) : {};
+  pAttrValues = {}; pGroups = []; pVariants = []; pAttrDefs = [];
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂສິນຄ້າ':'ເພີ່ມສິນຄ້າ'}</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="field"><label>ໝວດໝູ່</label><select id="pCat">${STATE.categories.map(c=>`<option value="${c.id}" ${p.category_id===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
+    <div class="field"><label>ໝວດໝູ່</label><select id="pCat" onchange="onAdminProductCategoryChange()">${STATE.categories.map(c=>`<option value="${c.id}" ${p.category_id===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
     <div class="field"><label>ຮ້ານຄ້າ</label><select id="pSeller"><option value="">-- ຮ້ານທາງການ KhaiDee --</option>${(STATE.adminSellersForProduct||[]).map(s=>`<option value="${s.id}" ${p.seller_id===s.id?'selected':''}>${s.store_name}${s.status!=='approved'?` (${s.status})`:''}</option>`).join('')}</select></div>
     <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
     <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
@@ -2261,21 +2405,21 @@ function adminEditProduct(id){
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
     <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
-    <div class="row2">
-      <div class="field"><label>ນ້ຳໜັກ (ກິໂລ ຕໍ່ 1 ຊິ້ນ, ໃຊ້ຄິດໄລ່ຄ່າສົ່ງ)</label><input type="number" step="0.1" min="0.1" id="pWeight" value="${p.weight_kg||1}"></div>
-      <div class="field"><label>ໄຊ້ (ຄັ່ນດ້ວຍ , — ຖ້າບໍ່ມີໄຊ້ ປະໄວ້ຫວ່າງ)</label><input id="pSizes" placeholder="S, M, L, XL" value="${(p.size_options||[]).join(', ')}"></div>
-    </div>
-    <div class="field">
-      <label>ສະເປັກສິນຄ້າ (ຍີ່ຫໍ້/ຮຸ່ນ/ອື່ນໆ — 1 ແຖວ = 1 ລາຍການ, ຮູບແບບ "ຫົວຂໍ້: ຄ່າ")</label>
-      <textarea id="pAttrs" rows="3" placeholder="ຍີ່ຫໍ້: Samsung&#10;ຮຸ່ນ: Galaxy A15&#10;ສີ: ດຳ">${(p.attributes||[]).map(a=>`${a.label}: ${a.value}`).join('\n')}</textarea>
-      <div class="hint">ຈະສະແດງເປັນຕາຕະລາງໃນໜ້າສິນຄ້າ ໃຫ້ລູກຄ້າອ່ານກ່ອນຕັດສິນໃຈສັ່ງ</div>
-    </div>
+    <div class="field"><label>ນ້ຳໜັກ (ກິໂລ ຕໍ່ 1 ຊິ້ນ, ໃຊ້ຄິດໄລ່ຄ່າສົ່ງ)</label><input type="number" step="0.1" min="0.1" id="pWeight" value="${p.weight_kg||1}"></div>
     <div class="field"><label>ຮູບພາບສິນຄ້າ (ອັບໂຫລດໄດ້ຫຼາຍໆຮູບ)</label><input type="file" id="pImageFiles" accept="image/*" multiple></div>
     <div id="pImagePreview" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
       ${(p.images||[]).map((url,i)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImage(${i})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join('')}
     </div>
     <div class="field"><label>ວິດີໂອສິນຄ້າ (ບໍ່ເກີນ 10 ວິນາທີ, ຖ້າມີ)</label><input type="file" id="pVideoFile" accept="video/*"></div>
     <div id="pVideoPreview" style="margin:8px 0;">${p.video_url?`<video src="${p.video_url}" style="width:100px; border-radius:8px;" muted controls></video>`:''}</div>
+    <div id="pAttrsBox"></div>
+    <div style="border-top:1px dashed var(--line); margin:14px 0; padding-top:12px;">
+      <label style="font-weight:700; font-size:13px;">🎛️ ຕົວເລືອກສິນຄ້າ (ໄຊສ໌ / ສີ ...)</label>
+      <div class="hint">ຖ້າສິນຄ້າມີຫຼາຍໄຊສ໌/ສີ ໃສ່ໄວ້ຈະໃຫ້ລູກຄ້າເລືອກໄດ້ ແລະແຍກລາຄາ/ສະຕັອກ</div>
+      <div id="pGroupsBox"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="addVariantGroup()">+ ເພີ່ມກຸ່ມຕົວເລືອກ</button>
+      <div id="pVariantsBox" style="margin-top:10px;"></div>
+    </div>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px;"><input type="checkbox" id="pFeatured" ${p.is_featured?'checked':''}> ສິນຄ້າແນະນຳ (ຂາຍດີ)</label>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px;"><input type="checkbox" id="pActive" ${p.is_active!==false?'checked':''}> ເປີດຂາຍ</label>
     <button class="btn btn-primary" style="margin-top:14px;" id="pSaveBtn">ບັນທຶກ</button>
@@ -2286,6 +2430,32 @@ function adminEditProduct(id){
   let pendingImages = [...(p.images||[])];
   let pendingVideoUrl = p.video_url||null;
   window.removePImage = (i)=>{ pendingImages.splice(i,1); document.getElementById('pImagePreview').innerHTML = pendingImages.map((url,j)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImage(${j})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join(''); };
+  window.onAdminProductCategoryChange = async ()=>{
+    const catId = Number(document.getElementById('pCat').value);
+    await loadCategoryAttrs(catId);
+    renderAttrsBox();
+  };
+  // Load category attributes + existing attribute values + existing variants (edit mode)
+  const initialAdminCat = p.category_id || (STATE.categories[0] && STATE.categories[0].id);
+  if(initialAdminCat) await loadCategoryAttrs(initialAdminCat);
+  if(id){
+    try{
+      const existingVals = await sbSelect('product_attribute_values', `product_id=eq.${id}`);
+      existingVals.forEach(v=> pAttrValues[v.attribute_id] = v.value);
+    }catch(e){}
+    try{
+      const vg = await sbRPC('product_variants_get', {p_product_id: id});
+      pGroups = (vg.groups||[]).map(g=>({name:g.name, values:(g.values||[]).map(v=>({value:v.value, image_url:v.image_url}))}));
+      pVariants = (vg.variants||[]).map(v=>{
+        const labels = (v.value_ids||[]).map(vid=>{
+          for(const g of vg.groups||[]){ const found=(g.values||[]).find(x=>x.id===vid); if(found) return found.value; }
+          return '';
+        });
+        return {value_labels:labels, price:v.price, compare_price:v.compare_price, stock:v.stock, sku:v.sku};
+      });
+    }catch(e){}
+  }
+  renderAttrsBox(); renderGroupsBox(); renderVariantsBox();
   overlay.querySelector('#pSaveBtn').onclick = async ()=>{
     const btn = overlay.querySelector('#pSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
     try{
@@ -2308,16 +2478,20 @@ function adminEditProduct(id){
         price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
         stock: Number(document.getElementById('pStock').value),
         weight_kg: Number(document.getElementById('pWeight').value)||1,
-        size_options: document.getElementById('pSizes').value.split(',').map(s=>s.trim()).filter(Boolean),
-        attributes: document.getElementById('pAttrs').value.split('\n').map(line=>{
-          const idx = line.indexOf(':'); if(idx<0) return null;
-          const label = line.slice(0,idx).trim(), value = line.slice(idx+1).trim();
-          return (label && value) ? {label, value} : null;
-        }).filter(Boolean),
         images: pendingImages, video_url: pendingVideoUrl,
         is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
       };
-      await sbRPC('admin_upsert_product', {p_password:STATE.adminPassword, p_product:payload});
+      const res = await sbRPC('admin_upsert_product', {p_password:STATE.adminPassword, p_product:payload});
+      const productId = id || res.id;
+      // Save category attributes
+      const attrPayload = Object.entries(pAttrValues).filter(([k,v])=>v!==undefined && v!==null && String(v).trim()!=='').map(([attribute_id,value])=>({attribute_id:Number(attribute_id), value:String(value)}));
+      await sbRPC('admin_product_set_attributes', {p_password:STATE.adminPassword, p_product_id: productId, p_values: attrPayload});
+      // Save variant groups + variants (if any)
+      const validGroups = pGroups.filter(g=>g.name && g.values && g.values.length);
+      if(validGroups.length){
+        await sbRPC('admin_set_product_variants', {p_password:STATE.adminPassword, p_product_id: productId,
+          p_groups: validGroups.map(g=>({name:g.name, values:g.values})), p_variants: pVariants});
+      }
       overlay.remove(); renderAdminProducts();
     }catch(e){
       alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message);
