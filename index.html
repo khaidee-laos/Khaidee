@@ -1942,21 +1942,29 @@ function buyNow(id, qty, variant){
 }
 /* ============================================================ PER-SELLER SHIPPING CALCULATOR ============================================================
    Replaces the old "flat carrier base_fee for the whole order" model with per-seller rates:
-   8,000 KIP covers 1kg (or under) *within the seller's own province*; shipping outside the
-   seller's province doubles that base rate; a seller-issued free-shipping coupon zeroes it.
-   Official-store items (seller_id null — sold directly by KhaiDee, not a 3rd-party seller)
-   keep using the old carrier.base_fee, since there's no seller row to compare provinces against.
+   each seller's own shipping_rate_per_kg (set by the seller in seller.html ► ບັນຊີ ► ອັດຕາຄ່າສົ່ງ,
+   saved via seller_set_shipping_rate) covers 1kg (or under) *within the seller's own province*;
+   shipping outside the seller's province multiplies that rate by shipping_outside_multiplier
+   (site-wide, admin-editable in ► ການຕັ້ງຄ່າ ► ຄ່າຂົນສົ່ງ); a seller-issued free-shipping coupon
+   zeroes it. If a seller hasn't set their own rate yet, shipping_base_per_kg (also admin-editable,
+   same settings panel) is used as the site-wide default. Official-store items (seller_id null —
+   sold directly by KhaiDee, not a 3rd-party seller) keep using the old carrier.base_fee, since
+   there's no seller row to read a rate from.
    IMPORTANT: this is a client-side calc for display + what gets POSTed to order_create. The
-   same rule must be mirrored inside order_create server-side (recompute shipping_fee from
-   weight/province instead of trusting the client number) so the price can't be tampered with. */
-const SHIPPING_BASE_PER_KG = 8000;
+   same per-seller shipping_rate_per_kg / shipping_outside_multiplier logic must be read inside
+   order_create server-side too (recompute shipping_fee from weight/province instead of trusting
+   the client number) so the price can't be tampered with, and so seller/admin rate edits here
+   actually take effect on the real charged amount. */
+function shippingDefaultPerKg(){ return Number(STATE.settings.shipping_base_per_kg) || 8000; }
+function shippingOutsideMultiplier(){ return Number(STATE.settings.shipping_outside_multiplier) || 2; }
 function calcGroupShipping(group, address, carrier){
   if(group.freeShipping) return 0;
   if(!group.sellerId) return carrier ? Number(carrier.base_fee)||0 : 0;
   const seller = sellerById(group.sellerId);
   const kg = Math.max(1, Math.ceil(group.weight||1));
-  let fee = SHIPPING_BASE_PER_KG * kg;
-  if(seller && seller.province && address && address.province && seller.province !== address.province) fee *= 2;
+  const ratePerKg = (seller && seller.shipping_rate_per_kg!=null && seller.shipping_rate_per_kg!=='') ? Number(seller.shipping_rate_per_kg) : shippingDefaultPerKg();
+  let fee = ratePerKg * kg;
+  if(seller && seller.province && address && address.province && seller.province !== address.province) fee *= shippingOutsideMultiplier();
   return fee;
 }
 // Splits the flat cart into one group per seller (plus one for official-store items),
@@ -4365,6 +4373,15 @@ async function renderAdminSettings(){
     <button class="btn btn-primary" id="stSave">ບັນທຶກການຕັ້ງຄ່າ</button>
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
+    <h4 style="font-size:13px;">🚚 ຄ່າຂົນສົ່ງ (ຮ້ານຄ້າ/ຜູ້ຂາຍ)</h4>
+    <div class="hint" style="margin-top:-4px;">ຜູ້ຂາຍແຕ່ລະຄົນຕັ້ງ "ອັດຕາຄ່າສົ່ງ" ຂອງຕົນເອງໄດ້ໃນ seller.html ► ບັນຊີ. ຄ່າຂ້າງລຸ່ມນີ້ຈະຖືກໃຊ້ພຽງແຕ່ເປັນ <b>ຄ່າເລີ່ມຕົ້ນ</b> ສຳລັບຜູ້ຂາຍທີ່ຍັງບໍ່ໄດ້ຕັ້ງອັດຕາຂອງຕົນເອງ, ແລະ ຄ່າ "ຕົວຄູນຂ້າມແຂວງ" ໃຊ້ກັບທຸກຮ້ານ. (ຄ່າຂົນສົ່ງໃນໜ້າ Carriers ດ້ານລຸ່ມແມ່ນໃຊ້ສະເພາະສິນຄ້າຮ້ານທາງການ KhaiDee ເອງເທົ່ານັ້ນ.)</div>
+    <div class="row2">
+      <div class="field"><label>ຄ່າຂົນສົ່ງເລີ່ມຕົ້ນ (ກີບ / ກກ, ພາຍໃນແຂວງດຽວກັນ)</label><input type="number" id="stShipBase" value="${STATE.settings.shipping_base_per_kg||8000}"></div>
+      <div class="field"><label>ຕົວຄູນ ຖ້າສົ່ງຂ້າມແຂວງ</label><input type="number" step="0.1" id="stShipMult" value="${STATE.settings.shipping_outside_multiplier||2}"></div>
+    </div>
+    <button class="btn btn-primary" id="stShipSave">ບັນທຶກຄ່າຂົນສົ່ງ</button>
+
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">🤖 AI ຂຽນລາຍລະອຽດສິນຄ້າອັດຕະໂນມັດ</h4>
     <div class="hint" style="margin-top:-4px;">ໃສ່ Anthropic API key ຂອງທ່ານເພື່ອເປີດໃຊ້ປຸ່ມ "ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ" ໃນໜ້າເພີ່ມ/ແກ້ໄຂສິນຄ້າ — ລະບົບຈະຂຽນລາຍລະອຽດເປັນພາສາລາວໃຫ້ຈາກຊື່ ແລະ ໝວດໝູ່ສິນຄ້າ.<br>⚠️ <b>ຄຳເຕືອນ:</b> key ນີ້ຖືກເກັບໄວ້ໃນຕາຕະລາງການຕັ້ງຄ່າດຽວກັນກັບ whatsapp_number ເຊິ່ງລູກຄ້າທົ່ວໄປສາມາດອ່ານໄດ້ (site_settings_public) — ຫາກຕ້ອງການໃຊ້ຢ່າງປອດໄພແທ້ໆ ຄວນຍ້າຍ key ນີ້ໄປໄວ້ໃນຕາຕະລາງ/Edge Function ແຍກຕ່າງຫາກທີ່ຈຳກັດໃຫ້ອ່ານໄດ້ສະເພາະແອດມິນເທົ່ານັ້ນ ກ່ອນນຳໄປໃຊ້ຈິງ.</div>
     <div class="field"><label>Anthropic API Key</label><input type="password" id="stAiKey" value="${STATE.settings.anthropic_api_key||''}" placeholder="sk-ant-..."></div>
@@ -4403,6 +4420,19 @@ async function renderAdminSettings(){
     for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
     await loadSettings();
     showToast('ບັນທຶກແລ້ວ');
+  };
+  document.getElementById('stShipSave').onclick = async ()=>{
+    const btn = document.getElementById('stShipSave'); btn.disabled = true;
+    try{
+      const updates = {
+        shipping_base_per_kg: String(Number(document.getElementById('stShipBase').value) || 8000),
+        shipping_outside_multiplier: String(Number(document.getElementById('stShipMult').value) || 2)
+      };
+      for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
+      await loadSettings();
+      showToast('ບັນທຶກຄ່າຂົນສົ່ງແລ້ວ');
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: '+(e.message||e)); }
+    btn.disabled = false;
   };
   document.getElementById('stAiKeySave').onclick = async ()=>{
     const btn = document.getElementById('stAiKeySave'); btn.disabled = true;
