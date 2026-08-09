@@ -2165,7 +2165,7 @@ function renderCheckout(){
     </div>
     <div class="field">
       <label>💳 ວິທີຊຳລະເງິນ</label>
-      <select id="paymentMethod"><option value="qr">📱 ສະແກນ QR ຈ່າຍເງິນ (ຢືນຢັນທັນທີ)</option><option value="transfer">ໂອນຜ່ານທະນາຄານ (ອັບໂຫລດສະລິບ)</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
+      <select id="paymentMethod"><option value="qr">📱 ສະແກນ QR ຈ່າຍເງິນ (ຢືນຢັນທັນທີ)</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
     </div>
     <div class="sumrow"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(subtotal)}</span></div>
     ${shipRows}
@@ -2233,61 +2233,8 @@ function proceedCheckout(){
     showToast(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
     return;
   }
-  if(payment==='transfer'){ renderTransferProofStep(total); return; }
   if(payment==='qr'){ renderQrPaymentStep(total); return; }
   submitOrder(payment, null);
-}
-/* ---- Step 2 (transfer only): pick a bank, see ITS QR + account, then attach the slip ----
-   Each row in public.bank_accounts (BCEL, LDB, JDB, LVB, ...) can carry its own QR image and
-   account number, so the customer transfers to whichever bank they actually use instead of a
-   single fixed account. Falls back to the old single wallet_qr_url/wallet_instructions if the
-   shop hasn't set up any bank in bank_accounts yet, so nothing breaks mid-upgrade. */
-function renderTransferProofStep(total){
-  const banks = STATE.bankAccounts || [];
-  const selectedId = checkoutState.bankAccountId;
-  const selected = banks.find(b=>b.id===selectedId);
-  const legacyQr = STATE.settings.wallet_qr_url;
-  const legacyInfo = STATE.settings.wallet_instructions;
-
-  const bankListHtml = banks.length ? `
-    <div class="field">
-      <label>🏦 ເລືອກທະນາຄານທີ່ຈະໂອນ</label>
-      ${banks.map(b=>`
-        <div class="optcard ${selectedId===b.id?'selected':''}" onclick="selectTransferBank(${b.id}, ${total})">
-          <div class="ico">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">`:(b.logo_emoji||'🏦')}</div>
-          <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
-          <div class="arrow">›</div>
-        </div>`).join('')}
-    </div>` : '';
-
-  const payInfoHtml = banks.length
-    ? (selected ? `<div class="optcard" style="flex-direction:column; align-items:flex-start; gap:8px;">
-        ${selected.qr_url?`<img src="${selected.qr_url}" style="width:160px; height:160px; object-fit:cover; border-radius:10px; align-self:center;">`:''}
-        <div class="hint">ຊື່ບັນຊີ: <b>${selected.account_name||'-'}</b></div>
-        <div class="hint">ເລກບັນຊີ: <b>${selected.account_number||'-'}</b></div>
-      </div>` : `<div class="hint">👆 ກະລຸນາເລືອກທະນາຄານທີ່ຈະໂອນເງິນກ່ອນ</div>`)
-    : (legacyQr || legacyInfo ? `<div class="optcard" style="flex-direction:column; align-items:flex-start; gap:8px;">
-        ${legacyQr?`<img src="${legacyQr}" style="width:160px; height:160px; object-fit:cover; border-radius:10px; align-self:center;">`:''}
-        ${legacyInfo?`<div class="hint" style="white-space:pre-wrap;">${legacyInfo}</div>`:''}
-      </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າ QR ຮັບເງິນ — ກະລຸນາຕິດຕໍ່ຮ້ານ</div>`);
-
-  const canSubmit = !banks.length || !!selected; // legacy shops (no bank_accounts rows yet) skip straight through
-
-  document.getElementById('checkoutBody').innerHTML = `
-    <div class="hint" style="cursor:pointer; margin-bottom:10px;" onclick="renderCheckout()">← ຍ້ອນກັບ ແກ້ໄຂຄຳສັ່ງຊື້</div>
-    <div class="field">
-      <label>💳 ໂອນຜ່ານທະນາຄານ</label>
-      <div class="sumrow total" style="margin-bottom:10px;"><span>ຍອດທີ່ຕ້ອງໂອນ</span><span>${fmtMoney(total)}</span></div>
-    </div>
-    ${bankListHtml}
-    <div class="field">${payInfoHtml}</div>
-    <div class="field"><label>ອັບໂຫລດສະລິບໂອນເງິນ (ຈຳເປັນ)</label><input type="file" id="orderSlip" accept="image/*"></div>
-    <button class="btn btn-primary" id="submitOrderBtn" ${canSubmit?'':'disabled'} onclick="submitOrder('transfer', true)">✅ ຢືນຢັນອີກຄັ້ງ — ສົ່ງໃຫ້ກວດສອບ</button>
-    <div class="hint" style="margin-top:8px;">ແອດມິນຈະກວດສອບສະລິບ ແລະ ຢືນຢັນຄຳສັ່ງຊື້ພາຍໃນບໍ່ດົນ — ອໍເດີຈະຄ້າງໄວ້ "ລໍຖ້າຢືນຢັນ" ຈົນກວ່າຈະໄດ້ຮັບການກວດສອບ</div>`;
-}
-function selectTransferBank(id, total){
-  checkoutState.bankAccountId = id;
-  renderTransferProofStep(total);
 }
 /* ============================================================ QR AUTO-PAY (PhaJay) ============================================================
    "ສະແກນ QR ຈ່າຍເງິນ" — customer picks a bank, we create the order (status stays 'pending'),
@@ -2347,7 +2294,7 @@ function renderQrPaymentStep(total){
           <div class="arrow">›</div>
         </div>`).join('')}
     </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າທະນາຄານທີ່ຮອງຮັບ QR ອັດຕະໂນມັດ (BCEL / LDB / JDB) — ກະລຸນາເລືອກວິທີຊຳລະອື່ນ</div>`}
-    <button class="btn btn-primary" id="submitOrderBtn" ${selected?'':'disabled'} onclick="submitOrder('qr', false)">⚡ ສ້າງ QR ຈ່າຍເງິນ</button>
+    <button class="btn btn-primary" id="submitOrderBtn" ${selected?'':'disabled'} onclick="submitOrder('qr')">⚡ ສ້າງ QR ຈ່າຍເງິນ</button>
     <div class="hint" style="margin-top:8px;">ສະແກນຈ່າຍແລ້ວລະບົບຈະຢືນຢັນອໍເດີໃຫ້ທັນທີ ບໍ່ຕ້ອງລໍຖ້າແອດມິນ</div>`;
 }
 // Called after order_create succeeds with payment_method 'qr'. Asks the Edge Function for a QR
@@ -2415,7 +2362,7 @@ function startQrPolling(orderNumber){
    This does several sequential inserts rather than one atomic multi-order RPC — simplest upgrade
    from the single-order version, though a true order_create_multi RPC would be safer against a
    partial failure leaving some seller orders placed and others not. */
-async function submitOrder(payment, needsSlip){
+async function submitOrder(payment){
   // Open a blank tab RIGHT NOW, synchronously, while we're still inside the click handler.
   // Browsers only allow window.open() without a popup-block prompt when it happens in direct
   // response to a user gesture — if we wait until after the order is saved (several `await`s
@@ -2430,31 +2377,13 @@ async function submitOrder(payment, needsSlip){
     const subtotal = activeCart().reduce((s,i)=>s+i.price*i.qty,0);
     const total = subtotal + shipping - (checkoutState.discount||0);
     const btn = document.getElementById('submitOrderBtn');
-    let file = null;
-    if(needsSlip){
-      if((STATE.bankAccounts||[]).length && !checkoutState.bankAccountId){
-        if(waTab) waTab.close();
-        showToast('ກະລຸນາເລືອກທະນາຄານທີ່ໂອນເງິນເຂົ້າ'); return;
-      }
-      file = document.getElementById('orderSlip').files[0];
-      if(!file){ if(waTab) waTab.close(); showToast('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
-    }
     if(payment==='qr'){
       if(waTab) waTab.close(); // QR flow never redirects to WhatsApp — no reserved tab needed
       if(!checkoutState.bankAccountId){ showToast('ກະລຸນາເລືອກທະນາຄານກ່ອນ'); return; }
-      if(groups.length>1){ showToast('ກະຕ່າມີສິນຄ້າຈາກຫຼາຍຮ້ານ — QR ອັດຕະໂນມັດຮອງຮັບອໍເດີດຽວ ກະລຸນາເລືອກ "ໂອນຜ່ານທະນາຄານ" ແທນ'); return; }
+      if(groups.length>1){ showToast('ກະຕ່າມີສິນຄ້າຈາກຫຼາຍຮ້ານ — QR ອັດຕະໂນມັດຮອງຮັບອໍເດີດຽວ ກະລຸນາເລືອກ "ກະເປົາເງິນ KhaiDee" ຫຼື "ເກັບເງິນປາຍທາງ" ແທນ'); return; }
     }
-    if(btn){ btn.disabled = true; btn.textContent = needsSlip ? 'ກຳລັງບີບອັດຮູບ...' : 'ກຳລັງດຳເນີນການ...'; } // onGuard() above is what actually blocks repeat taps / double-charge
+    if(btn){ btn.disabled = true; btn.textContent = 'ກຳລັງດຳເນີນການ...'; } // onGuard() above is what actually blocks repeat taps / double-charge
     try{
-      let slipUrl = null;
-      if(needsSlip){
-        const compressed = await compressImageFile(file);
-        btn.textContent = 'ກຳລັງອັບໂຫລດ... 0%';
-        slipUrl = await sbUploadWithProgress('khaidee-slips', `order_${STATE.customer.id}_${Date.now()}_${file.name}`, compressed, (pct)=>{
-          btn.textContent = `ກຳລັງອັບໂຫລດ... ${pct}%`;
-        });
-        btn.textContent = 'ກຳລັງບັນທຶກ...';
-      }
       btn.textContent = 'ກຳລັງບັນທຶກອໍເດີ...';
       const results = [];
       for(let gi=0; gi<groups.length; gi++){
@@ -2470,8 +2399,8 @@ async function submitOrder(payment, needsSlip){
           p_payment_method: payment,
           p_coupon_code: checkoutState.coupon,
           p_discount: groupDiscounts[gi],
-          p_payment_slip_url: slipUrl,
-          p_bank_account_id: (needsSlip || payment==='qr') ? checkoutState.bankAccountId : null
+          p_payment_slip_url: null,
+          p_bank_account_id: payment==='qr' ? checkoutState.bankAccountId : null
         });
         results.push(res);
       }
@@ -2487,11 +2416,9 @@ async function submitOrder(payment, needsSlip){
       }
       if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
       closeModal('modalCheckout');
-      notifyWhatsApp(orderNumbers, combinedTotal, needsSlip, waTab);
+      notifyWhatsApp(orderNumbers, combinedTotal, false, waTab);
       playSuccessSound();
-      showToast(needsSlip
-        ? `ສົ່ງຄຳສັ່ງຊື້ແລ້ວ! ເລກທີອໍເດີ: ${orderNumbers}\nລໍຖ້າແອດມິນກວດສອບສະລິບໂອນເງິນ`
-        : `ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${orderNumbers}`);
+      showToast(`ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${orderNumbers}`);
       const last = results[results.length-1];
       if(STATE.customer && last && last.wallet_balance!=null){ STATE.customer.wallet_balance = last.wallet_balance; saveCustomer(); }
       // Refresh product stock post-purchase, then check whether anything just sold out so we
@@ -2503,7 +2430,7 @@ async function submitOrder(payment, needsSlip){
       playErrorSound();
       showToast('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
     }finally{
-      if(btn){ btn.disabled = false; btn.textContent = needsSlip ? '✅ ຢືນຢັນອີກຄັ້ງ — ສົ່ງໃຫ້ກວດສອບ' : '✅ ຢືນຢັນສັ່ງຊື້'; }
+      if(btn){ btn.disabled = false; btn.textContent = '✅ ຢືນຢັນສັ່ງຊື້'; }
     }
   });
 }
@@ -2910,6 +2837,10 @@ function startOrderDetailQrPolling(orderId, orderNumber){
       if(qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; }
       if(qrCountdownTimer){ clearInterval(qrCountdownTimer); qrCountdownTimer = null; }
     }
+    if(id==='modalWallet'){
+      if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer = null; }
+      if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer = null; }
+    }
     return origCloseModal.apply(this, arguments);
   };
 })();
@@ -2935,54 +2866,110 @@ async function showWallet(){
         </div>`).join('') : '<div class="empty">ຍັງບໍ່ມີປະຫວັດ</div>'}`;
   });
 }
+/* ---- Wallet top-up — QR auto-pay only (no more slip upload / admin approval) ----
+   Mirrors the checkout "ສະແກນ QR ຈ່າຍເງິນ" flow: customer picks a bank + amount, we open a
+   pending wallet_transactions row, ask phajay-generate-qr for a QR tied to that top-up, show it,
+   and poll until it's credited. Kept separate state/timers from the checkout QR flow (qrPollTimer
+   etc. above) so a top-up and a checkout can't stomp on each other's polling if both were ever
+   open in the same session. */
+let topupQrState = {};
+let topupPollTimer = null;
+let topupCountdownTimer = null;
 function showTopupForm(){
-  const qr = STATE.settings.wallet_qr_url;
-  const info = STATE.settings.wallet_instructions;
+  const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active && QR_BANKS.includes(b.bank_name_en));
+  if(topupQrState.bankAccountId==null && banks.length) topupQrState.bankAccountId = banks[0].id;
+  const selectedId = topupQrState.bankAccountId;
   document.getElementById('topupFormWrap').innerHTML = `
-    ${qr || info ? `<div class="optcard" style="flex-direction:column; align-items:flex-start; gap:8px;">
-      ${qr?`<img src="${qr}" style="width:140px; height:140px; object-fit:cover; border-radius:10px; align-self:center;">`:''}
-      ${info?`<div class="hint" style="white-space:pre-wrap;">${info}</div>`:''}
-    </div>` : ''}
-    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000"></div>
-    <div class="field"><label>ອັບໂຫລດສະລິບໂອນເງິນ (ຈຳເປັນ)</label><input type="file" id="topupSlip" accept="image/*"></div>
-    <button class="btn btn-primary" id="topupSubmitBtn" onclick="submitTopup()">ສົ່ງຄຳຂໍເຕີມເງິນ</button>
-    <div class="hint">ແອດມິນຈະກວດສອບສະລິບ ແລະ ອະນຸມັດພາຍໃນບໍ່ດົນ — ຍອດຈະບໍ່ເຂົ້າກະເປົາທັນທີ ຈົນກວ່າຈະໄດ້ຮັບການອະນຸມັດ</div>`;
+    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000" value="${topupQrState.amount||''}"></div>
+    ${banks.length ? `<div class="field">
+      <label>🏦 ເລືອກທະນາຄານ</label>
+      ${banks.map(b=>`
+        <div class="optcard ${selectedId===b.id?'selected':''}" onclick="selectTopupBank(${b.id})">
+          <div class="ico">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">`:(b.logo_emoji||'🏦')}</div>
+          <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
+          <div class="arrow">›</div>
+        </div>`).join('')}
+    </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າທະນາຄານທີ່ຮອງຮັບ QR ອັດຕະໂນມັດ (BCEL / LDB / JDB) — ກະລຸນາຕິດຕໍ່ຮ້ານ</div>`}
+    <button class="btn btn-primary" id="topupSubmitBtn" ${banks.length?'':'disabled'} onclick="submitTopup()">⚡ ສ້າງ QR ເຕີມເງິນ</button>
+    <div class="hint" style="margin-top:8px;">ສະແກນຈ່າຍແລ້ວຍອດຈະເຂົ້າກະເປົາໃຫ້ທັນທີ ບໍ່ຕ້ອງລໍຖ້າແອດມິນ</div>
+    <div id="topupQrBox"></div>`;
 }
+function selectTopupBank(id){ topupQrState.bankAccountId = id; showTopupForm(); }
 async function submitTopup(){
   onGuard('topup', async ()=>{
     const amount = Number(document.getElementById('topupAmount').value);
-    const file = document.getElementById('topupSlip').files[0];
     if(!amount || amount<=0){ showToast('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
-    if(!file){ showToast('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
-
-    // Guard against the "closed and reopened the page, so it looks fresh" duplicate-submit case:
-    // a matching pending request sent in the last 3 minutes means one is likely already in flight
-    // on the server (or already submitted successfully) — confirm before sending another.
-    const dupKey = `khaidee_last_topup_${STATE.customer.id}`;
-    try{
-      const last = JSON.parse(localStorage.getItem(dupKey)||'null');
-      if(last && last.amount===amount && (Date.now()-last.at) < 3*60*1000){
-        const proceed = confirm('ທ່ານຫາກໍສົ່ງຄຳຂໍເຕີມເງິນຈຳນວນນີ້ໄປແລ້ວເມື່ອຄູ່ນີ້ — ອາດຈະສົ່ງໄປແລ້ວແຕ່ໜ້າຈໍປິດກ່ອນສະແດງຜົນ. ກວດເບິ່ງ "ປະຫວັດທຸລະກຳ" ກ່ອນ. ຕ້ອງການສົ່ງອີກຄັ້ງບໍ?');
-        if(!proceed) return;
-      }
-    }catch(e){/* ignore malformed cache */}
-
+    if(!topupQrState.bankAccountId){ showToast('ກະລຸນາເລືອກທະນາຄານ'); return; }
+    topupQrState.amount = amount;
     const btn = document.getElementById('topupSubmitBtn');
-    btn.disabled = true; btn.textContent = 'ກຳລັງບີບອັດຮູບ...';
+    btn.disabled = true; btn.textContent = 'ກຳລັງສ້າງ QR...';
     try{
-      const compressed = await compressImageFile(file);
-      btn.textContent = 'ກຳລັງອັບໂຫລດ... 0%';
-      const slipUrl = await sbUploadWithProgress('khaidee-slips', `${STATE.customer.id}_${Date.now()}_${file.name}`, compressed, (pct)=>{
-        btn.textContent = `ກຳລັງອັບໂຫລດ... ${pct}%`;
-      });
-      btn.textContent = 'ກຳລັງບັນທຶກ...';
-      await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
-      localStorage.setItem(dupKey, JSON.stringify({amount, at: Date.now()}));
-      playSuccessSound();
-      showToast('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
-      showWallet();
-    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
+      // wallet_topup_request opens a 'pending' wallet_transactions row and generates its own
+      // topup_number (TP + date + random, same shape as order_number) — that's what
+      // phajay-generate-topup-qr looks the row up by, and what phajay-webhook matches on when
+      // PhaJay confirms payment (falls back to tag1 the same way order QR-pay does).
+      const res = await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: null});
+      requestTopupQrAndShow(res.id, res.topup_number, amount);
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='⚡ ສ້າງ QR ເຕີມເງິນ'; }
   });
+}
+// Mirrors requestQrAndShow()/startQrPolling() above but hits the dedicated
+// phajay-generate-topup-qr Edge Function (keyed by topup_number, not order_number) and polls
+// wallet_topup_status instead of selecting orders directly.
+async function requestTopupQrAndShow(txnId, topupNumber, amount){
+  const box = document.getElementById('topupQrBox');
+  const bankAcc = (STATE.bankAccounts||[]).find(b=>b.id===topupQrState.bankAccountId);
+  const bankCode = bankAcc ? bankAcc.bank_name_en : 'BCEL';
+  box.innerHTML = `<div class="hint" style="text-align:center; padding:20px 0;">⏳ ກຳລັງສ້າງ QR ...</div>`;
+  try{
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/phajay-generate-topup-qr`, {
+      method:'POST',
+      headers: sbHeaders(),
+      body: JSON.stringify({topup_number: topupNumber, bank: bankCode})
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'ສ້າງ QR ບໍ່ສຳເລັດ');
+    const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(data.qrCode)}`;
+    const expiresAtMs = Date.now() + QR_EXPIRY_MS;
+    box.innerHTML = `
+      <div style="text-align:center; margin-top:12px;">
+        <div class="sumrow total" style="margin-bottom:10px; justify-content:center; gap:8px;"><span>ຈຳນວນເຕີມ</span><span>${fmtMoney(amount)}</span></div>
+        <img src="${qrImg}" style="width:220px; height:220px; border-radius:14px; border:1.5px solid var(--line);">
+        <div class="hint" style="margin-top:10px;">ເປີດແອັບທະນາຄານ (${bankCode}) ແລ້ວສະແກນ QR ນີ້ເພື່ອເຕີມເງິນ</div>
+        <div id="topupWaitingLine" style="margin-top:14px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
+        <div id="topupQrCountdown" class="hint" style="margin-top:6px; font-weight:600;"></div>
+      </div>`;
+    startTopupPolling(txnId);
+    topupCountdownTimer = startQrCountdown('topupQrCountdown', expiresAtMs, ()=>{
+      if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
+      renderQrExpiredBox(box);
+    });
+  }catch(e){
+    box.innerHTML = `<div class="err">ສ້າງ QR ບໍ່ສຳເລັດ: ${e.message}</div>`;
+    const btn = document.getElementById('topupSubmitBtn');
+    if(btn){ btn.disabled=false; btn.textContent='⚡ ສ້າງ QR ເຕີມເງິນ'; }
+  }
+}
+function startTopupPolling(txnId){
+  if(topupPollTimer) clearInterval(topupPollTimer);
+  let tries = 0;
+  topupPollTimer = setInterval(async ()=>{
+    tries++;
+    try{
+      const res = await sbRPC('wallet_topup_status', {p_customer_id: STATE.customer.id, p_txn_id: txnId});
+      const status = res && (res.status || (Array.isArray(res) && res[0] && res[0].status));
+      if(status === 'approved'){
+        clearInterval(topupPollTimer); topupPollTimer = null;
+        if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer = null; }
+        playSuccessSound();
+        await refreshWalletBalance();
+        showToast('✅ ເຕີມເງິນສຳເລັດ!');
+        topupQrState = {};
+        showWallet();
+      }
+    }catch(e){ /* transient network hiccup — just try again next tick */ }
+    if(tries > 180){ clearInterval(topupPollTimer); topupPollTimer = null; } // stop after ~15 min (5s * 180)
+  }, 5000);
 }
 
 /* ============================================================ MY COUPONS WALLET ============================================================
