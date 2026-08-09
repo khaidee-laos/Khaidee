@@ -415,6 +415,13 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="productDetailBody"></div>
 </div></div>
 
+<!-- Shop / Store page -->
+<div class="overlay" id="modalShop"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>ໜ້າຮ້ານຄ້າ</h3><button class="closex" onclick="closeModal('modalShop')">✕</button></div>
+  <div class="sheet-body" id="shopBody" style="padding:0;"></div>
+</div></div>
+
 <!-- Checkout -->
 <div class="overlay" id="modalCheckout"><div class="sheet">
   <div class="sheet-handle"></div>
@@ -690,7 +697,7 @@ document.querySelectorAll('.lang-switch button').forEach(b=>{
 
 /* ============================================================ STATE ============================================================ */
 let STATE = {
-  products: [], categories: [], carriers: [], settings: {}, bankAccounts: [],
+  products: [], categories: [], carriers: [], settings: {}, bankAccounts: [], sellers: [],
   activeCategory: null, cart: JSON.parse(localStorage.getItem('kd_cart')||'[]'),
   customer: JSON.parse(localStorage.getItem('kd_customer')||'null'),
   favorites: JSON.parse(localStorage.getItem('kd_favorites')||'[]'),
@@ -844,6 +851,74 @@ async function loadBankAccounts(){
   try{ STATE.bankAccounts = await sbSelect('bank_accounts', 'select=*&is_active=eq.true&order=sort_order.asc'); }
   catch(e){ STATE.bankAccounts = []; console.warn('loadBankAccounts failed', e); }
 }
+// Approved shops (id/name/logo/follower_count) so product cards & the product-detail
+// storerow can show "which shop this belongs to" without an extra round trip per product.
+async function loadSellersPublic(){
+  try{ STATE.sellers = await sbRPC('sellers_list_public', {}); }
+  catch(e){ STATE.sellers = []; console.warn('loadSellersPublic failed', e); }
+}
+function sellerById(id){ return (STATE.sellers||[]).find(s=>s.id===id); }
+
+/* ============================================================ SHOP PAGE (public storefront) ============================================================ */
+async function openShop(sellerId){
+  const body = document.getElementById('shopBody');
+  body.innerHTML = '<div class="loader" style="padding:20px;">ກຳລັງໂຫລດ...</div>';
+  openModal('modalShop');
+  let shop;
+  try{
+    shop = await sbRPC('seller_public_profile', {p_seller_id: sellerId, p_customer_id: STATE.customer ? STATE.customer.id : null});
+  }catch(e){ body.innerHTML = `<div class="empty">ບໍ່ພົບຮ້ານຄ້ານີ້</div>`; return; }
+  STATE.activeShop = shop;
+  paintShop();
+}
+function paintShop(){
+  const shop = STATE.activeShop;
+  const body = document.getElementById('shopBody');
+  if(!shop) return;
+  const products = shop.products || [];
+  body.innerHTML = `
+    <div style="height:110px; background:${shop.cover_url?`url('${shop.cover_url}') center/cover`:'linear-gradient(135deg,var(--maroon),var(--maroon-dark))'};"></div>
+    <div style="padding:0 16px 16px; margin-top:-34px;">
+      <div style="display:flex; align-items:flex-end; gap:12px;">
+        <div style="width:68px; height:68px; border-radius:16px; background:#fff; border:3px solid #fff; box-shadow:var(--shadow); overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:30px;">
+          ${shop.logo_url?`<img src="${shop.logo_url}" style="width:100%; height:100%; object-fit:cover;">`:'🏪'}
+        </div>
+        <div style="flex:1; min-width:0; padding-bottom:2px;">
+          <div style="font-size:16px; font-weight:800;">${shop.store_name}</div>
+          <div class="hint" style="margin-top:2px;">👥 ${shop.follower_count||0} ຜູ້ຕິດຕາມ • 🛍️ ${products.length} ສິນຄ້າ</div>
+        </div>
+      </div>
+      ${shop.description?`<p style="font-size:13px; color:var(--ink-soft); margin:12px 0 0; line-height:1.6;">${shop.description}</p>`:''}
+      <button class="btn ${shop.is_following?'btn-ghost':'btn-primary'}" style="width:100%; margin-top:12px;" id="shopFollowBtn" onclick="toggleShopFollow()">${shop.is_following?'✓ ກຳລັງຕິດຕາມ':'➕ ຕິດຕາມຮ້ານ'}</button>
+    </div>
+    <div style="padding:0 16px 16px;">
+      <div style="font-size:13px; font-weight:700; margin-bottom:10px;">ສິນຄ້າຂອງຮ້ານ</div>
+      <div class="grid">${!products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ</div>' : products.map(p=>`
+        <div class="card" onclick="closeModal('modalShop'); openProduct(${p.id})">
+          <div class="imgwrap">
+            ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+            <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+          </div>
+          <div class="body">
+            <div class="name">${nameFor(p)}</div>
+            <div class="price-row"><span class="price">${fmtMoney(p.price)}</span></div>
+            <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
+          </div>
+        </div>`).join('')}</div>
+    </div>`;
+}
+async function toggleShopFollow(){
+  if(!STATE.customer){ closeModal('modalShop'); openModal('modalAuth'); return; }
+  const shop = STATE.activeShop; if(!shop) return;
+  const btn = document.getElementById('shopFollowBtn'); if(btn) btn.disabled = true;
+  try{
+    const res = await sbRPC('seller_follow_toggle', {p_customer_id: STATE.customer.id, p_seller_id: shop.id});
+    shop.is_following = res.following; shop.follower_count = res.follower_count;
+    const cached = sellerById(shop.id); if(cached) cached.follower_count = res.follower_count;
+    playSuccessSound();
+    paintShop();
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); if(btn) btn.disabled = false; }
+}
 function renderProducts(){
   let list = STATE.products;
   if(STATE.activeCategory) list = list.filter(p=>p.category_id===STATE.activeCategory);
@@ -894,13 +969,22 @@ function openProduct(id){
       <div class="price" style="font-size:20px;">${fmtMoney(p.price)} ${p.compare_price?`<span class="compare" style="font-size:13px;">${fmtMoney(p.compare_price)}</span>`:''}</div>
       <div class="meta" style="margin:8px 0 0;">ຄົງເຫຼືອ ${p.stock} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
 
+      ${(()=>{ const seller = sellerById(p.seller_id); return seller ? `
+      <div class="pd-storerow" style="cursor:pointer;" onclick="closeModal('modalProduct'); openShop('${seller.id}')">
+        <div class="ico" style="overflow:hidden;">${seller.logo_url?`<img src="${seller.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">`:'🏪'}</div>
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700;">${seller.store_name}</div>
+          <div class="hint" style="margin:0;">👥 ${seller.follower_count||0} ຜູ້ຕິດຕາມ • ແຕະເພື່ອເບິ່ງຮ້ານ</div>
+        </div>
+        <div class="arrow">›</div>
+      </div>` : `
       <div class="pd-storerow">
         <div class="ico">🏪</div>
         <div style="flex:1;">
           <div style="font-size:13px; font-weight:700;">${STATE.settings.site_name||'KhaiDee ຂາຍດີ'}</div>
           <div class="hint" style="margin:0;">ຮ້ານທາງການ • ຈັດສົ່ງທົ່ວ ສປປ ລາວ</div>
         </div>
-      </div>
+      </div>`; })()}
 
       <div class="pd-tabs">
         <button class="active" data-tab="details" onclick="switchPdTab('details')">ລາຍລະອຽດ</button>
@@ -1993,6 +2077,8 @@ async function renderAdminProducts(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   await loadProducts();
+  try{ STATE.adminSellersForProduct = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword}); }
+  catch(e){ STATE.adminSellersForProduct = []; }
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditProduct(null)">➕ ເພີ່ມສິນຄ້າໃໝ່</button>` +
     (!STATE.products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ</div>' : `<div class="tile-grid">${STATE.products.map(p=>`
       <div class="tile" onclick="adminEditProduct(${p.id})">
@@ -2010,6 +2096,7 @@ function adminEditProduct(id){
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂສິນຄ້າ':'ເພີ່ມສິນຄ້າ'}</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
     <div class="field"><label>ໝວດໝູ່</label><select id="pCat">${STATE.categories.map(c=>`<option value="${c.id}" ${p.category_id===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
+    <div class="field"><label>ຮ້ານຄ້າ</label><select id="pSeller"><option value="">-- ຮ້ານທາງການ KhaiDee --</option>${(STATE.adminSellersForProduct||[]).map(s=>`<option value="${s.id}" ${p.seller_id===s.id?'selected':''}>${s.store_name}${s.status!=='approved'?` (${s.status})`:''}</option>`).join('')}</select></div>
     <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
     <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
     <div class="field"><label>ຊື່ (English)</label><input id="pNameEn" value="${p.name_en||''}"></div>
@@ -2054,6 +2141,7 @@ function adminEditProduct(id){
       }
       const payload = {
         id: id||undefined, category_id: Number(document.getElementById('pCat').value),
+        seller_id: document.getElementById('pSeller').value || null,
         name_lo: document.getElementById('pNameLo').value, name_th: document.getElementById('pNameTh').value,
         name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
         price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
@@ -2264,7 +2352,8 @@ async function renderAdminSellers(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   try{
     STATE.adminSellers = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword});
-    body.innerHTML = `<div class="chiprow" style="margin-bottom:10px;">
+    body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditSellerProfile(null)">➕ ເພີ່ມຮ້ານໃໝ່</button>
+    <div class="chiprow" style="margin-bottom:10px;">
       ${['pending','approved','suspended','rejected','all'].map(s=>`<button class="${STATE.adminSellerFilter===s?'active':''}" onclick="adminSellerFilterSet('${s}')">${{pending:'ລໍຖ້າກວດສອບ',approved:'ອະນຸມັດແລ້ວ',suspended:'ຖືກລະງັບ',rejected:'ປະຕິເສດ',all:'ທັງໝົດ'}[s]}</button>`).join('')}
     </div>
     <div id="adminSellerList"></div>`;
@@ -2282,19 +2371,68 @@ function renderAdminSellerList(){
   const statusLabel = {pending:'ລໍຖ້າກວດສອບ', approved:'ອະນຸມັດແລ້ວ', rejected:'ປະຕິເສດ', suspended:'ຖືກລະງັບ'};
   wrap.innerHTML = list.map(s=>`
     <div class="admin-list-item">
-      <div class="top"><span class="title">${s.store_name}</span><span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span></div>
-      <div class="hint">${s.phone||'-'} • ${s.email||'-'}</div>
+      <div class="top">
+        <span class="title">${s.logo_url?`<img src="${s.logo_url}" style="width:22px; height:22px; border-radius:6px; object-fit:cover; vertical-align:middle; margin-right:4px;">`:''}${s.store_name}</span>
+        <span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span>
+      </div>
+      <div class="hint">${s.phone||'-'} • ${s.email||'-'} • 👥 ${s.follower_count||0} ຜູ້ຕິດຕາມ</div>
       <div class="hint">📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')}</div>
       <div class="hint">ສະໝັກເມື່ອ: ${s.created_at ? new Date(s.created_at).toLocaleString('lo-LA') : '-'}</div>
       ${s.reject_reason ? `<div class="hint" style="color:var(--danger);">ເຫດຜົນປະຕິເສດ: ${s.reject_reason}</div>` : ''}
       ${s.id_card_url ? `<img src="${s.id_card_url}" onclick="window.open('${s.id_card_url}','_blank')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); margin-top:8px; cursor:pointer;">` : ''}
       <div class="chiprow">
+        <button onclick="adminEditSellerProfile('${s.id}')">✏️ ຂໍ້ມູນ/ໂລໂກ້/ຮູບປົກ</button>
         ${s.status==='pending' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminRejectSeller('${s.id}')" style="color:var(--danger);">❌ ປະຕິເສດ</button>` : ''}
         ${s.status==='approved' ? `<button onclick="adminSuspendSeller('${s.id}')" style="color:var(--warn);">🚫 ລະງັບ</button><button onclick="adminResetSellerPw('${s.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>` : ''}
         ${s.status==='suspended' ? `<button onclick="adminReactivateSeller('${s.id}')" style="color:var(--ok);">✅ ເປີດຄືນ</button>` : ''}
         ${s.status==='rejected' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button>` : ''}
+        <button onclick="adminDeleteSeller('${s.id}')" style="color:var(--danger);">🗑️ ລຶບຮ້ານ</button>
       </div>
     </div>`).join('');
+}
+function adminEditSellerProfile(id){
+  const s = id ? STATE.adminSellers.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂຂໍ້ມູນຮ້ານ':'ເພີ່ມຮ້ານໃໝ່'}</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    ${s.cover_url?`<img src="${s.cover_url}" style="width:100%; height:80px; object-fit:cover; border-radius:10px; margin-bottom:8px;">`:''}
+    <div class="field"><label>ຮູບປົກຮ້ານ (cover)</label><input type="file" id="ssCoverFile" accept="image/*"></div>
+    ${s.logo_url?`<img src="${s.logo_url}" style="width:56px; height:56px; object-fit:cover; border-radius:12px; margin-bottom:8px; border:1px solid var(--line);">`:''}
+    <div class="field"><label>ໂລໂກ້ຮ້ານ</label><input type="file" id="ssLogoFile" accept="image/*"></div>
+    <div class="field"><label>ຊື່ຮ້ານ</label><input id="ssName" value="${s.store_name||''}"></div>
+    <div class="field"><label>ເບີໂທ</label><input id="ssPhone" value="${s.phone||''}"></div>
+    <div class="field"><label>ອີເມວ</label><input id="ssEmail" value="${s.email||''}"></div>
+    <div class="field"><label>ຄຳອະທິບາຍຮ້ານ</label><textarea id="ssDesc" rows="3">${s.description||''}</textarea></div>
+    ${!id?`<div class="field"><label>ລະຫັດຜ່ານເຂົ້າສູ່ລະບົບຮ້ານ (ຢ່າງໜ້ອຍ 6 ໂຕ)</label><input type="password" id="ssPassword" placeholder="ຖ້າຫວ່າງ ຈະຕັ້ງພາຍຫຼັງ"></div>`:''}
+    <button class="btn btn-primary" id="ssSaveBtn">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  overlay.querySelector('#ssSaveBtn').onclick = async ()=>{
+    const btn = overlay.querySelector('#ssSaveBtn'); btn.disabled = true;
+    try{
+      let logoUrl = s.logo_url || null;
+      const logoFile = document.getElementById('ssLogoFile').files[0];
+      if(logoFile){ logoUrl = await sbUpload('khaidee-products', `seller_logo_${Date.now()}_${logoFile.name}`, logoFile); }
+      let coverUrl = s.cover_url || null;
+      const coverFile = document.getElementById('ssCoverFile').files[0];
+      if(coverFile){ coverUrl = await sbUpload('khaidee-products', `seller_cover_${Date.now()}_${coverFile.name}`, coverFile); }
+      const payload = {
+        id: id||undefined, store_name: document.getElementById('ssName').value,
+        phone: document.getElementById('ssPhone').value, email: document.getElementById('ssEmail').value,
+        logo_url: logoUrl, cover_url: coverUrl, description: document.getElementById('ssDesc').value
+      };
+      const pwEl = document.getElementById('ssPassword');
+      if(pwEl && pwEl.value) payload.password = pwEl.value;
+      await sbRPC('admin_upsert_seller', {p_password:STATE.adminPassword, p_seller:payload});
+      overlay.remove(); renderAdminSellers();
+    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { btn.disabled = false; }
+  };
+}
+async function adminDeleteSeller(id){
+  if(!confirm('ລຶບຮ້ານນີ້? ສິນຄ້າຂອງຮ້ານຈະບໍ່ຖືກລຶບ ແຕ່ຈະບໍ່ມີເຈົ້າຂອງຮ້ານອີກຕໍ່ໄປ')) return;
+  try{ await sbRPC('admin_delete_seller', {p_password:STATE.adminPassword, p_seller_id:id}); renderAdminSellers(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminApproveSeller(id){
   if(!confirm('ອະນຸມັດຜູ້ຂາຍນີ້? ຮ້ານຄ້ານີ້ຈະສາມາດເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້')) return;
@@ -2742,7 +2880,7 @@ function hideSplash(){
   try{
     await loadSettings();
     if(STATE.settings.logo_url){ document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`; }
-    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts()]);
+    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts(), loadSellersPublic()]);
     renderProducts();
     updateCartBadge();
     if(STATE.customer){
