@@ -2352,13 +2352,33 @@ async function renderAdminSellers(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   try{
     STATE.adminSellers = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword});
-    body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditSellerProfile(null)">➕ ເພີ່ມຮ້ານໃໝ່</button>
+    let nameReqs = [];
+    try{ nameReqs = await sbRPC('admin_list_name_change_requests', {p_password: STATE.adminPassword}); }catch(e){}
+    body.innerHTML = (nameReqs.length ? `<div style="margin-bottom:14px;">
+      <div style="font-size:13px; font-weight:700; margin-bottom:8px;">🔔 ຄຳຂໍປ່ຽນຊື່ຮ້ານ (${nameReqs.length})</div>
+      ${nameReqs.map(r=>`
+        <div class="admin-list-item" style="border:1.5px solid var(--gold);">
+          <div class="top"><span class="title">${r.logo_url?`<img src="${r.logo_url}" style="width:20px; height:20px; border-radius:5px; object-fit:cover; vertical-align:middle; margin-right:4px;">`:''}${r.old_name}</span></div>
+          <div class="hint">➜ ຂໍປ່ຽນເປັນ: <b>${r.requested_name}</b></div>
+          <div class="hint">${r.created_at ? new Date(r.created_at).toLocaleString('lo-LA') : ''}</div>
+          <div class="chiprow">
+            <button onclick="adminReviewNameChange(${r.id}, true)" style="color:var(--ok);">✅ ອະນຸມັດ</button>
+            <button onclick="adminReviewNameChange(${r.id}, false)" style="color:var(--danger);">❌ ປະຕິເສດ</button>
+          </div>
+        </div>`).join('')}
+    </div>` : '') +
+    `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditSellerProfile(null)">➕ ເພີ່ມຮ້ານໃໝ່</button>
     <div class="chiprow" style="margin-bottom:10px;">
       ${['pending','approved','suspended','rejected','all'].map(s=>`<button class="${STATE.adminSellerFilter===s?'active':''}" onclick="adminSellerFilterSet('${s}')">${{pending:'ລໍຖ້າກວດສອບ',approved:'ອະນຸມັດແລ້ວ',suspended:'ຖືກລະງັບ',rejected:'ປະຕິເສດ',all:'ທັງໝົດ'}[s]}</button>`).join('')}
     </div>
     <div id="adminSellerList"></div>`;
     renderAdminSellerList();
   }catch(e){ body.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນຜູ້ຂາຍໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
+}
+async function adminReviewNameChange(id, approve){
+  const note = approve ? null : (prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຖ້າມີ):')||null);
+  try{ await sbRPC('admin_review_name_change', {p_password:STATE.adminPassword, p_request_id:id, p_approve:approve, p_note:note}); renderAdminSellers(); }
+  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminSellerFilterSet(s){ STATE.adminSellerFilter = s; renderAdminSellers(); }
 function renderAdminSellerList(){
