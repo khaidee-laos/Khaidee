@@ -194,6 +194,15 @@ header.top{
 .card .compare{font-size:11px; color:var(--ink-soft); text-decoration:line-through;}
 .card .meta{display:flex; justify-content:space-between; align-items:center; margin-top:4px; font-size:10.5px; color:var(--ink-soft);}
 .addbtn{position:absolute; right:8px; bottom:8px; width:28px; height:28px; border-radius:999px; background:var(--maroon); color:#fff; border:none; font-size:16px; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(122,30,43,.4);}
+.addbtn[disabled]{background:var(--ink-soft); box-shadow:none; opacity:.6; cursor:not-allowed;}
+/* ---- Out-of-stock treatment: keep the card/listing + photo in place, just mark it clearly
+   and stop it from being orderable — never delete the product or its image off the page. */
+.card.out-of-stock .imgwrap img{filter:grayscale(85%) brightness(.75);}
+.card .oos-ribbon{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:3; pointer-events:none;}
+.card .oos-ribbon span{background:rgba(43,27,20,.78); color:#fff; font-size:12px; font-weight:800; padding:5px 14px; border-radius:999px; letter-spacing:.3px; transform:rotate(-6deg); box-shadow:0 3px 10px rgba(0,0,0,.3);}
+.pd-oos-banner{background:rgba(178,58,58,.1); color:var(--danger); border:1px solid rgba(178,58,58,.35); border-radius:10px; padding:9px 12px; font-size:12.5px; font-weight:700; margin-top:8px; display:flex; align-items:center; gap:6px;}
+.btn[disabled]{opacity:.55; cursor:not-allowed; filter:grayscale(30%);}
+.qty-select button[disabled]{opacity:.4; cursor:not-allowed;}
 .card-heart{position:absolute; left:6px; top:6px; width:26px; height:26px; border-radius:999px; background:rgba(255,255,255,.85); border:none; font-size:13px; display:flex; align-items:center; justify-content:center;}
 
 /* ---------- BOTTOM NAV ---------- */
@@ -910,6 +919,23 @@ function saveCustomer(){ localStorage.setItem('kd_customer', JSON.stringify(STAT
 
 function fmtMoney(n){ return (STATE.settings.currency||'₭') + ' ' + Number(n||0).toLocaleString('en-US'); }
 
+/* ============================================================ STOCK HELPERS ============================================================
+   Single source of truth for "how many of this can still be bought right now" and "is it sold
+   out". Product-level stock (p.stock) is used everywhere a specific variant isn't in play (grid
+   cards, quick-add, shop grid); when a variant IS selected/known, its own stock overrides it.
+   Sold-out products are NEVER removed from listings — they just get a badge + blocked ordering,
+   per how the storefront is meant to behave. */
+function productStock(p){ return p ? Number(p.stock||0) : 0; }
+function isProductOutOfStock(p){ return productStock(p) <= 0; }
+function variantStock(p, variant){ return variant ? Number(variant.stock||0) : productStock(p); }
+// Returns how many MORE of this line the customer is still allowed to add, given whatever is
+// already sitting in the cart for that same product/variant combo.
+function remainingStockForLine(p, variant, alreadyInCart){
+  const cap = variantStock(p, variant);
+  return Math.max(0, cap - (alreadyInCart||0));
+}
+function outOfStockRibbon(){ return `<div class="oos-ribbon"><span>⛔ ສິນຄ້າໝົດແລ້ວ</span></div>`; }
+
 /* ============================================================ MODALS ============================================================ */
 function openModal(id){
   document.getElementById(id).classList.add('show');
@@ -1118,19 +1144,22 @@ function renderShopGrid(){
   const shop = STATE.activeShop; const wrap = document.getElementById('shopProductsWrap');
   if(!shop || !wrap) return;
   const products = filterShopProducts(shop.products || []);
-  wrap.innerHTML = `<div class="grid">${!products.length ? '<div class="empty">ບໍ່ພົບສິນຄ້າ</div>' : products.map(p=>`
-    <div class="card" onclick="closeModal('modalShop'); openProduct(${p.id})">
+  wrap.innerHTML = `<div class="grid">${!products.length ? '<div class="empty">ບໍ່ພົບສິນຄ້າ</div>' : products.map(p=>{
+    const oos = isProductOutOfStock(p);
+    return `
+    <div class="card ${oos?'out-of-stock':''}" onclick="closeModal('modalShop'); openProduct(${p.id})">
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
         ${sellerVerifiedBadge(shop,'on-card')}
         <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+        ${oos?outOfStockRibbon():''}
       </div>
       <div class="body">
         <div class="name">${nameFor(p)}</div>
         <div class="price-row"><span class="price">${fmtMoney(p.price)}</span></div>
-        <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
+        <div class="meta"><span>${oos?'<span style="color:var(--danger); font-weight:700;">ສິນຄ້າໝົດ</span>':'ຂາຍແລ້ວ '+(p.sold_count||0)}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
       </div>
-    </div>`).join('')}</div>`;
+    </div>`;}).join('')}</div>`;
 }
 function switchShopTab(tab){
   SHOP_TAB_STATE.tab = tab;
@@ -1155,21 +1184,24 @@ function renderProducts(){
   if(STATE.activeCategory) list = list.filter(p=>p.category_id===STATE.activeCategory);
   const q = (document.getElementById('searchInput').value||'').trim().toLowerCase();
   if(q) list = list.filter(p=> (p.name_lo||'').toLowerCase().includes(q) || (p.name_th||'').toLowerCase().includes(q) || (p.name_en||'').toLowerCase().includes(q));
-  const html = !list.length ? '<div class="empty">ບໍ່ພົບສິນຄ້າ 🔍</div>' : list.map(p=>`
-    <div class="card" onclick="openProduct(${p.id})">
+  const html = !list.length ? '<div class="empty">ບໍ່ພົບສິນຄ້າ 🔍</div>' : list.map(p=>{
+    const oos = isProductOutOfStock(p);
+    return `
+    <div class="card ${oos?'out-of-stock':''}" onclick="openProduct(${p.id})">
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
         ${sellerVerifiedBadge(sellerById(p.seller_id),'on-card')}
         <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+        ${oos?outOfStockRibbon():''}
         <button class="card-heart ${isFavorite(p.id)?'liked':''}" onclick="toggleFavorite(${p.id}, event)">${isFavorite(p.id)?'❤️':'🤍'}</button>
       </div>
       <div class="body">
         <div class="name">${nameFor(p)}</div>
         <div class="price-row"><span class="price">${fmtMoney(p.price)}</span>${p.compare_price?`<span class="compare">${fmtMoney(p.compare_price)}</span>`:''}</div>
-        <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
+        <div class="meta"><span>${oos?'<span style="color:var(--danger); font-weight:700;">ສິນຄ້າໝົດ</span>':'ຂາຍແລ້ວ '+(p.sold_count||0)}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
       </div>
-      <button class="addbtn" onclick="event.stopPropagation(); quickAdd(${p.id}, event, '${((p.images&&p.images[0])||'').replace(/'/g,"\\'")}')">+</button>
-    </div>`).join('');
+      <button class="addbtn" ${oos?'disabled':''} onclick="event.stopPropagation(); ${oos?'showToast(\'ສິນຄ້ານີ້ໝົດແລ້ວ\')':`quickAdd(${p.id}, event, '${((p.images&&p.images[0])||'').replace(/'/g,"\\'")}')`}">${oos?'⛔':'+'}</button>
+    </div>`;}).join('');
   // same product list is mirrored on the Home page (productGrid) and the Categories page (catPageGrid)
   ['productGrid','catPageGrid'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML = html; });
 }
@@ -1286,6 +1318,7 @@ function paintProductDetail(id){
       <h2 style="font-size:16px;margin:0 0 4px;">${nameFor(p)}</h2>
       <div class="price" style="font-size:20px;" id="pdPrice">${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}</div>
       <div class="meta" style="margin:8px 0 0;" id="pdStockLine">ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
+      <div id="pdOosBanner">${(displayStock??0)<=0?'<div class="pd-oos-banner">⛔ ສິນຄ້ານີ້ໝົດແລ້ວ — ບໍ່ສາມາດສັ່ງຊື້ໄດ້ໃນຕອນນີ້</div>':''}</div>
 
       ${detailGroups.length ? `
       <div class="hint" style="margin-top:8px;">🎛️ ມີຕົວເລືອກ: ${detailGroups.map(g=>g.name).join(', ')} — ເລືອກໄດ້ຕາມໃຈມັກ (ບໍ່ບັງຄັບ) ຕອນກົດ “ເພີ່ມໃສ່ກະຕ່າ” ຫຼື “ຊື້ເລີຍ” ຂ້າງລຸ່ມ</div>` : ''}
@@ -1324,23 +1357,26 @@ function paintProductDetail(id){
       </div>
 
       ${related.length?`<h4 style="font-size:13px; margin-top:20px;">ສິນຄ້າທີ່ກ່ຽວຂ້ອງ</h4>
-      <div class="pd-related-grid">${related.map(r=>`
-        <div class="card" onclick="openProduct(${r.id})">
+      <div class="pd-related-grid">${related.map(r=>{
+        const rOos = isProductOutOfStock(r);
+        return `
+        <div class="card ${rOos?'out-of-stock':''}" onclick="openProduct(${r.id})">
           <div class="imgwrap">
             ${r.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
             <img src="${(r.images&&r.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+            ${rOos?outOfStockRibbon():''}
           </div>
           <div class="body">
             <div class="name">${nameFor(r)}</div>
             <div class="price-row"><span class="price">${fmtMoney(r.price)}</span>${r.compare_price?`<span class="compare">${fmtMoney(r.compare_price)}</span>`:''}</div>
-            <div class="meta"><span>ຂາຍແລ້ວ ${r.sold_count||0}</span><span>⭐ ${r.rating_avg||'-'}</span></div>
+            <div class="meta"><span>${rOos?'<span style="color:var(--danger); font-weight:700;">ສິນຄ້າໝົດ</span>':'ຂາຍແລ້ວ '+(r.sold_count||0)}</span><span>⭐ ${r.rating_avg||'-'}</span></div>
           </div>
-        </div>`).join('')}</div>`:''}
+        </div>`;}).join('')}</div>`:''}
     </div>
 
     <div class="pd-sticky-bar">
-      <button class="btn btn-ghost" onclick="openBuyOptions(${p.id}, 'cart')">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
-      <button class="btn btn-primary" onclick="openBuyOptions(${p.id}, 'buy')">⚡ ຊື້ເລີຍ</button>
+      <button class="btn btn-ghost" id="pdAddCartBtn" ${(displayStock??0)<=0?'disabled':''} onclick="openBuyOptions(${p.id}, 'cart')">${(displayStock??0)<=0?'⛔ ສິນຄ້າໝົດ':'🛒 ເພີ່ມໃສ່ກະຕ່າ'}</button>
+      <button class="btn btn-primary" id="pdBuyNowBtn" ${(displayStock??0)<=0?'disabled':''} onclick="openBuyOptions(${p.id}, 'buy')">${(displayStock??0)<=0?'⛔ ສິນຄ້າໝົດ':'⚡ ຊື້ເລີຍ'}</button>
     </div>`;
 }
 // Shared by confirmBuyOptions() — resolves whatever the customer has (optionally) ticked to a
@@ -1406,11 +1442,11 @@ function paintBuyOptions(id){
     <div class="bo-qtyrow">
       <label>ຈຳນວນ</label>
       <div class="qty-select" style="margin:0;">
-        <button onclick="changeBoQty(-1)">−</button><span id="boQtyLabel">${detailQty}</span><button onclick="changeBoQty(1)">+</button>
+        <button onclick="changeBoQty(-1)">−</button><span id="boQtyLabel">${detailQty}</span><button id="boQtyPlusBtn" ${detailQty>=(displayStock??0)?'disabled':''} onclick="changeBoQty(1)">+</button>
       </div>
     </div>
     <div class="bo-footer">
-      <button class="btn ${boAction==='buy'?'btn-primary':'btn-ghost'}" onclick="confirmBuyOptions(${p.id}, event)">${boAction==='buy'?'⚡ ຊື້ເລີຍ':'🛒 ເພີ່ມໃສ່ກະຕ່າ'}</button>
+      <button class="btn ${boAction==='buy'?'btn-primary':'btn-ghost'}" id="boConfirmBtn" ${(displayStock??0)<=0?'disabled':''} onclick="confirmBuyOptions(${p.id}, event)">${(displayStock??0)<=0?'⛔ ສິນຄ້າໝົດ':(boAction==='buy'?'⚡ ຊື້ເລີຍ':'🛒 ເພີ່ມໃສ່ກະຕ່າ')}</button>
     </div>`;
 }
 function boSelectValue(groupId, valueId){
@@ -1424,18 +1460,44 @@ function boSelectValue(groupId, valueId){
   const priceEl = document.getElementById('boPrice'), stockEl = document.getElementById('boStockLine'), thumbEl = document.getElementById('boThumb');
   if(priceEl) priceEl.innerHTML = `${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:12px;">${fmtMoney(displayCompare)}</span>`:''}`;
   if(stockEl) stockEl.textContent = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ`;
+  // Switching variant can change the available stock — clamp qty and refresh the +/- and confirm buttons.
+  detailQty = Math.min(detailQty, Math.max(1, displayStock??0)) || 1;
+  const boQtyLabel = document.getElementById('boQtyLabel'), boPlus = document.getElementById('boQtyPlusBtn'), boConfirm = document.getElementById('boConfirmBtn');
+  if(boQtyLabel) boQtyLabel.textContent = detailQty;
+  if(boPlus) boPlus.disabled = detailQty >= (displayStock??0);
+  if(boConfirm){
+    boConfirm.disabled = (displayStock??0)<=0;
+    boConfirm.textContent = (displayStock??0)<=0 ? '⛔ ສິນຄ້າໝົດ' : (boAction==='buy'?'⚡ ຊື້ເລີຍ':'🛒 ເພີ່ມໃສ່ກະຕ່າ');
+  }
   const thumb = selectedVariantThumb();
   if(thumbEl && thumb) thumbEl.src = thumb;
   // keep the full-page price/stock line in sync too, in case the customer goes back to look
   const pdPrice = document.getElementById('pdPrice'), pdStock = document.getElementById('pdStockLine');
   if(pdPrice) pdPrice.innerHTML = `${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}`;
   if(pdStock) pdStock.innerHTML = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}`;
+  const oosBanner = document.getElementById('pdOosBanner');
+  if(oosBanner) oosBanner.innerHTML = (displayStock??0)<=0 ? '<div class="pd-oos-banner">⛔ ຕົວເລືອກນີ້ໝົດແລ້ວ — ບໍ່ສາມາດສັ່ງຊື້ໄດ້ໃນຕອນນີ້</div>' : '';
+  const addCartBtn = document.getElementById('pdAddCartBtn'), buyNowBtn = document.getElementById('pdBuyNowBtn');
+  const oosNow = (displayStock??0)<=0;
+  [addCartBtn, buyNowBtn].forEach(b=>{ if(b){ b.disabled = oosNow; } });
+  if(addCartBtn) addCartBtn.textContent = oosNow ? '⛔ ສິນຄ້າໝົດ' : '🛒 ເພີ່ມໃສ່ກະຕ່າ';
+  if(buyNowBtn) buyNowBtn.textContent = oosNow ? '⛔ ສິນຄ້າໝົດ' : '⚡ ຊື້ເລີຍ';
 }
-function changeBoQty(d){ detailQty = Math.max(1, detailQty+d); const el=document.getElementById('boQtyLabel'); if(el) el.textContent = detailQty; }
+function changeBoQty(d){
+  const p = STATE.products.find(x=>x.id===detailProductId);
+  const mv = matchedDetailVariant();
+  const cap = Math.max(0, variantStock(p, mv));
+  detailQty = Math.max(1, Math.min(cap || 1, detailQty+d));
+  const el=document.getElementById('boQtyLabel'); if(el) el.textContent = detailQty;
+  const plus = document.getElementById('boQtyPlusBtn'); if(plus) plus.disabled = detailQty >= cap;
+}
 function confirmBuyOptions(id, evt){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   const actionLabel = boAction==='buy' ? 'ຊື້ເລີຍ' : 'ເພີ່ມໃສ່ກະຕ່າ';
   const r = resolveDetailVariantOrAlert(actionLabel); if(!r.ok) return;
+  const cap = variantStock(p, r.variant);
+  if(cap<=0){ showToast('ສິນຄ້ານີ້ໝົດແລ້ວ'); return; }
+  if(detailQty > cap){ showToast(`ມີສິນຄ້າຄົງເຫຼືອພຽງ ${cap} ຊິ້ນ`); detailQty = cap; }
   const thumb = selectedVariantThumb() || (p.images && p.images[0]) || '';
   const btnEl = evt && evt.currentTarget;
   if(boAction==='buy'){
@@ -1530,7 +1592,13 @@ async function submitComment(productId){
     loadComments(productId);
   }catch(e){ showToast('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
 }
-function quickAdd(id, evt, imgUrl){ addToCart(id, 1); playCartSound(); flyToCart(evt && evt.currentTarget, imgUrl); }
+function quickAdd(id, evt, imgUrl){
+  const p = STATE.products.find(x=>x.id===id);
+  if(isProductOutOfStock(p)){ showToast('ສິນຄ້ານີ້ໝົດແລ້ວ'); return; }
+  const existing = STATE.cart.find(i=>i.product_id===id && !i.variant_id);
+  if(existing && existing.qty >= productStock(p)){ showToast(`ມີສິນຄ້າຄົງເຫຼືອພຽງ ${productStock(p)} ຊິ້ນ — ທ່ານມີໃນກະຕ່າຄົບແລ້ວ`); return; }
+  addToCart(id, 1); playCartSound(); flyToCart(evt && evt.currentTarget, imgUrl);
+}
 // Small clone of the tapped button arcs across the screen to the 🛒 tab, then the cart badge
 // pulses once it "lands" — purely cosmetic feedback so adding to cart feels tactile even
 // though the button itself sits far from the cart icon (grid cards, buy-options sheet, etc).
@@ -1580,10 +1648,15 @@ function buildCartLine(p, qty, variant){
 function addToCart(id, qty, variant){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   const variantId = variant ? variant.id : null;
+  const cap = variantStock(p, variant);
   // Same product with a different variant is a separate cart line (can't merge qty across variants).
   const existing = STATE.cart.find(i=>i.product_id===id && i.variant_id===variantId);
-  if(existing) existing.qty += qty;
-  else STATE.cart.push(buildCartLine(p, qty, variant));
+  const alreadyInCart = existing ? existing.qty : 0;
+  const allowedQty = Math.max(0, Math.min(qty, cap - alreadyInCart));
+  if(allowedQty <= 0){ showToast(cap<=0 ? 'ສິນຄ້ານີ້ໝົດແລ້ວ' : `ມີສິນຄ້າຄົງເຫຼືອພຽງ ${cap} ຊິ້ນ`); return; }
+  if(allowedQty < qty){ showToast(`ມີສິນຄ້າຄົງເຫຼືອພຽງ ${cap} ຊິ້ນ — ເພີ່ມໃສ່ກະຕ່າໄດ້ ${allowedQty} ຊິ້ນ`); }
+  if(existing) existing.qty += allowedQty;
+  else STATE.cart.push(buildCartLine(p, allowedQty, variant));
   saveCart();
 }
 /* ---- "Buy Now" — checks out a single product immediately without touching the real cart.
@@ -1597,6 +1670,9 @@ function activeCart(){ return buyNowMode ? buyNowItems : STATE.cart; }
 function exitBuyNowMode(){ buyNowMode = false; buyNowItems = []; }
 function buyNow(id, qty, variant){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  const cap = variantStock(p, variant);
+  if(cap<=0){ showToast('ສິນຄ້ານີ້ໝົດແລ້ວ'); return; }
+  qty = Math.min(qty, cap);
   requireLogin(()=>{
     buyNowItems = [buildCartLine(p, qty, variant)];
     buyNowMode = true;
@@ -1666,13 +1742,21 @@ function renderCart(){
     const seller = g.sellerId ? sellerById(g.sellerId) : null;
     const itemsHtml = g.items.map(i=>{
       const idx = STATE.cart.indexOf(i);
+      // Only base (no-variant) lines have live stock we can check client-side against
+      // STATE.products; variant stock isn't cached globally, so those defer to server-side
+      // enforcement in order_create. This still stops the most common over-order case.
+      const prod = STATE.products.find(x=>x.id===i.product_id);
+      const cap = (!i.variant_id && prod) ? productStock(prod) : null;
+      const atCap = cap!==null && i.qty >= cap;
+      const overCap = cap!==null && i.qty > cap;
       return `<div class="cart-item">
         <img src="${i.image||'https://placehold.co/60x60/F1DFAE/7A1E2B?text=KD'}">
         <div class="info">
           <div class="name">${i.name}</div>
           <div class="price">${fmtMoney(i.price)}</div>
+          ${overCap?`<div class="hint" style="color:var(--danger);">⚠️ ຄົງເຫຼືອພຽງ ${cap} ຊິ້ນ — ກະລຸນາຫຼຸດຈຳນວນ</div>`:''}
           <div class="qtybox">
-            <button onclick="cartQty(${idx},-1)">−</button><span>${i.qty}</span><button onclick="cartQty(${idx},1)">+</button>
+            <button onclick="cartQty(${idx},-1)">−</button><span>${i.qty}</span><button ${atCap?'disabled':''} onclick="cartQty(${idx},1)">+</button>
             <button onclick="cartRemove(${idx})" style="margin-left:auto; color:var(--danger); border:none; background:none; font-size:12px;">ລຶບ</button>
           </div>
         </div>
@@ -1684,7 +1768,16 @@ function renderCart(){
     `<div class="sumrow total"><span>ລວມທັງໝົດ</span><span>${fmtMoney(subtotal)}</span></div>
      <button class="btn btn-primary" style="margin-top:14px;" onclick="startCheckout();">ສັ່ງຊື້ ➜</button>`;
 }
-function cartQty(idx,d){ STATE.cart[idx].qty=Math.max(1,STATE.cart[idx].qty+d); saveCart(); renderCart(); }
+function cartQty(idx,d){
+  const line = STATE.cart[idx]; if(!line) return;
+  let next = Math.max(1, line.qty+d);
+  if(!line.variant_id){
+    const prod = STATE.products.find(x=>x.id===line.product_id);
+    const cap = productStock(prod);
+    if(next > cap){ next = Math.max(1, cap); if(d>0) showToast(cap<=0?'ສິນຄ້ານີ້ໝົດແລ້ວ':`ມີສິນຄ້າຄົງເຫຼືອພຽງ ${cap} ຊິ້ນ`); }
+  }
+  line.qty = next; saveCart(); renderCart();
+}
 function cartRemove(idx){ STATE.cart.splice(idx,1); saveCart(); renderCart(); }
 
 /* ============================================================ AUTH ============================================================ */
@@ -1756,6 +1849,9 @@ function startCheckout(){
   if(!STATE.cart.length) return;
   exitBuyNowMode(); // this is the ordinary "checkout my cart" entry point, not Buy Now
   requireLogin(()=>{
+    // Refresh product stock right before checkout so the cap check at proceedCheckout() is
+    // working off current numbers, not whatever was loaded when the app first opened.
+    loadProducts().then(()=>{ if(!validateCartStockOrWarn()) renderCart(); });
     const savedAddrs = getSavedAddresses();
     checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
     renderCheckout();
@@ -1839,8 +1935,25 @@ async function applyCoupon(){
    tapping "ຢືນຢັນສັ່ງຊື້" instantly said "ສັ່ງຊື້ສຳເລັດ!" and opened WhatsApp before any money had
    actually moved. Wallet (balance already reserved server-side) and COD (nothing to pay yet) skip
    straight through, same as before. */
+// Last-chance stock check right before payment — catches the case where stock ran out or
+// dropped *after* the item was added to the cart (e.g. someone else bought the last one).
+// Client-side only for no-variant lines (see cartQty note above); the server (order_create)
+// is still the real source of truth and will reject anything this misses.
+function validateCartStockOrWarn(){
+  const problems = [];
+  activeCart().forEach(i=>{
+    if(i.variant_id) return;
+    const prod = STATE.products.find(x=>x.id===i.product_id);
+    const cap = productStock(prod);
+    if(cap<=0) problems.push(`${i.name} — ໝົດແລ້ວ`);
+    else if(i.qty>cap) problems.push(`${i.name} — ຄົງເຫຼືອພຽງ ${cap} ຊິ້ນ`);
+  });
+  if(problems.length){ showToast('ກະລຸນາປັບຈຳນວນໃນກະຕ່າ:\n' + problems.join('\n')); return false; }
+  return true;
+}
 function proceedCheckout(){
   if(!checkoutState.address){ showToast('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
+  if(!validateCartStockOrWarn()){ if(!buyNowMode){ renderCart(); } return; }
   const payment = document.getElementById('paymentMethod').value;
   const groups = groupCartBySeller();
   groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
@@ -1981,7 +2094,10 @@ async function submitOrder(payment, needsSlip){
         : `ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${orderNumbers}`);
       const last = results[results.length-1];
       if(STATE.customer && last && last.wallet_balance!=null){ STATE.customer.wallet_balance = last.wallet_balance; saveCustomer(); }
-      loadProducts().then(renderProducts);
+      // Refresh product stock post-purchase, then check whether anything just sold out so we
+      // can nudge the seller(s) about it — the listing itself stays up (never deleted), it just
+      // needs restocking or pausing.
+      loadProducts().then(()=>{ renderProducts(); alertSellersOfSoldOutItems(groups); });
     }catch(e){
       if(waTab) waTab.close();
       playErrorSound();
@@ -2008,6 +2124,48 @@ function notifyWhatsApp(orderNumber, total, pendingSlip, reservedTab){
   }
   lastWhatsAppLink = link;
   showWhatsAppFallbackLink(link);
+}
+/* ---- Seller "you're out of stock" nudge -----------------------------------------------
+   Runs right after an order succeeds and products have been reloaded. For every seller group
+   in that order, checks whether any purchased product is now at 0 stock and — if so — surfaces
+   a tappable WhatsApp link to that seller (falls back to the site's admin WhatsApp number if the
+   seller has no phone on file) so someone finds out promptly instead of the listing silently
+   selling nothing while looking available. This is a client-side best-effort nudge, not a
+   guaranteed delivery — a proper fix would be a DB trigger/RPC that fires the moment stock hits
+   0 server-side, regardless of which channel (storefront, admin panel) caused it. */
+function alertSellersOfSoldOutItems(groups){
+  const bySeller = new Map(); // sellerId(or '__official__') -> {seller, names:Set}
+  groups.forEach(g=>{
+    g.items.forEach(i=>{
+      const p = STATE.products.find(x=>x.id===i.product_id);
+      if(!p || !isProductOutOfStock(p)) return;
+      const key = g.sellerId || '__official__';
+      if(!bySeller.has(key)) bySeller.set(key, {sellerId:g.sellerId, names:new Set()});
+      bySeller.get(key).names.add(nameFor(p));
+    });
+  });
+  if(!bySeller.size) return;
+  const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
+  const entries = Array.from(bySeller.values()).map(entry=>{
+    const seller = entry.sellerId ? sellerById(entry.sellerId) : null;
+    const sellerNum = (seller && seller.phone ? seller.phone : num).replace(/[^0-9]/g,'');
+    const productList = Array.from(entry.names).join(', ');
+    const msg = encodeURIComponent(`⚠️ ແຈ້ງເຕືອນສິນຄ້າໝົດ KhaiDee\nສິນຄ້າຕໍ່ໄປນີ້ຂາຍໝົດແລ້ວ ກະລຸນາເຕີມສະຕັອກ ຫຼື ປິດການຂາຍຊົ່ວຄາວ:\n${productList}${seller?`\nຮ້ານ: ${seller.store_name}`:''}`);
+    return {label: seller ? seller.store_name : (STATE.settings.site_name||'KhaiDee'), link:`https://wa.me/${sellerNum}?text=${msg}`, count: entry.names.size};
+  });
+  showSoldOutSellerBanner(entries);
+}
+function showSoldOutSellerBanner(entries){
+  let bar = document.getElementById('soldOutAlertBar');
+  if(!bar){
+    bar = document.createElement('div'); bar.id = 'soldOutAlertBar';
+    bar.style.cssText = 'position:fixed; left:14px; right:14px; bottom:84px; z-index:60; background:#fff; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:10px 12px; display:flex; flex-direction:column; gap:8px;';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><span style="font-size:18px;">⚠️</span><span style="flex:1; font-size:12.5px; font-weight:700; color:var(--ink);">ມີສິນຄ້າໝົດສະຕັອກຫຼັງອໍເດີນີ້ — ແຈ້ງເຕືອນຮ້ານຄ້າ:</span>
+    <button onclick="document.getElementById('soldOutAlertBar').remove()" style="background:none; border:none; font-size:16px; color:var(--ink-soft); padding:0 2px;">✕</button></div>
+    ${entries.map(e=>`<a href="${e.link}" target="_blank" rel="noopener" style="background:var(--ok); color:#fff; font-size:12px; font-weight:700; padding:8px 12px; border-radius:999px; text-decoration:none; text-align:center;">💬 ແຈ້ງ ${e.label} (${e.count} ລາຍການ)</a>`).join('')}`;
+  setTimeout(()=>{ const b=document.getElementById('soldOutAlertBar'); if(b) b.remove(); }, 45000);
 }
 // Small persistent banner with a real tappable link, in case the automatic redirect above
 // got blocked (some browsers block it even with the reserved-tab trick, e.g. in-app webviews

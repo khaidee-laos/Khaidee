@@ -428,7 +428,25 @@ async function renderDashboard(){
       <div class="stat-card"><div class="n">${fmtMoney(d.total_revenue)}</div><div class="l">ຍອດຂາຍລວມ</div></div>
       <div class="stat-card"><div class="n">${d.total_products}</div><div class="l">ສິນຄ້າທັງໝົດ</div></div>
       <div class="stat-card"><div class="n">${d.pending_items}</div><div class="l">ລໍຖ້າດຳເນີນການ</div></div>`;
+    renderSoldOutAlert();
   }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
+}
+// Passive "notification" for the seller: every time the dashboard loads, pull the seller's own
+// product list and call out anything sitting at 0 stock right at the top, in bold red, so it's
+// impossible to miss even without a real push-notification pipeline wired up yet.
+async function renderSoldOutAlert(){
+  const wrap = document.getElementById('dashboardBody');
+  try{
+    const products = await sbRPC('seller_product_list', {p_seller_id: STATE.seller.id});
+    const soldOut = products.filter(p=>Number(p.stock||0)<=0 && p.is_active);
+    if(!soldOut.length) return;
+    const box = document.createElement('div');
+    box.style.cssText = 'grid-column:1/-1; background:rgba(178,58,58,.1); border:1px solid rgba(178,58,58,.35); border-radius:14px; padding:12px 14px; margin-top:2px;';
+    box.innerHTML = `<div style="font-weight:800; color:var(--danger); font-size:13px; margin-bottom:6px;">⚠️ ສິນຄ້າໝົດສະຕັອກ (${soldOut.length})</div>
+      ${soldOut.map(p=>`<div style="font-size:12.5px; color:var(--ink); padding:3px 0;">• ${p.name_lo}</div>`).join('')}
+      <div class="hint" style="margin-top:6px;">ລູກຄ້າຈະເຫັນວ່າ "ສິນຄ້າໝົດ" ແລະ ບໍ່ສາມາດສັ່ງຊື້ໄດ້ — ໄປທີ່ໜ້າສິນຄ້າເພື່ອເຕີມສະຕັອກ</div>`;
+    wrap.appendChild(box);
+  }catch(e){ /* dashboard already showed its own error if this RPC is unavailable */ }
 }
 
 /* ============================================================ PRODUCTS ============================================================ */
@@ -444,12 +462,14 @@ async function renderProducts(){
     STATE.products = await sbRPC('seller_product_list', {p_seller_id: STATE.seller.id});
     wrap.innerHTML = `<div style="padding:0 14px 12px;"><button class="btn btn-gold" onclick="editProduct(null)">➕ ເພີ່ມສິນຄ້າໃໝ່</button></div>` +
       (!STATE.products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ — ເພີ່ມສິນຄ້າທຳອິດຂອງທ່ານ 🛍️</div>' :
-        STATE.products.map(p=>`
-        <div class="admin-list-item">
-          <div class="top"><span class="title">${p.name_lo}</span><span class="hint">${p.is_active?'ເປີດຂາຍ':'ປິດ'}</span></div>
-          <div class="hint">${fmtMoney(p.price)} • ຄົງເຫຼືອ ${p.stock} • ຂາຍ ${p.sold_count||0}</div>
+        STATE.products.map(p=>{
+          const oos = Number(p.stock||0)<=0;
+          return `
+        <div class="admin-list-item" style="${oos?'border:1.5px solid var(--danger);':''}">
+          <div class="top"><span class="title">${p.name_lo}</span><span class="hint" style="${oos?'color:var(--danger); font-weight:800;':''}">${oos?'⛔ ໝົດສະຕັອກ':(p.is_active?'ເປີດຂາຍ':'ປິດ')}</span></div>
+          <div class="hint">${fmtMoney(p.price)} • ຄົງເຫຼືອ ${oos?'<span style="color:var(--danger); font-weight:800;">0</span>':p.stock} • ຂາຍ ${p.sold_count||0}</div>
           <div class="chiprow"><button onclick="editProduct(${p.id})">✏️ ແກ້ໄຂ</button><button onclick="deleteProduct(${p.id})" style="color:var(--danger);">🗑️ ລຶບ</button></div>
-        </div>`).join(''));
+        </div>`;}).join(''));
   }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດສິນຄ້າໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
 }
 let pAttrDefs = [];      // category_attributes for the currently selected category
@@ -664,6 +684,7 @@ async function editProduct(id){
           p_groups: validGroups.map(g=>({name:g.name, values:g.values})), p_variants: pVariants});
       }
       overlay.remove(); renderProducts();
+      if(payload.stock<=0 && payload.is_active){ showToast('ບັນທຶກແລ້ວ — ສິນຄ້ານີ້ຄົງເຫຼືອ 0 ຊິ້ນ, ລູກຄ້າຈະເຫັນວ່າ "ໝົດ" ແລະ ສັ່ງຊື້ບໍ່ໄດ້ ຈົນກວ່າຈະເຕີມສະຕັອກ', 'warn'); }
     }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
   };
 }
