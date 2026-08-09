@@ -509,6 +509,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="customers">👥 ລູກຄ້າ</button>
     <button data-tab="sellers">🏪 ຜູ້ຂາຍ</button>
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
+    <button data-tab="payouts">💸 ຖອນເງິນຜູ້ຂາຍ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
     <button data-tab="banks">🏦 ທະນາຄານ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
@@ -945,9 +946,11 @@ document.getElementById('searchInput').addEventListener('input', renderProducts)
 
 /* ============================================================ PRODUCT DETAIL ============================================================ */
 let detailQty = 1;
+let detailSelectedSize = null;
 function openProduct(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   detailQty = 1;
+  detailSelectedSize = null;
   STATE.activeDetailTab = 'details';
   const media = [];
   (p.images||[]).forEach(url=> media.push({type:'image', url}));
@@ -968,6 +971,14 @@ function openProduct(id){
       <h2 style="font-size:16px;margin:0 0 4px;">${nameFor(p)}</h2>
       <div class="price" style="font-size:20px;">${fmtMoney(p.price)} ${p.compare_price?`<span class="compare" style="font-size:13px;">${fmtMoney(p.compare_price)}</span>`:''}</div>
       <div class="meta" style="margin:8px 0 0;">ຄົງເຫຼືອ ${p.stock} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
+
+      ${(p.size_options && p.size_options.length) ? `
+      <div class="field" style="margin:10px 0 0;">
+        <label>ເລືອກໄຊ້</label>
+        <div class="chiprow" id="pdSizeChips">
+          ${p.size_options.map(sz=>`<button type="button" onclick="selectDetailSize('${String(sz).replace(/'/g,"\\'")}')" data-size="${sz}">${sz}</button>`).join('')}
+        </div>
+      </div>` : ''}
 
       ${(()=>{ const seller = sellerById(p.seller_id); return seller ? `
       <div class="pd-storerow" style="cursor:pointer;" onclick="closeModal('modalProduct'); openShop('${seller.id}')">
@@ -991,6 +1002,10 @@ function openProduct(id){
         <button data-tab="reviews" onclick="switchPdTab('reviews')">ຄວາມຄິດເຫັນ</button>
       </div>
       <div id="pdTabDetails">
+        ${(p.attributes && p.attributes.length) ? `
+        <div class="pd-spec-table" style="margin:12px 0; border:1px solid var(--line); border-radius:10px; overflow:hidden;">
+          ${p.attributes.map(a=>`<div style="display:flex; justify-content:space-between; gap:10px; padding:8px 12px; font-size:12.5px; border-bottom:1px solid var(--line);"><span class="hint" style="margin:0;">${a.label}</span><span style="font-weight:600; text-align:right;">${a.value}</span></div>`).join('')}
+        </div>` : ''}
         <p style="font-size:13px; color:var(--ink-soft); line-height:1.6; margin:12px 0;">${p.description||'ບໍ່ມີລາຍລະອຽດເພີ່ມເຕີມ'}</p>
       </div>
       <div id="pdTabReviews" class="hidden">
@@ -1013,10 +1028,20 @@ function openProduct(id){
       <div class="qty-select" style="margin:0;">
         <button onclick="changeDetailQty(-1)">−</button><span id="detailQtyLabel">1</span><button onclick="changeDetailQty(1)">+</button>
       </div>
-      <button class="btn btn-primary" onclick="addToCart(${p.id}, detailQty); closeModal('modalProduct')">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
+      <button class="btn btn-primary" onclick="confirmAddToCart(${p.id})">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
     </div>`;
   loadComments(p.id);
   openModal('modalProduct');
+}
+function selectDetailSize(sz){
+  detailSelectedSize = sz;
+  document.querySelectorAll('#pdSizeChips button').forEach(b=> b.classList.toggle('active', b.dataset.size===sz));
+}
+function confirmAddToCart(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  if(p.size_options && p.size_options.length && !detailSelectedSize){ alert('ກະລຸນາເລືອກໄຊ້ກ່ອນເພີ່ມໃສ່ກະຕ່າ'); return; }
+  addToCart(id, detailQty, detailSelectedSize);
+  closeModal('modalProduct');
 }
 function onPdGalleryScroll(){
   const track = document.getElementById('pdGalleryTrack');
@@ -1073,12 +1098,66 @@ function quickAdd(id){ addToCart(id, 1); pulseCart(); }
 function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
 
 /* ============================================================ CART ============================================================ */
-function addToCart(id, qty){
+function addToCart(id, qty, size){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  const existing = STATE.cart.find(i=>i.product_id===id);
+  size = size || null;
+  // Same product in a different size is a separate cart line (can't merge qty across sizes).
+  const existing = STATE.cart.find(i=>i.product_id===id && i.size===size);
   if(existing) existing.qty += qty;
-  else STATE.cart.push({product_id:id, name:nameFor(p), price:p.price, qty, image:(p.images&&p.images[0])||''});
+  else STATE.cart.push({
+    product_id:id, name: nameFor(p) + (size?` (${size})`:''), price:p.price, qty, size,
+    image:(p.images&&p.images[0])||'',
+    seller_id: p.seller_id || null,        // which shop this item belongs to — drives per-seller shipping & wallet split
+    weight: Number(p.weight_kg)||1          // kg per unit — drives shipping calc
+  });
   saveCart();
+}
+/* ============================================================ PER-SELLER SHIPPING CALCULATOR ============================================================
+   Replaces the old "flat carrier base_fee for the whole order" model with per-seller rates:
+   8,000 KIP covers 1kg (or under) *within the seller's own province*; shipping outside the
+   seller's province doubles that base rate; a seller-issued free-shipping coupon zeroes it.
+   Official-store items (seller_id null — sold directly by KhaiDee, not a 3rd-party seller)
+   keep using the old carrier.base_fee, since there's no seller row to compare provinces against.
+   IMPORTANT: this is a client-side calc for display + what gets POSTed to order_create. The
+   same rule must be mirrored inside order_create server-side (recompute shipping_fee from
+   weight/province instead of trusting the client number) so the price can't be tampered with. */
+const SHIPPING_BASE_PER_KG = 8000;
+function calcGroupShipping(group, address, carrier){
+  if(group.freeShipping) return 0;
+  if(!group.sellerId) return carrier ? Number(carrier.base_fee)||0 : 0;
+  const seller = sellerById(group.sellerId);
+  const kg = Math.max(1, Math.ceil(group.weight||1));
+  let fee = SHIPPING_BASE_PER_KG * kg;
+  if(seller && seller.province && address && address.province && seller.province !== address.province) fee *= 2;
+  return fee;
+}
+// Splits the flat cart into one group per seller (plus one for official-store items),
+// since each group gets its own shipping fee and becomes its own order at checkout.
+function groupCartBySeller(){
+  const map = new Map();
+  STATE.cart.forEach(i=>{
+    const key = i.seller_id || '__official__';
+    if(!map.has(key)) map.set(key, {sellerId: i.seller_id||null, items:[], weight:0, subtotal:0, freeShipping:false});
+    const g = map.get(key);
+    g.items.push(i); g.weight += (Number(i.weight)||1)*i.qty; g.subtotal += i.price*i.qty;
+  });
+  return Array.from(map.values());
+}
+// A coupon can be platform-wide (checkoutState.couponSellerId is null → split proportionally
+// across every seller group by subtotal share) or scoped to one seller (full discount goes to
+// that seller's group only, matching how the seller funded that coupon out of their own sales).
+function computeGroupDiscounts(groups, discount){
+  if(!discount) return groups.map(()=>0);
+  if(checkoutState.couponSellerId){
+    return groups.map(g => g.sellerId===checkoutState.couponSellerId ? discount : 0);
+  }
+  const totalSubtotal = groups.reduce((s,g)=>s+g.subtotal,0) || 1;
+  let allocated = 0;
+  return groups.map((g,idx)=>{
+    if(idx===groups.length-1) return discount - allocated; // last group absorbs rounding remainder
+    const d = Math.round(discount * (g.subtotal/totalSubtotal));
+    allocated += d; return d;
+  });
 }
 function updateCartBadge(){
   const count = STATE.cart.reduce((s,i)=>s+i.qty,0);
@@ -1088,18 +1167,26 @@ function updateCartBadge(){
 function renderCart(){
   if(!STATE.cart.length){ document.getElementById('cartBody').innerHTML = '<div class="empty">ກະຕ່າຂອງທ່ານຍັງວ່າງເປົ່າ 🛒</div>'; return; }
   const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
-  document.getElementById('cartBody').innerHTML = STATE.cart.map((i,idx)=>`
-    <div class="cart-item">
-      <img src="${i.image||'https://placehold.co/60x60/F1DFAE/7A1E2B?text=KD'}">
-      <div class="info">
-        <div class="name">${i.name}</div>
-        <div class="price">${fmtMoney(i.price)}</div>
-        <div class="qtybox">
-          <button onclick="cartQty(${idx},-1)">−</button><span>${i.qty}</span><button onclick="cartQty(${idx},1)">+</button>
-          <button onclick="cartRemove(${idx})" style="margin-left:auto; color:var(--danger); border:none; background:none; font-size:12px;">ລຶບ</button>
+  const groups = groupCartBySeller();
+  const groupsHtml = groups.map(g=>{
+    const seller = g.sellerId ? sellerById(g.sellerId) : null;
+    const itemsHtml = g.items.map(i=>{
+      const idx = STATE.cart.indexOf(i);
+      return `<div class="cart-item">
+        <img src="${i.image||'https://placehold.co/60x60/F1DFAE/7A1E2B?text=KD'}">
+        <div class="info">
+          <div class="name">${i.name}</div>
+          <div class="price">${fmtMoney(i.price)}</div>
+          <div class="qtybox">
+            <button onclick="cartQty(${idx},-1)">−</button><span>${i.qty}</span><button onclick="cartQty(${idx},1)">+</button>
+            <button onclick="cartRemove(${idx})" style="margin-left:auto; color:var(--danger); border:none; background:none; font-size:12px;">ລຶບ</button>
+          </div>
         </div>
-      </div>
-    </div>`).join('') +
+      </div>`;
+    }).join('');
+    return `<div style="font-size:12.5px; font-weight:700; color:var(--maroon); margin:12px 0 4px; display:flex; align-items:center; gap:4px;">🏪 ${seller?seller.store_name:(STATE.settings.site_name||'KhaiDee ຂາຍດີ')}</div>${itemsHtml}`;
+  }).join('');
+  document.getElementById('cartBody').innerHTML = groupsHtml +
     `<div class="sumrow total"><span>ລວມທັງໝົດ</span><span>${fmtMoney(subtotal)}</span></div>
      <button class="btn btn-primary" style="margin-top:14px;" onclick="startCheckout();">ສັ່ງຊື້ ➜</button>`;
 }
@@ -1170,20 +1257,29 @@ async function doRegister(){
 function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); document.getElementById('notifBadge').classList.add('hidden'); }
 
 /* ============================================================ CHECKOUT ============================================================ */
-let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false, bankAccountId:null};
+let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
 function startCheckout(){
   if(!STATE.cart.length) return;
   requireLogin(()=>{
     const savedAddrs = getSavedAddresses();
-    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, bankAccountId:null};
+    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
     renderCheckout();
     openModal('modalCheckout');
   });
 }
 function renderCheckout(){
+  const groups = groupCartBySeller();
+  groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
+  const groupDiscounts = computeGroupDiscounts(groups, checkoutState.discount||0);
   const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
-  const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
-  const total = subtotal + shipping - checkoutState.discount;
+  const shipping = groups.reduce((s,g)=> s + calcGroupShipping(g, checkoutState.address, checkoutState.carrier), 0);
+  const total = subtotal + shipping - (checkoutState.discount||0);
+  const shipRows = groups.map((g,idx)=>{
+    const seller = g.sellerId ? sellerById(g.sellerId) : null;
+    const fee = calcGroupShipping(g, checkoutState.address, checkoutState.carrier);
+    const qty = g.items.reduce((s,i)=>s+i.qty,0);
+    return `<div class="sumrow"><span>🚚 ${seller?seller.store_name:(STATE.settings.site_name||'KhaiDee')} (${qty} ລາຍການ)</span><span>${g.freeShipping?'🎁 ຟຣີ':fmtMoney(fee)}</span></div>`;
+  }).join('');
   document.getElementById('checkoutBody').innerHTML = `
     <div class="field">
       <label>📍 ທີ່ຢູ່ຈັດສົ່ງ</label>
@@ -1194,10 +1290,10 @@ function renderCheckout(){
       </div>
     </div>
     <div class="field">
-      <label>🚚 ບໍລິສັດຂົນສົ່ງ</label>
+      <label>🚚 ບໍລິສັດຂົນສົ່ງ (ສຳລັບຕິດຕາມພັດສະດຸ — ຄ່າສົ່ງຄິດຕາມນ້ຳໜັກ+ແຂວງດ້ານລຸ່ມ)</label>
       ${STATE.carriers.map(c=>`
         <div class="optcard ${checkoutState.carrier&&checkoutState.carrier.id===c.id?'selected':''}" onclick="selectCarrier(${c.id})">
-          <div class="ico">${c.logo}</div><div class="t">${c.name}<div class="hint" style="margin-top:2px;">ຄາດວ່າ ~${c.avg_delivery_days||3} ມື້</div></div><div class="p">${fmtMoney(c.base_fee)}</div>
+          <div class="ico">${c.logo}</div><div class="t">${c.name}<div class="hint" style="margin-top:2px;">ຄາດວ່າ ~${c.avg_delivery_days||3} ມື້</div></div>
         </div>`).join('')}
     </div>
     <div class="field">
@@ -1213,7 +1309,7 @@ function renderCheckout(){
       <select id="paymentMethod"><option value="transfer">ໂອນຜ່ານທະນາຄານ</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
     </div>
     <div class="sumrow"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(subtotal)}</span></div>
-    <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${checkoutState.freeShipping?'🎁 ຟຣີ':fmtMoney(shipping)}</span></div>
+    ${shipRows}
     ${checkoutState.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(checkoutState.discount)}</span></div>`:''}
     <div class="sumrow total"><span>ຍອດຊຳລະ</span><span>${fmtMoney(total)}</span></div>
     ${STATE.customer && Number(STATE.customer.wallet_balance||0) < total ? `<div class="hint" id="walletLowHint" style="display:none; color:var(--danger);">⚠️ ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ</div>`:''}
@@ -1235,6 +1331,7 @@ async function applyCoupon(){
       checkoutState.coupon = code;
       checkoutState.freeShipping = !!res.free_shipping;
       checkoutState.discount = Number(res.discount||0);
+      checkoutState.couponSellerId = res.seller_id || null; // seller-issued coupon → only discounts/frees shipping for that seller's items
       playSuccessSound();
       renderCheckout();
     }catch(e){ playErrorSound(); document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
@@ -1250,7 +1347,9 @@ async function applyCoupon(){
 function proceedCheckout(){
   if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
   const payment = document.getElementById('paymentMethod').value;
-  const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
+  const groups = groupCartBySeller();
+  groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
+  const shipping = groups.reduce((s,g)=> s + calcGroupShipping(g, checkoutState.address, checkoutState.carrier), 0);
   const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
   const total = subtotal + shipping - (checkoutState.discount||0);
   if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
@@ -1313,6 +1412,14 @@ function selectTransferBank(id, total){
   checkoutState.bankAccountId = id;
   renderTransferProofStep(total);
 }
+/* ---- Order submission — one order PER SELLER ----
+   A cart can span several shops, each with its own shipping fee, its own wallet to be credited,
+   and its own 5% commission line — so one order_create call happens per seller group instead of
+   one call for the whole cart. p_seller_id/p_discount are new params order_create needs to accept;
+   everything else (address, carrier, payment, coupon code, slip) is shared across all of them.
+   This does several sequential inserts rather than one atomic multi-order RPC — simplest upgrade
+   from the single-order version, though a true order_create_multi RPC would be safer against a
+   partial failure leaving some seller orders placed and others not. */
 async function submitOrder(payment, needsSlip){
   // Open a blank tab RIGHT NOW, synchronously, while we're still inside the click handler.
   // Browsers only allow window.open() without a popup-block prompt when it happens in direct
@@ -1321,7 +1428,10 @@ async function submitOrder(payment, needsSlip){
   // wa.me once the order succeeds keeps the "auto-redirect to WhatsApp" reliable.
   const waTab = window.open('', '_blank');
   onGuard('order', async ()=>{
-    const shipping = checkoutState.freeShipping ? 0 : (checkoutState.carrier ? Number(checkoutState.carrier.base_fee) : 0);
+    const groups = groupCartBySeller();
+    groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
+    const groupDiscounts = computeGroupDiscounts(groups, checkoutState.discount||0);
+    const shipping = groups.reduce((s,g)=> s + calcGroupShipping(g, checkoutState.address, checkoutState.carrier), 0);
     const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
     const total = subtotal + shipping - (checkoutState.discount||0);
     const btn = document.getElementById('submitOrderBtn');
@@ -1345,25 +1455,37 @@ async function submitOrder(payment, needsSlip){
         });
         btn.textContent = 'ກຳລັງບັນທຶກ...';
       }
-      const res = await sbRPC('order_create', {
-        p_customer_id: STATE.customer.id,
-        p_items: STATE.cart.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty})),
-        p_address: checkoutState.address,
-        p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
-        p_shipping_fee: shipping,
-        p_payment_method: payment,
-        p_coupon_code: checkoutState.coupon,
-        p_payment_slip_url: slipUrl,
-        p_bank_account_id: needsSlip ? checkoutState.bankAccountId : null
-      });
+      btn.textContent = 'ກຳລັງບັນທຶກອໍເດີ...';
+      const results = [];
+      for(let gi=0; gi<groups.length; gi++){
+        const g = groups[gi];
+        const fee = calcGroupShipping(g, checkoutState.address, checkoutState.carrier);
+        const res = await sbRPC('order_create', {
+          p_customer_id: STATE.customer.id,
+          p_seller_id: g.sellerId, // null = official KhaiDee store
+          p_items: g.items.map(i=>({product_id:i.product_id, name:i.name, price:i.price, qty:i.qty, size:i.size||null})),
+          p_address: checkoutState.address,
+          p_shipping_carrier_id: checkoutState.carrier ? checkoutState.carrier.id : null,
+          p_shipping_fee: fee,
+          p_payment_method: payment,
+          p_coupon_code: checkoutState.coupon,
+          p_discount: groupDiscounts[gi],
+          p_payment_slip_url: slipUrl,
+          p_bank_account_id: needsSlip ? checkoutState.bankAccountId : null
+        });
+        results.push(res);
+      }
       STATE.cart = []; saveCart();
       closeModal('modalCheckout');
-      notifyWhatsApp(res.order_number, res.total, needsSlip, waTab);
+      const combinedTotal = results.reduce((s,r)=>s+Number(r.total||0),0);
+      const orderNumbers = results.map(r=>r.order_number).join(', ');
+      notifyWhatsApp(orderNumbers, combinedTotal, needsSlip, waTab);
       playSuccessSound();
       alert(needsSlip
-        ? `ສົ່ງຄຳສັ່ງຊື້ແລ້ວ! ເລກທີອໍເດີ: ${res.order_number}\nລໍຖ້າແອດມິນກວດສອບສະລິບໂອນເງິນ`
-        : `ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${res.order_number}`);
-      if(STATE.customer && res.wallet_balance!=null){ STATE.customer.wallet_balance = res.wallet_balance; saveCustomer(); }
+        ? `ສົ່ງຄຳສັ່ງຊື້ແລ້ວ! ເລກທີອໍເດີ: ${orderNumbers}\nລໍຖ້າແອດມິນກວດສອບສະລິບໂອນເງິນ`
+        : `ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${orderNumbers}`);
+      const last = results[results.length-1];
+      if(STATE.customer && last && last.wallet_balance!=null){ STATE.customer.wallet_balance = last.wallet_balance; saveCustomer(); }
       loadProducts().then(renderProducts);
     }catch(e){
       if(waTab) waTab.close();
@@ -1548,8 +1670,15 @@ function paintCustomerOrders(){
 /* ============================================================ ORDER DETAIL (items + images + status timeline) ============================================================
    Needs an order_detail_for_customer RPC returning: {order_number, status, created_at, total, subtotal,
    shipping_fee, discount, address:{recipient_name,phone,village,district,province}, carrier_name,
-   items:[{product_name, image_url, qty, price}]}. Item images let the customer tap through to see exactly
-   what they ordered, same as the product photos shown on Shopee/Lazada order pages. */
+   items:[{product_name, image_url, qty, price, size}]}. Item images let the customer tap through to see exactly
+   what they ordered, same as the product photos shown on Shopee/Lazada order pages.
+   Also now expects, on both order_detail_for_customer and admin_list_orders:
+   - seller_id (which shop this specific order belongs to — orders are now split per seller at checkout)
+   - fulfillment_steps: [{step, label, photo_url, at}] — the packing/handoff/in-transit/confirmed photos
+     the seller uploads from seller.html at each stage; shown as a thumbnail row here and in the admin panel.
+   - tracking_url — the courier's own tracking link for this shipment, shown as a tappable button.
+   - commission_amount / seller_net_amount — optional, purely informational; the 5% commission split
+     itself happens server-side inside admin_update_order_status when p_release_funds is true. */
 // Lao labels for the real order.status values used across the DB/RPCs (pending/paid/packing/shipping/delivered/cancelled).
 // Used everywhere a raw status is shown to a customer or admin so nothing appears in English anymore.
 const ORDER_STATUS_LABELS = {
@@ -1616,6 +1745,12 @@ async function openOrderDetail(orderId){
         ${o.status==='cancelled' ? '' : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
           <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
         ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:8px; font-weight:600; color:var(--maroon);">📅 ຄາດວ່າຈະຮອດປະມານ ${estimateDeliveryDate(o)}</div>` : ''}
+        ${(o.fulfillment_steps && o.fulfillment_steps.length) ? `
+        <h4 style="font-size:13px; margin:14px 0 4px;">📦 ຂັ້ນຕອນການສົ່ງ (ຫຼັກຖານຈາກຮ້ານ)</h4>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">
+          ${o.fulfillment_steps.map(s=>`<div style="text-align:center;"><img src="${s.photo_url}" onclick="window.open('${s.photo_url}','_blank')" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--line);"><div class="hint" style="margin-top:2px; font-size:10.5px;">${s.label||''}</div></div>`).join('')}
+        </div>` : ''}
+        ${o.tracking_url ? `<a href="${o.tracking_url}" target="_blank" class="btn btn-ghost btn-sm" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">🔗 ຕິດຕາມພັດສະດຸກັບຂົນສົ່ງ</a>` : ''}
         <h4 style="font-size:13px; margin:14px 0 4px;">🛍️ ລາຍການສິນຄ້າ</h4>
         ${(o.items||[]).map(i=>`
           <div class="od-item" onclick="event.stopPropagation();">
@@ -1934,7 +2069,7 @@ function openSettings(){
       <div class="listrow" onclick="closeModal('modalSettings'); showContactAdmin();"><span class="ico">💬</span><span class="t">ຕິດຕໍ່ແອດມິນ</span><span class="arrow">›</span></div>
       ${STATE.customer?`<div class="listrow" onclick="closeModal('modalSettings'); showChangePassword();"><span class="ico">🔒</span><span class="t">ປ່ຽນລະຫັດຜ່ານ</span><span class="arrow">›</span></div>`:''}
     </div>
-    <div class="hint" style="text-align:center;">KhaiDee ຂາຍດີ • v1.0</div>`;
+    <div class="hint" style="text-align:center;">KhaiDee ຂາຍດີ • v1.1</div>`;
   openModal('modalSettings');
 }
 function showContactAdmin(){
@@ -1992,7 +2127,8 @@ function switchAdminTab(tab){
   document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups,
-    carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons, ads:renderAdminAds, settings:renderAdminSettings};
+    payouts:renderAdminPayouts, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
+    ads:renderAdminAds, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
 }
 async function renderAdminDashboard(){
@@ -2007,6 +2143,7 @@ async function renderAdminDashboard(){
     <div class="stat-card"><div class="n">${d.pending_topups}</div><div class="l">ຄຳຂໍເຕີມເງິນ</div></div>
     <div class="stat-card"><div class="n">${d.low_stock}</div><div class="l">ສິນຄ້າໃກ້ໝົດ</div></div>
     <div class="stat-card" style="cursor:pointer;" onclick="switchAdminTab('sellers')"><div class="n">${d.pending_sellers||0}</div><div class="l">ຄຳຂໍສະໝັກຜູ້ຂາຍໃໝ່</div></div>
+    <div class="stat-card" style="cursor:pointer;" onclick="switchAdminTab('payouts')"><div class="n">${d.pending_payouts||0}</div><div class="l">ຄຳຂໍຖອນເງິນຜູ້ຂາຍ</div></div>
   </div>
   <div class="hint">ເຄັດລັບ: ແຕະໄອຄອນ ⚙️ ໃນໜ້າບັນຊີ 3 ຄັ້ງຕິດກັນ ເພື່ອກັບເຂົ້າໜ້ານີ້ໄດ້ທຸກເທື່ອ.</div>`;
 }
@@ -2042,6 +2179,8 @@ function paintAdminOrders(){
       <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
       <div style="font-size:12.5px; margin-top:6px;">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</div>
       ${o.payment_slip_url ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📎 ສະລິບໂອນເງິນ:</div><img src="${o.payment_slip_url}" onclick="window.open('${o.payment_slip_url}','_blank')" style="width:100px; height:100px; object-fit:cover; border-radius:8px; margin-top:4px; cursor:pointer; border:1px solid var(--line);">` : ''}
+      ${(o.fulfillment_steps && o.fulfillment_steps.length) ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📦 ຮູບຂັ້ນຕອນສົ່ງ (ຈາກຮ້ານ):</div><div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">${o.fulfillment_steps.map(s=>`<img src="${s.photo_url}" title="${s.label||''}" onclick="window.open('${s.photo_url}','_blank')" style="width:44px; height:44px; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid var(--line);">`).join('')}</div>` : ''}
+      ${o.tracking_url ? `<a href="${o.tracking_url}" target="_blank" style="font-size:11.5px; color:var(--maroon); font-weight:600; display:inline-block; margin-top:4px;">🔗 ລິງກ໌ຕິດຕາມພັດສະດຸ</a>` : ''}
       ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
@@ -2049,9 +2188,22 @@ function paintAdminOrders(){
       </select>
     </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີໃນໝວດນີ້</div>');
 }
+// Setting status to 'delivered' is the trigger point for releasing money to the seller: the
+// admin_update_order_status RPC, when p_release_funds is true, should compute 5% platform
+// commission on that order's item subtotal, credit the remaining 95% to the seller's
+// wallet_balance (skip this for official-store orders where seller_id is null — that revenue
+// is already the platform's own), log a seller_wallet_transactions row, and send the customer
+// a notification carrying the order's fulfillment evidence photos + tracking link.
 async function adminSetOrderStatus(id, status){
   onGuard('order-status-'+id, async ()=>{
-    try{ await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status}); playSuccessSound(); renderAdminOrders(); }
+    if(status==='delivered'){
+      const ok = confirm('ຢືນຢັນວ່າລູກຄ້າໄດ້ຮັບເຄື່ອງແລ້ວບໍ? ລະບົບຈະໂອນເງິນເຂົ້າ Wallet ຜູ້ຂາຍ (ຫັກຄ່າທຳນຽມ 5%) ແລະ ແຈ້ງເຕືອນລູກຄ້າ');
+      if(!ok) return;
+    }
+    try{
+      await sbRPC('admin_update_order_status', {p_password:STATE.adminPassword, p_order_id:id, p_status:status, p_release_funds: status==='delivered'});
+      playSuccessSound(); renderAdminOrders();
+    }
     catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
   });
 }
@@ -2109,6 +2261,15 @@ function adminEditProduct(id){
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
     <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
+    <div class="row2">
+      <div class="field"><label>ນ້ຳໜັກ (ກິໂລ ຕໍ່ 1 ຊິ້ນ, ໃຊ້ຄິດໄລ່ຄ່າສົ່ງ)</label><input type="number" step="0.1" min="0.1" id="pWeight" value="${p.weight_kg||1}"></div>
+      <div class="field"><label>ໄຊ້ (ຄັ່ນດ້ວຍ , — ຖ້າບໍ່ມີໄຊ້ ປະໄວ້ຫວ່າງ)</label><input id="pSizes" placeholder="S, M, L, XL" value="${(p.size_options||[]).join(', ')}"></div>
+    </div>
+    <div class="field">
+      <label>ສະເປັກສິນຄ້າ (ຍີ່ຫໍ້/ຮຸ່ນ/ອື່ນໆ — 1 ແຖວ = 1 ລາຍການ, ຮູບແບບ "ຫົວຂໍ້: ຄ່າ")</label>
+      <textarea id="pAttrs" rows="3" placeholder="ຍີ່ຫໍ້: Samsung&#10;ຮຸ່ນ: Galaxy A15&#10;ສີ: ດຳ">${(p.attributes||[]).map(a=>`${a.label}: ${a.value}`).join('\n')}</textarea>
+      <div class="hint">ຈະສະແດງເປັນຕາຕະລາງໃນໜ້າສິນຄ້າ ໃຫ້ລູກຄ້າອ່ານກ່ອນຕັດສິນໃຈສັ່ງ</div>
+    </div>
     <div class="field"><label>ຮູບພາບສິນຄ້າ (ອັບໂຫລດໄດ້ຫຼາຍໆຮູບ)</label><input type="file" id="pImageFiles" accept="image/*" multiple></div>
     <div id="pImagePreview" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
       ${(p.images||[]).map((url,i)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImage(${i})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join('')}
@@ -2146,6 +2307,13 @@ function adminEditProduct(id){
         name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
         price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
         stock: Number(document.getElementById('pStock').value),
+        weight_kg: Number(document.getElementById('pWeight').value)||1,
+        size_options: document.getElementById('pSizes').value.split(',').map(s=>s.trim()).filter(Boolean),
+        attributes: document.getElementById('pAttrs').value.split('\n').map(line=>{
+          const idx = line.indexOf(':'); if(idx<0) return null;
+          const label = line.slice(0,idx).trim(), value = line.slice(idx+1).trim();
+          return (label && value) ? {label, value} : null;
+        }).filter(Boolean),
         images: pendingImages, video_url: pendingVideoUrl,
         is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
       };
@@ -2397,6 +2565,7 @@ function renderAdminSellerList(){
       </div>
       <div class="hint">${s.phone||'-'} • ${s.email||'-'} • 👥 ${s.follower_count||0} ຜູ້ຕິດຕາມ</div>
       <div class="hint">📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')}</div>
+      <div class="hint">💰 Wallet: <b>${fmtMoney(s.wallet_balance||0)}</b> (ຫັກຄ່າທຳນຽມ 5% ອັດຕະໂນມັດແລ້ວ)</div>
       <div class="hint">ສະໝັກເມື່ອ: ${s.created_at ? new Date(s.created_at).toLocaleString('lo-LA') : '-'}</div>
       ${s.reject_reason ? `<div class="hint" style="color:var(--danger);">ເຫດຜົນປະຕິເສດ: ${s.reject_reason}</div>` : ''}
       ${s.id_card_url ? `<img src="${s.id_card_url}" onclick="window.open('${s.id_card_url}','_blank')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); margin-top:8px; cursor:pointer;">` : ''}
@@ -2537,6 +2706,54 @@ async function adminDeleteTopup(id){
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminTopups();
+    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+  });
+}
+/* ============================================================ SELLER PAYOUTS (withdraw requests) ============================================================
+   Needs on the Supabase side:
+   - admin_list_seller_withdrawals(p_password) -> [{id, seller_id, store_name, amount, qr_url, status, requested_at}]
+       status: 'pending' | 'approved' | 'rejected'. Seller submits the request + their own payout
+       QR (bank/mobile money) from seller.html once they have enough wallet_balance to withdraw.
+   - admin_approve_seller_withdrawal(p_password, p_withdrawal_id, p_approve, p_reason?)
+       On approve: admin has already paid the seller by scanning their QR — this just deducts the
+       amount from seller.wallet_balance and logs a seller_wallet_transactions row (type='withdrawal').
+       On reject: just marks the request rejected, wallet_balance untouched.
+   All payouts flow through the admin this way — no direct seller-to-customer money movement — same
+   principle as the existing customer topup approval flow just mirrored on the seller side. */
+async function renderAdminPayouts(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const list = await sbRPC('admin_list_seller_withdrawals', {p_password: STATE.adminPassword});
+  STATE.adminPayoutsCache = list;
+  body.innerHTML = !list.length ? '<div class="empty">ບໍ່ມີຄຳຂໍຖອນເງິນ</div>' : `<div class="tile-grid">${list.map(w=>`
+    <div class="tile" onclick="adminViewPayout(${w.id})">
+      <div class="tile-dot" style="background:${adminStatusColor(w.status)}"></div>
+      <div class="tile-img">${w.qr_url ? `<img src="${w.qr_url}">` : '💸'}</div>
+      <div class="tile-title">${w.store_name||'-'}</div>
+      <div class="tile-sub">${fmtMoney(w.amount)}</div>
+    </div>`).join('')}</div>`;
+}
+function adminViewPayout(id){
+  const w = (STATE.adminPayoutsCache||[]).find(x=>x.id===id);
+  if(!w) return;
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ຄຳຂໍຖອນເງິນ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="top" style="margin-bottom:6px;"><span class="title">${w.store_name} • ${fmtMoney(w.amount)}</span><span class="status-pill status-${w.status}">${w.status}</span></div>
+    <div class="hint">${w.requested_at ? new Date(w.requested_at).toLocaleString('lo-LA') : ''}</div>
+    ${w.qr_url?`<div class="hint" style="margin-top:10px;">QR ຂອງຮ້ານ (ໂອນຫາອັນນີ້ໃຫ້ຜູ້ຂາຍ):</div><img src="${w.qr_url}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; margin-top:6px; display:block;">`:''}
+    ${w.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApprovePayout(${w.id},true)" style="color:var(--ok);">✅ ຈ່າຍແລ້ວ / ອະນຸມັດ</button><button onclick="adminApprovePayout(${w.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+}
+async function adminApprovePayout(id, approve){
+  onGuard('payout-approve-'+id, async ()=>{
+    try{
+      await sbRPC('admin_approve_seller_withdrawal', {p_password:STATE.adminPassword, p_withdrawal_id:id, p_approve:approve});
+      playSuccessSound();
+      document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
+      renderAdminPayouts();
     }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
   });
 }
