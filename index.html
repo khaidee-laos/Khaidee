@@ -403,9 +403,31 @@ nav.bottom .icon{font-size:19px;}
 .hidden{display:none !important;}
 .empty{text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:13px;}
 .loader{text-align:center; padding:30px; color:var(--ink-soft); font-size:13px;}
+
+/* ---- Custom in-app toast (replaces the browser's native showToast() popup so success/error
+   messages always look like part of the app, not a Safari/Chrome system dialog) ---- */
+#toastStack{position:fixed; left:0; right:0; top:calc(env(safe-area-inset-top,0px) + 14px); z-index:9999;
+  display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; padding:0 16px;}
+.toast{
+  max-width:420px; width:100%; background:#fff; border-radius:14px; padding:12px 14px; display:flex; align-items:flex-start; gap:10px;
+  box-shadow:0 10px 30px rgba(43,27,20,.22); border-left:4px solid var(--maroon); pointer-events:auto;
+  transform:translateY(-18px); opacity:0; transition:transform .25s ease, opacity .25s ease; font-size:13px; line-height:1.5; color:var(--ink);
+}
+.toast.show{transform:translateY(0); opacity:1;}
+.toast .ic{font-size:17px; flex-shrink:0; margin-top:1px;}
+.toast .msg{flex:1; white-space:pre-line; word-break:break-word;}
+.toast .x{background:none; border:none; color:var(--ink-soft); font-size:13px; padding:2px 0 0 4px; flex-shrink:0; line-height:1;}
+.toast.success{border-left-color:var(--ok);}
+.toast.error{border-left-color:var(--danger);}
+.toast.warn{border-left-color:var(--warn);}
+.toast.info{border-left-color:var(--gold);}
 </style>
 </head>
 <body>
+
+<!-- Custom toast notifications live above everything else (splash, modals) so every
+     success/error message the app shows is drawn in KhaiDee's own style. -->
+<div id="toastStack"></div>
 
 <!-- ============================================================ SPLASH SCREEN ============================================================ -->
 <div id="splashScreen">
@@ -620,9 +642,33 @@ nav.bottom .icon{font-size:19px;}
 </div>
 
 <script>
-/* ============================================================
-   CONFIG — Supabase connection
-   ============================================================ */
+/* ============================================================ TOAST NOTIFICATIONS ============================================================
+   Replaces the browser's native showToast() so every "it worked" / "it failed" message the app
+   shows is drawn in KhaiDee's own colors instead of a Safari/Chrome/Android system popup.
+   Every old alert(...) call below has simply been renamed to showToast(...) — the type (success/
+   error/warning) is auto-detected from the actual message text at the moment it's shown, so
+   this works for dynamic messages (e.g. showToast('...' + e.message)) without touching every call site. */
+function showToast(message, type){
+  if(!type){
+    const t = String(message||'');
+    if(/ຜິດພາດ|ບໍ່ສຳເລັດ|ບໍ່ຖືກຕ້ອງ|ໝົດອາຍຸ|ໝົດແລ້ວ|ບໍ່ພຽງພໍ|ໃຫຍ່ເກີນໄປ|ຍາວເກີນໄປ|ບໍ່ພົບ|ບໍ່ສາມາດ/.test(t)) type = 'error';
+    else if(/ກະລຸນາ/.test(t)) type = 'warn';
+    else type = 'success';
+  }
+  const stack = document.getElementById('toastStack');
+  if(!stack){ window.alert(message); return; } // safety net if the container is ever missing
+  const icons = {success:'✅', error:'❌', warn:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.innerHTML = `<span class="ic">${icons[type]||icons.info}</span><span class="msg"></span><button class="x" aria-label="close">✕</button>`;
+  el.querySelector('.msg').textContent = message; // textContent only — never render raw HTML here
+  stack.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  const remove = ()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 250); };
+  const timer = setTimeout(remove, type==='error' ? 4200 : 3200);
+  el.querySelector('.x').onclick = ()=>{ clearTimeout(timer); remove(); };
+}
+
 const SUPABASE_URL = 'https://fzxetdumhymqkfisefnq.supabase.co';
 // Using the project's anon key. This key is DESIGNED to be public/client-side —
 // it only grants what your Row Level Security policies + RPC functions allow.
@@ -909,7 +955,7 @@ async function claimAdCoupon(code){
 }
 function claimAdCouponLegacy(code){
   navigator.clipboard?.writeText(code).catch(()=>{});
-  alert(`🎉 ຄັດລອກລະຫັດຄູປອງແລ້ວ: ${code}\nນຳໄປໃສ່ຕອນຊຳລະເງິນເພື່ອຮັບສ່ວນຫຼຸດ`);
+  showToast(`🎉 ຄັດລອກລະຫັດຄູປອງແລ້ວ: ${code}\nນຳໄປໃສ່ຕອນຊຳລະເງິນເພື່ອຮັບສ່ວນຫຼຸດ`);
 }
 // full-screen popup ad shown once per calendar day after the splash screen fades
 // (shows the highest-priority active popup ad — admins control order via sort_order)
@@ -1079,7 +1125,7 @@ async function toggleShopFollow(){
     const cached = sellerById(shop.id); if(cached) cached.follower_count = res.follower_count;
     playSuccessSound();
     paintShop();
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); if(btn) btn.disabled = false; }
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); if(btn) btn.disabled = false; }
 }
 function renderProducts(){
   let list = STATE.products;
@@ -1280,7 +1326,7 @@ function paintProductDetail(id){
 function resolveDetailVariantOrAlert(actionLabel){
   if(!detailGroups.length) return {ok:true, variant:null};
   const variant = matchedDetailVariant();
-  if(variant && (variant.stock??0) <= 0){ alert('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return {ok:false}; }
+  if(variant && (variant.stock??0) <= 0){ showToast('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return {ok:false}; }
   const label = detailGroups.map(g=>{
     const valId = detailSelection[g.id];
     const val = (g.values||[]).find(v=>v.id===valId);
@@ -1444,18 +1490,18 @@ async function loadComments(productId){
 async function submitComment(productId){
   if(!STATE.customer || !detailCanReview) return;
   const text = document.getElementById('pdNewComment').value.trim();
-  if(!text){ alert('ກະລຸນາຂຽນຄວາມຄິດເຫັນ'); return; }
-  if(!pdRating){ alert('ກະລຸນາໃຫ້ດາວກ່ອນ'); return; }
+  if(!text){ showToast('ກະລຸນາຂຽນຄວາມຄິດເຫັນ'); return; }
+  if(!pdRating){ showToast('ກະລຸນາໃຫ້ດາວກ່ອນ'); return; }
   try{
     const res = await sbRPC('comment_add', {p_customer_id: STATE.customer.id, p_product_id: productId, p_comment: text, p_rating: pdRating});
     document.getElementById('pdNewComment').value = '';
     if(res && res.coins_earned){
       STATE.customer.coin_balance = Number(STATE.customer.coin_balance||0) + Number(res.coins_earned);
       saveCustomer();
-      alert(`ຂອບໃຈສຳລັບລີວິວ! ໄດ້ຮັບ ${res.coins_earned} ຫຼຽນ 🪙`);
+      showToast(`ຂອບໃຈສຳລັບລີວິວ! ໄດ້ຮັບ ${res.coins_earned} ຫຼຽນ 🪙`);
     }
     loadComments(productId);
-  }catch(e){ alert('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
+  }catch(e){ showToast('ສົ່ງລີວິວບໍ່ສຳເລັດ: ' + e.message); }
 }
 function quickAdd(id){ addToCart(id, 1); pulseCart(); }
 function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
@@ -1739,7 +1785,7 @@ async function applyCoupon(){
    actually moved. Wallet (balance already reserved server-side) and COD (nothing to pay yet) skip
    straight through, same as before. */
 function proceedCheckout(){
-  if(!checkoutState.address){ alert('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
+  if(!checkoutState.address){ showToast('ກະລຸນາເພີ່ມທີ່ຢູ່ຈັດສົ່ງ'); return; }
   const payment = document.getElementById('paymentMethod').value;
   const groups = groupCartBySeller();
   groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
@@ -1748,7 +1794,7 @@ function proceedCheckout(){
   const total = subtotal + shipping - (checkoutState.discount||0);
   if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
     playErrorSound();
-    alert(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
+    showToast(`ຍອດເງິນໃນກະເປົາບໍ່ພຽງພໍ (ມີ ${fmtMoney(STATE.customer.wallet_balance)} / ຕ້ອງໃຊ້ ${fmtMoney(total)}) — ກະລຸນາເຕີມເງິນກ່ອນ ຫຼື ເລືອກວິທີຊຳລະອື່ນ`);
     return;
   }
   if(payment==='transfer'){ renderTransferProofStep(total); return; }
@@ -1833,10 +1879,10 @@ async function submitOrder(payment, needsSlip){
     if(needsSlip){
       if((STATE.bankAccounts||[]).length && !checkoutState.bankAccountId){
         if(waTab) waTab.close();
-        alert('ກະລຸນາເລືອກທະນາຄານທີ່ໂອນເງິນເຂົ້າ'); return;
+        showToast('ກະລຸນາເລືອກທະນາຄານທີ່ໂອນເງິນເຂົ້າ'); return;
       }
       file = document.getElementById('orderSlip').files[0];
-      if(!file){ if(waTab) waTab.close(); alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
+      if(!file){ if(waTab) waTab.close(); showToast('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
     }
     if(btn){ btn.disabled = true; btn.textContent = needsSlip ? 'ກຳລັງບີບອັດຮູບ...' : 'ກຳລັງດຳເນີນການ...'; } // onGuard() above is what actually blocks repeat taps / double-charge
     try{
@@ -1875,7 +1921,7 @@ async function submitOrder(payment, needsSlip){
       const orderNumbers = results.map(r=>r.order_number).join(', ');
       notifyWhatsApp(orderNumbers, combinedTotal, needsSlip, waTab);
       playSuccessSound();
-      alert(needsSlip
+      showToast(needsSlip
         ? `ສົ່ງຄຳສັ່ງຊື້ແລ້ວ! ເລກທີອໍເດີ: ${orderNumbers}\nລໍຖ້າແອດມິນກວດສອບສະລິບໂອນເງິນ`
         : `ສັ່ງຊື້ສຳເລັດ! ເລກທີອໍເດີ: ${orderNumbers}`);
       const last = results[results.length-1];
@@ -1884,7 +1930,7 @@ async function submitOrder(payment, needsSlip){
     }catch(e){
       if(waTab) waTab.close();
       playErrorSound();
-      alert('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
+      showToast('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
     }finally{
       if(btn){ btn.disabled = false; btn.textContent = needsSlip ? '✅ ຢືນຢັນອີກຄັ້ງ — ສົ່ງໃຫ້ກວດສອບ' : '✅ ຢືນຢັນສັ່ງຊື້'; }
     }
@@ -2205,8 +2251,8 @@ async function submitTopup(){
   onGuard('topup', async ()=>{
     const amount = Number(document.getElementById('topupAmount').value);
     const file = document.getElementById('topupSlip').files[0];
-    if(!amount || amount<=0){ alert('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
-    if(!file){ alert('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
+    if(!amount || amount<=0){ showToast('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
+    if(!file){ showToast('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
 
     // Guard against the "closed and reopened the page, so it looks fresh" duplicate-submit case:
     // a matching pending request sent in the last 3 minutes means one is likely already in flight
@@ -2232,9 +2278,9 @@ async function submitTopup(){
       await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
       localStorage.setItem(dupKey, JSON.stringify({amount, at: Date.now()}));
       playSuccessSound();
-      alert('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
+      showToast('ສົ່ງຄຳຂໍແລ້ວ ລໍຖ້າການອະນຸມັດ');
       showWallet();
-    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); btn.disabled=false; btn.textContent='ສົ່ງຄຳຂໍເຕີມເງິນ'; }
   });
 }
 
@@ -2384,14 +2430,14 @@ function renderAccount(){
 function customerCode(id){ return 'KD-' + String(id).padStart(6,'0'); }
 async function uploadAvatar(file){
   if(!file) return;
-  if(file.size > 4*1024*1024){ alert('ຮູບໃຫຍ່ເກີນໄປ (ສູງສຸດ 4MB)'); return; }
+  if(file.size > 4*1024*1024){ showToast('ຮູບໃຫຍ່ເກີນໄປ (ສູງສຸດ 4MB)'); return; }
   try{
     const url = await sbUpload('khaidee-products', `avatars/${STATE.customer.id}_${Date.now()}_${file.name}`, file);
     await sbRPC('customer_update_profile', {p_customer_id: STATE.customer.id, p_avatar_url: url});
     STATE.customer.avatar_url = url;
     saveCustomer(); renderAccount();
   }catch(e){
-    alert('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message + '\n\n(ຖ້າຄັ້ງທຳອິດ ອາດຕ້ອງເພີ່ມຟັງຊັນ customer_update_profile ໃນ Supabase ກ່ອນ — ຖາມແອດມິນ/ຜູ້ພັດທະນາ)');
+    showToast('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message + '\n\n(ຖ້າຄັ້ງທຳອິດ ອາດຕ້ອງເພີ່ມຟັງຊັນ customer_update_profile ໃນ Supabase ກ່ອນ — ຖາມແອດມິນ/ຜູ້ພັດທະນາ)');
   }
 }
 function showEditProfile(){
@@ -2429,7 +2475,7 @@ function showChangePassword(){
 async function doChangePassword(){
   try{
     await sbRPC('customer_change_password', {p_customer_id:STATE.customer.id, p_old:document.getElementById('oldPw').value, p_new:document.getElementById('newPw').value});
-    closeModal('modalAuth'); alert('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
+    closeModal('modalAuth'); showToast('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
   }catch(e){ document.getElementById('authErr').innerHTML = `<div class="err">ລະຫັດຜ່ານເກົ່າບໍ່ຖືກຕ້ອງ</div>`; }
 }
 
@@ -2610,7 +2656,7 @@ async function adminSetOrderStatus(id, status){
       }
       playSuccessSound(); renderAdminOrders();
     }
-    catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+    catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
   });
 }
 // Needs a new admin_delete_order RPC (SECURITY DEFINER) that removes the order + its
@@ -2628,7 +2674,7 @@ async function adminDeleteOrder(id){
       // itself isn't removing it server-side (see comment above) and needs to be fixed in Supabase.
       renderAdminOrders();
     }
-    catch(e){ playErrorSound(); alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+    catch(e){ playErrorSound(); showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
   });
 }
 async function renderAdminProducts(){
@@ -2808,7 +2854,7 @@ async function adminEditProduct(id){
       const videoFile = document.getElementById('pVideoFile').files[0];
       if(videoFile){
         const duration = await getVideoDuration(videoFile);
-        if(duration > 10.5){ alert(`ວິດີໂອຍາວເກີນໄປ (${duration.toFixed(1)} ວິນາທີ) — ອະນຸຍາດສູງສຸດ 10 ວິນາທີ`); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+        if(duration > 10.5){ showToast(`ວິດີໂອຍາວເກີນໄປ (${duration.toFixed(1)} ວິນາທີ) — ອະນຸຍາດສູງສຸດ 10 ວິນາທີ`); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
         pendingVideoUrl = await sbUpload('khaidee-products', `video_${Date.now()}_${videoFile.name}`, videoFile);
       }
       const payload = {
@@ -2835,7 +2881,7 @@ async function adminEditProduct(id){
       }
       overlay.remove(); renderAdminProducts();
     }catch(e){
-      alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message);
+      showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message);
       btn.disabled = false; btn.textContent = 'ບັນທຶກ';
     }
   };
@@ -2848,9 +2894,9 @@ async function adminEditProduct(id){
    move behind a small server-side proxy instead of calling the API straight from the browser. */
 async function generateProductDescription(overlay){
   const key = STATE.settings.anthropic_api_key;
-  if(!key){ alert('ກະລຸນາຕັ້ງຄ່າ Anthropic API Key ໃນໜ້າ "ການຕັ້ງຄ່າ" ກ່ອນ'); return; }
+  if(!key){ showToast('ກະລຸນາຕັ້ງຄ່າ Anthropic API Key ໃນໜ້າ "ການຕັ້ງຄ່າ" ກ່ອນ'); return; }
   const nameLo = overlay.querySelector('#pNameLo').value.trim();
-  if(!nameLo){ alert('ກະລຸນາພິມຊື່ສິນຄ້າ (ພາສາລາວ) ກ່ອນ ເພື່ອໃຫ້ AI ຮູ້ວ່າຈະຂຽນລາຍລະອຽດຫຍັງ'); return; }
+  if(!nameLo){ showToast('ກະລຸນາພິມຊື່ສິນຄ້າ (ພາສາລາວ) ກ່ອນ ເພື່ອໃຫ້ AI ຮູ້ວ່າຈະຂຽນລາຍລະອຽດຫຍັງ'); return; }
   const catId = Number(overlay.querySelector('#pCat').value);
   const catName = (STATE.categories.find(c=>c.id===catId)||{}).name_lo || '';
   const price = overlay.querySelector('#pPrice').value;
@@ -2878,7 +2924,7 @@ async function generateProductDescription(overlay){
     if(!text) throw new Error('ບໍ່ໄດ້ຮັບຄຳຕອບຈາກ AI');
     overlay.querySelector('#pDesc').value = text;
   }catch(e){
-    alert('ຂຽນລາຍລະອຽດບໍ່ສຳເລັດ: ' + e.message);
+    showToast('ຂຽນລາຍລະອຽດບໍ່ສຳເລັດ: ' + e.message);
   }finally{
     btn.disabled = false; btn.textContent = '🤖 ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ';
   }
@@ -2914,7 +2960,7 @@ async function renderAdminCategories(){
 async function adminDeleteCategory(id){
   if(!confirm('ລຶບໝວດໝູ່ນີ້? ສິນຄ້າທີ່ຢູ່ໃນໝວດນີ້ອາດໄດ້ຮັບຜົນກະທົບ')) return;
   try{ await sbRPC('admin_delete_category', {p_password:STATE.adminPassword, p_category_id:id}); renderAdminCategories(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditCategory(id){
   const c = id ? STATE.categories.find(x=>x.id===id) : {};
@@ -2999,7 +3045,7 @@ async function adminResetPw(id){
   const pw = prompt('ຕັ້ງລະຫັດຜ່ານໃໝ່ໃຫ້ລູກຄ້າ (ຢ່າງໜ້ອຍ 6 ໂຕ):');
   if(!pw || pw.length<6) return;
   await sbRPC('admin_reset_customer_password', {p_password:STATE.adminPassword, p_customer_id:id, p_new_password:pw});
-  alert('ຣີເຊັດລະຫັດຜ່ານແລ້ວ ແຈ້ງລູກຄ້າໃຫ້ປ່ຽນລະຫັດຜ່ານໃໝ່ອີກຄັ້ງຫຼັງເຂົ້າສູ່ລະບົບ');
+  showToast('ຣີເຊັດລະຫັດຜ່ານແລ້ວ ແຈ້ງລູກຄ້າໃຫ້ປ່ຽນລະຫັດຜ່ານໃໝ່ອີກຄັ້ງຫຼັງເຂົ້າສູ່ລະບົບ');
 }
 async function adminAdjustWallet(id){
   const amt = prompt('ຈຳນວນເງິນ (ໃສ່ຕິດລົບເພື່ອຫັກເງິນ):');
@@ -3009,7 +3055,7 @@ async function adminAdjustWallet(id){
       await sbRPC('admin_adjust_wallet', {p_password:STATE.adminPassword, p_customer_id:id, p_amount:Number(amt), p_note:'ປັບໂດຍແອດມິນ'});
       playSuccessSound();
       renderAdminCustomers();
-    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
   });
 }
 /* ============================================================ SELLERS (KYC approval queue)
@@ -3061,7 +3107,7 @@ async function renderAdminSellers(){
 async function adminReviewNameChange(id, approve){
   const note = approve ? null : (prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຖ້າມີ):')||null);
   try{ await sbRPC('admin_review_name_change', {p_password:STATE.adminPassword, p_request_id:id, p_approve:approve, p_note:note}); renderAdminSellers(); }
-  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminSellerFilterSet(s){ STATE.adminSellerFilter = s; renderAdminSellers(); }
 function renderAdminSellerList(){
@@ -3106,7 +3152,7 @@ async function adminToggleSellerVerified(id, verified){
     const s = STATE.adminSellers.find(x=>x.id===id); if(s) s.is_verified = verified;
     const pub = sellerById(id); if(pub) pub.is_verified = verified;
     renderAdminSellerList();
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditSellerProfile(id){
   const s = id ? STATE.adminSellers.find(x=>x.id===id) : {};
@@ -3144,39 +3190,39 @@ function adminEditSellerProfile(id){
       if(pwEl && pwEl.value) payload.password = pwEl.value;
       await sbRPC('admin_upsert_seller', {p_password:STATE.adminPassword, p_seller:payload});
       overlay.remove(); renderAdminSellers();
-    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { btn.disabled = false; }
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { btn.disabled = false; }
   };
 }
 async function adminDeleteSeller(id){
   if(!confirm('ລຶບຮ້ານນີ້? ສິນຄ້າຂອງຮ້ານຈະບໍ່ຖືກລຶບ ແຕ່ຈະບໍ່ມີເຈົ້າຂອງຮ້ານອີກຕໍ່ໄປ')) return;
   try{ await sbRPC('admin_delete_seller', {p_password:STATE.adminPassword, p_seller_id:id}); renderAdminSellers(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminApproveSeller(id){
   if(!confirm('ອະນຸມັດຜູ້ຂາຍນີ້? ຮ້ານຄ້ານີ້ຈະສາມາດເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້')) return;
   try{ await sbRPC('admin_seller_approve', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
-  catch(e){ alert('ອະນຸມັດບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ອະນຸມັດບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminRejectSeller(id){
   const reason = prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຈະສະແດງໃຫ້ຜູ້ຂາຍເຫັນ):');
   if(reason===null) return;
   try{ await sbRPC('admin_seller_reject', {p_password: STATE.adminPassword, p_seller_id: id, p_reason: reason}); renderAdminSellers(); }
-  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminSuspendSeller(id){
   if(!confirm('ລະງັບການຂາຍຂອງຮ້ານນີ້ຊົ່ວຄາວ?')) return;
   try{ await sbRPC('admin_seller_suspend', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
-  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminReactivateSeller(id){
   try{ await sbRPC('admin_seller_reactivate', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
-  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminResetSellerPw(id){
   const pw = prompt('ຕັ້ງລະຫັດຜ່ານໃໝ່ໃຫ້ຜູ້ຂາຍ (ຢ່າງໜ້ອຍ 6 ໂຕ):');
   if(!pw || pw.length<6) return;
-  try{ await sbRPC('admin_reset_seller_password', {p_password: STATE.adminPassword, p_seller_id: id, p_new_password: pw}); alert('ຣີເຊັດລະຫັດຜ່ານແລ້ວ'); }
-  catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  try{ await sbRPC('admin_reset_seller_password', {p_password: STATE.adminPassword, p_seller_id: id, p_new_password: pw}); showToast('ຣີເຊັດລະຫັດຜ່ານແລ້ວ'); }
+  catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 
 async function renderAdminTopups(){
@@ -3215,7 +3261,7 @@ async function adminApproveTopup(id, approve){
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminTopups();
-    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
   });
 }
 // Needs a new admin_delete_topup RPC (SECURITY DEFINER) that just removes the row from the
@@ -3235,7 +3281,7 @@ async function adminDeleteTopup(id){
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminTopups();
-    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
   });
 }
 /* ============================================================ SELLER PAYOUTS (withdraw requests) ============================================================
@@ -3287,7 +3333,7 @@ async function adminApprovePayout(id, approve){
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminPayouts();
-    }catch(e){ playErrorSound(); alert('ຜິດພາດ: ' + e.message); }
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
   });
 }
 async function renderAdminCarriers(){
@@ -3306,7 +3352,7 @@ async function renderAdminCarriers(){
 async function adminDeleteCarrier(id){
   if(!confirm('ລຶບບໍລິສັດຂົນສົ່ງນີ້?')) return;
   try{ await sbRPC('admin_delete_carrier', {p_password:STATE.adminPassword, p_carrier_id:id}); renderAdminCarriers(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditCarrier(id){
   const c = id ? STATE.carriers.find(x=>x.id===id) : {};
@@ -3351,7 +3397,7 @@ async function renderAdminBanks(){
 async function adminDeleteBank(id){
   if(!confirm('ລຶບທະນາຄານນີ້?')) return;
   try{ await sbRPC('admin_delete_bank_account', {p_password:STATE.adminPassword, p_bank_id:id}); renderAdminBanks(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditBank(id){
   const b = id ? adminBanksList.find(x=>x.id===id) : {};
@@ -3397,7 +3443,7 @@ function adminEditBank(id){
         sort_order:Number(document.getElementById('bkSort').value)||999,
         is_active:document.getElementById('bkActive').checked}});
       overlay.remove(); renderAdminBanks();
-    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { saveBtn.disabled = false; }
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { saveBtn.disabled = false; }
   };
 }
 async function renderAdminCoupons(){
@@ -3446,7 +3492,7 @@ function adminEditCoupon(id){
         expires_at:document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
         is_active:document.getElementById('cpActive').checked}});
       overlay.remove(); renderAdminCoupons();
-    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); }
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); }
   };
 }
 // Needs new admin_list_coupons(p_password) and admin_delete_coupon(p_password, p_coupon_id) RPCs;
@@ -3454,7 +3500,7 @@ function adminEditCoupon(id){
 async function adminDeleteCoupon(id){
   if(!confirm('ລຶບຄູປອງນີ້?')) return;
   try{ await sbRPC('admin_delete_coupon', {p_password:STATE.adminPassword, p_coupon_id:id}); renderAdminCoupons(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function renderAdminAds(){
   const body = document.getElementById('adminBody');
@@ -3528,7 +3574,7 @@ function adminEditAd(id){
     try{
       const file = document.getElementById('adImageFile').files[0];
       if(file){ pendingImageUrl = await sbUpload('khaidee-products', `ad_${Date.now()}_${file.name}`, file); }
-      if(!pendingImageUrl){ alert('ກະລຸນາອັບໂຫລດຮູບພາບ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+      if(!pendingImageUrl){ showToast('ກະລຸນາອັບໂຫລດຮູບພາບ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
       await sbRPC('admin_upsert_ad', {p_password: STATE.adminPassword, p_ad: {
         id: id||null, placement: document.getElementById('adPlacement').value,
         image_url: pendingImageUrl, title: document.getElementById('adTitle').value,
@@ -3536,13 +3582,13 @@ function adminEditAd(id){
         sort_order: Number(document.getElementById('adSort').value)||0, is_active: document.getElementById('adActive').checked
       }});
       overlay.remove(); renderAdminAds();
-    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
   };
 }
 async function adminDeleteAd(id){
   if(!confirm('ລຶບໂຄສະນານີ້?')) return;
   try{ await sbRPC('admin_delete_ad', {p_password: STATE.adminPassword, p_ad_id: id}); renderAdminAds(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function renderAdminSettings(){
   const body = document.getElementById('adminBody');
@@ -3595,15 +3641,15 @@ async function renderAdminSettings(){
     };
     for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
     await loadSettings();
-    alert('ບັນທຶກແລ້ວ');
+    showToast('ບັນທຶກແລ້ວ');
   };
   document.getElementById('stAiKeySave').onclick = async ()=>{
     const btn = document.getElementById('stAiKeySave'); btn.disabled = true;
     try{
       await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:'anthropic_api_key', p_value:document.getElementById('stAiKey').value.trim()});
       await loadSettings();
-      alert('ບັນທຶກ API Key ແລ້ວ');
-    }catch(e){ alert('ຜິດພາດ: ' + e.message); } finally { btn.disabled = false; }
+      showToast('ບັນທຶກ API Key ແລ້ວ');
+    }catch(e){ showToast('ຜິດພາດ: ' + e.message); } finally { btn.disabled = false; }
   };
   document.getElementById('stWalletSave').onclick = async ()=>{
     const btn = document.getElementById('stWalletSave'); btn.disabled=true;
@@ -3614,8 +3660,8 @@ async function renderAdminSettings(){
       const updates = { wallet_qr_url: qrUrl, wallet_instructions: document.getElementById('stWalletInfo').value };
       for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
       await loadSettings(); renderAdminSettings();
-      alert('ບັນທຶກຂໍ້ມູນກະເປົາເງິນແລ້ວ');
-    }catch(e){ alert('ຜິດພາດ: '+e.message); } finally { btn.disabled=false; }
+      showToast('ບັນທຶກຂໍ້ມູນກະເປົາເງິນແລ້ວ');
+    }catch(e){ showToast('ຜິດພາດ: '+e.message); } finally { btn.disabled=false; }
   };
   document.getElementById('stContactSave').onclick = async ()=>{
     const btn = document.getElementById('stContactSave'); btn.disabled=true;
@@ -3626,15 +3672,15 @@ async function renderAdminSettings(){
       const updates = { contact_qr_url: qrUrl, contact_whatsapp_link: document.getElementById('stContactWa').value, contact_description: document.getElementById('stContactDesc').value };
       for(const k in updates){ await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:k, p_value:updates[k]}); }
       await loadSettings(); renderAdminSettings();
-      alert('ບັນທຶກຂໍ້ມູນຕິດຕໍ່ແລ້ວ');
-    }catch(e){ alert('ຜິດພາດ: '+e.message); } finally { btn.disabled=false; }
+      showToast('ບັນທຶກຂໍ້ມູນຕິດຕໍ່ແລ້ວ');
+    }catch(e){ showToast('ຜິດພາດ: '+e.message); } finally { btn.disabled=false; }
   };
   document.getElementById('apSave').onclick = async ()=>{
     try{
       await sbRPC('admin_change_password', {p_old:document.getElementById('apOld').value, p_new:document.getElementById('apNew').value});
       STATE.adminPassword = document.getElementById('apNew').value;
-      alert('ປ່ຽນລະຫັດຜ່ານແອດມິນສຳເລັດ');
-    }catch(e){ alert('ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ'); }
+      showToast('ປ່ຽນລະຫັດຜ່ານແອດມິນສຳເລັດ');
+    }catch(e){ showToast('ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ'); }
   };
 }
 

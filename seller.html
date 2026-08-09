@@ -115,9 +115,31 @@ nav.bottom .icon{font-size:19px;}
 #authScreen .card{width:100%; max-width:360px; background:#fff; border-radius:18px; padding:22px 20px; box-shadow:var(--shadow);}
 #authScreen h2{margin:0 0 4px; font-size:17px; text-align:center;}
 #authScreen .sub{text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:18px;}
+
+/* ---- Custom in-app toast (replaces the browser's native showToast() popup so success/error
+   messages always look like part of the app, not a Safari/Chrome system dialog) ---- */
+#toastStack{position:fixed; left:0; right:0; top:calc(env(safe-area-inset-top,0px) + 14px); z-index:9999;
+  display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; padding:0 16px;}
+.toast{
+  max-width:420px; width:100%; background:#fff; border-radius:14px; padding:12px 14px; display:flex; align-items:flex-start; gap:10px;
+  box-shadow:0 10px 30px rgba(43,27,20,.22); border-left:4px solid var(--maroon); pointer-events:auto;
+  transform:translateY(-18px); opacity:0; transition:transform .25s ease, opacity .25s ease; font-size:13px; line-height:1.5; color:var(--ink);
+}
+.toast.show{transform:translateY(0); opacity:1;}
+.toast .ic{font-size:17px; flex-shrink:0; margin-top:1px;}
+.toast .msg{flex:1; white-space:pre-line; word-break:break-word;}
+.toast .x{background:none; border:none; color:var(--ink-soft); font-size:13px; padding:2px 0 0 4px; flex-shrink:0; line-height:1;}
+.toast.success{border-left-color:var(--ok);}
+.toast.error{border-left-color:var(--danger);}
+.toast.warn{border-left-color:var(--warn);}
+.toast.info{border-left-color:var(--gold);}
 </style>
 </head>
 <body>
+
+<!-- Custom toast notifications live above everything else (splash, modals) so every
+     success/error message the app shows is drawn in KhaiDee Seller's own style. -->
+<div id="toastStack"></div>
 
 <!-- SPLASH -->
 <div id="splashScreen">
@@ -192,6 +214,33 @@ nav.bottom .icon{font-size:19px;}
 </div>
 
 <script>
+/* ============================================================ TOAST NOTIFICATIONS ============================================================
+   Replaces the browser's native showToast() so every "it worked" / "it failed" message the app
+   shows is drawn in KhaiDee Seller's own colors instead of a Safari/Chrome/Android system popup.
+   Every old alert(...) call below has simply been renamed to showToast(...) — the type (success/
+   error/warning) is auto-detected from the actual message text at the moment it's shown, so
+   this works for dynamic messages (e.g. showToast('...' + e.message)) without touching every call site. */
+function showToast(message, type){
+  if(!type){
+    const t = String(message||'');
+    if(/ຜິດພາດ|ບໍ່ສຳເລັດ|ບໍ່ຖືກຕ້ອງ|ໝົດອາຍຸ|ໝົດແລ້ວ|ບໍ່ພຽງພໍ|ໃຫຍ່ເກີນໄປ|ຍາວເກີນໄປ|ບໍ່ພົບ|ບໍ່ສາມາດ/.test(t)) type = 'error';
+    else if(/ກະລຸນາ/.test(t)) type = 'warn';
+    else type = 'success';
+  }
+  const stack = document.getElementById('toastStack');
+  if(!stack){ window.alert(message); return; } // safety net if the container is ever missing
+  const icons = {success:'✅', error:'❌', warn:'⚠️', info:'ℹ️'};
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.innerHTML = `<span class="ic">${icons[type]||icons.info}</span><span class="msg"></span><button class="x" aria-label="close">✕</button>`;
+  el.querySelector('.msg').textContent = message; // textContent only — never render raw HTML here
+  stack.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  const remove = ()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 250); };
+  const timer = setTimeout(remove, type==='error' ? 4200 : 3200);
+  el.querySelector('.x').onclick = ()=>{ clearTimeout(timer); remove(); };
+}
+
 /* ============================================================
    CONFIG — same Supabase project as the main KhaiDee site, so the
    seller app shares the same products/orders backend.
@@ -486,7 +535,7 @@ async function uploadGroupValueImage(i, j, file){
     const url = await sbUpload('khaidee-products', `variant_${STATE.seller.id}_${Date.now()}_${file.name}`, file);
     pGroups[i].values[j].image_url = url;
     renderGroupsBox();
-  }catch(e){ alert('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message); }
+  }catch(e){ showToast('ອັບໂຫລດຮູບບໍ່ສຳເລັດ: ' + e.message); }
 }
 function cartesian(arrs){
   return arrs.reduce((acc,cur)=> acc.flatMap(a=>cur.map(c=>[...a,c])), [[]]);
@@ -591,7 +640,7 @@ async function editProduct(id){
       const videoFile = document.getElementById('pVideoFile').files[0];
       if(videoFile){
         const duration = await getVideoDuration(videoFile);
-        if(duration > 10.5){ alert(`ວິດີໂອຍາວເກີນໄປ (${duration.toFixed(1)} ວິນາທີ) — ອະນຸຍາດສູງສຸດ 10 ວິນາທີ`); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+        if(duration > 10.5){ showToast(`ວິດີໂອຍາວເກີນໄປ (${duration.toFixed(1)} ວິນາທີ) — ອະນຸຍາດສູງສຸດ 10 ວິນາທີ`); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
         pendingVideoUrl = await sbUpload('khaidee-products', `video_${STATE.seller.id}_${Date.now()}_${videoFile.name}`, videoFile);
       }
       const payload = {
@@ -615,7 +664,7 @@ async function editProduct(id){
           p_groups: validGroups.map(g=>({name:g.name, values:g.values})), p_variants: pVariants});
       }
       overlay.remove(); renderProducts();
-    }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
   };
 }
 // reads a video file's duration client-side (no upload needed) so we can reject >10s clips early
@@ -631,7 +680,7 @@ function getVideoDuration(file){
 async function deleteProduct(id){
   if(!confirm('ລຶບສິນຄ້ານີ້?')) return;
   try{ await sbRPC('seller_product_delete', {p_seller_id: STATE.seller.id, p_product_id: id}); renderProducts(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 
 /* ============================================================ ORDERS (order items belonging to this seller's products) ============================================================ */
@@ -663,18 +712,18 @@ async function renderOrders(){
 async function setItemStatus(itemId, status){
   if(status==='cancelled' && !confirm('ຍົກເລີກລາຍການນີ້?')) return;
   try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: status}); renderOrders(); }
-  catch(e){ alert('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function markDelivered(itemId){
   if(!confirm('ຢືນຢັນວ່າລູກຄ້າໄດ້ຮັບສິນຄ້ານີ້ແລ້ວບໍ? (ແອດມິນຈະກວດສອບ ແລະ ໂອນເງິນເຂົ້າກະເປົາຂອງທ່ານຫລັງຈາກນີ້)')) return;
   try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'delivered'}); renderOrders(); }
-  catch(e){ alert('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
 }
 /* ---- 3-step packing / shipping photo flow ---- */
 async function openShipmentSheet(itemId){
   let item;
   try{ item = await sbRPC('seller_order_item_get', {p_seller_id: STATE.seller.id, p_order_item_id: itemId}); }
-  catch(e){ alert('ໂຫລດຂໍ້ມູນບໍ່ສຳເລັດ'); return; }
+  catch(e){ showToast('ໂຫລດຂໍ້ມູນບໍ່ສຳເລັດ'); return; }
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   const stepBox = (n, label, url, atField)=>`
     <div style="background:var(--cream); border-radius:10px; padding:12px; margin-bottom:10px;">
@@ -702,7 +751,7 @@ async function openShipmentSheet(itemId){
 async function uploadShipStep(itemId, step){
   const fileInput = document.getElementById(`shipStep${step}File`);
   const file = fileInput.files[0];
-  if(!file){ alert('ກະລຸນາເລືອກຮູບກ່ອນ'); return; }
+  if(!file){ showToast('ກະລຸນາເລືອກຮູບກ່ອນ'); return; }
   try{
     const url = await sbUpload('khaidee-products', `shipment_${itemId}_step${step}_${Date.now()}_${file.name}`, file);
     const body = {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_step: step, p_photo_url: url};
@@ -714,15 +763,15 @@ async function uploadShipStep(itemId, step){
     if(window._closeShipSheet) window._closeShipSheet();
     openShipmentSheet(itemId);
     renderOrders();
-  }catch(e){ alert('ອັບໂຫລດບໍ່ສຳເລັດ: ' + e.message); }
+  }catch(e){ showToast('ອັບໂຫລດບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function confirmShipment(itemId){
   try{
     await sbRPC('seller_order_item_confirm_shipment', {p_seller_id: STATE.seller.id, p_order_item_id: itemId});
     if(window._closeShipSheet) window._closeShipSheet();
-    alert('ຢືນຢັນແລ້ວ! ລູກຄ້າໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມລິ້ງຕິດຕາມແລ້ວ');
+    showToast('ຢືນຢັນແລ້ວ! ລູກຄ້າໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມລິ້ງຕິດຕາມແລ້ວ');
     renderOrders();
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 
 /* ============================================================ ACCOUNT ============================================================ */
@@ -793,8 +842,8 @@ function openNameChangeRequest(){
   const name = prompt('ຊື່ຮ້ານໃໝ່ທີ່ຕ້ອງການ (ຈະຕ້ອງລໍຖ້າແອດມິນອະນຸມັດກ່ອນຈຶ່ງຈະປ່ຽນຈິງ):', STATE.seller.store_name||'');
   if(!name || !name.trim()) return;
   sbRPC('seller_request_name_change', {p_seller_id: STATE.seller.id, p_requested_name: name.trim()})
-    .then(()=>{ alert('ສົ່ງຄຳຂໍປ່ຽນຊື່ຮ້ານແລ້ວ ລໍຖ້າແອດມິນອະນຸມັດ'); refreshNameChangeStatus(); })
-    .catch(e=> alert('ບໍ່ສຳເລັດ: ' + e.message));
+    .then(()=>{ showToast('ສົ່ງຄຳຂໍປ່ຽນຊື່ຮ້ານແລ້ວ ລໍຖ້າແອດມິນອະນຸມັດ'); refreshNameChangeStatus(); })
+    .catch(e=> showToast('ບໍ່ສຳເລັດ: ' + e.message));
 }
 async function saveAccountMedia(){
   const btn = document.getElementById('accMediaSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
@@ -804,7 +853,7 @@ async function saveAccountMedia(){
     if(logoFile){ logoUrl = await sbUpload('khaidee-products', `seller_logo_${STATE.seller.id}_${Date.now()}_${logoFile.name}`, logoFile); }
     const coverFile = document.getElementById('accCoverFile').files[0];
     if(coverFile){ coverUrl = await sbUpload('khaidee-products', `seller_cover_${STATE.seller.id}_${Date.now()}_${coverFile.name}`, coverFile); }
-    if(!logoUrl && !coverUrl){ alert('ກະລຸນາເລືອກຮູບກ່ອນ'); btn.disabled=false; btn.textContent='ບັນທຶກໂລໂກ້/ຮູບປົກ'; return; }
+    if(!logoUrl && !coverUrl){ showToast('ກະລຸນາເລືອກຮູບກ່ອນ'); btn.disabled=false; btn.textContent='ບັນທຶກໂລໂກ້/ຮູບປົກ'; return; }
     await sbRPC('seller_update_profile', {p_seller_id: STATE.seller.id, p_phone:null, p_email:null, p_logo_url:logoUrl, p_cover_url:coverUrl});
     if(logoUrl) STATE.seller.logo_url = logoUrl;
     if(coverUrl) STATE.seller.cover_url = coverUrl;
@@ -812,8 +861,8 @@ async function saveAccountMedia(){
     const logoBox = document.getElementById('brandLogoBox');
     if(logoBox && STATE.seller.logo_url) logoBox.innerHTML = `<img src="${STATE.seller.logo_url}">`;
     renderAccount();
-    alert('ບັນທຶກແລ້ວ');
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກໂລໂກ້/ຮູບປົກ'; }
+    showToast('ບັນທຶກແລ້ວ');
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກໂລໂກ້/ຮູບປົກ'; }
 }
 async function saveAccount(){
   try{
@@ -822,23 +871,23 @@ async function saveAccount(){
     STATE.seller.phone = document.getElementById('accPhone').value;
     STATE.seller.email = document.getElementById('accEmail').value;
     saveSeller(); renderAccount();
-    alert('ບັນທຶກແລ້ວ');
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+    showToast('ບັນທຶກແລ້ວ');
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function saveShipRate(){
   const rate = Number(document.getElementById('accShipRate').value);
-  if(!rate || rate<0){ alert('ອັດຕາຄ່າສົ່ງບໍ່ຖືກຕ້ອງ'); return; }
+  if(!rate || rate<0){ showToast('ອັດຕາຄ່າສົ່ງບໍ່ຖືກຕ້ອງ'); return; }
   try{
     await sbRPC('seller_set_shipping_rate', {p_seller_id: STATE.seller.id, p_rate: rate});
     STATE.seller.shipping_rate_per_kg = rate; saveSeller();
-    alert('ບັນທຶກອັດຕາຄ່າສົ່ງແລ້ວ');
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+    showToast('ບັນທຶກອັດຕາຄ່າສົ່ງແລ້ວ');
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function changePw(){
   try{
     await sbRPC('seller_change_password', {p_seller_id: STATE.seller.id, p_old: document.getElementById('accOldPw').value, p_new: document.getElementById('accNewPw').value});
-    alert('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+    showToast('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 
 /* ============================================================ WALLET ============================================================ */
@@ -900,17 +949,17 @@ function openWithdrawSheet(balance){
 async function submitWithdraw(balance){
   const amount = Number(document.getElementById('wAmount').value);
   const qrFile = document.getElementById('wQrFile').files[0];
-  if(!amount || amount<=0 || amount>balance){ alert('ຈຳນວນເງິນບໍ່ຖືກຕ້ອງ'); return; }
-  if(!qrFile && !STATE.seller.withdraw_qr_url){ alert('ກະລຸນາອັບໂຫລດຮູບ QR Code'); return; }
+  if(!amount || amount<=0 || amount>balance){ showToast('ຈຳນວນເງິນບໍ່ຖືກຕ້ອງ'); return; }
+  if(!qrFile && !STATE.seller.withdraw_qr_url){ showToast('ກະລຸນາອັບໂຫລດຮູບ QR Code'); return; }
   const btn = document.getElementById('wSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...';
   try{
     let qrUrl = STATE.seller.withdraw_qr_url || null;
     if(qrFile){ qrUrl = await sbUpload('khaidee-products', `seller_qr_${STATE.seller.id}_${Date.now()}_${qrFile.name}`, qrFile); STATE.seller.withdraw_qr_url = qrUrl; saveSeller(); }
     await sbRPC('seller_request_withdraw', {p_seller_id: STATE.seller.id, p_amount: amount, p_qr_url: qrUrl});
     if(window._closeWithdrawSheet) window._closeWithdrawSheet();
-    alert('ສົ່ງຄຳຂໍຖອນເງິນແລ້ວ ລໍຖ້າແອດມິນອະນຸມັດ');
+    showToast('ສົ່ງຄຳຂໍຖອນເງິນແລ້ວ ລໍຖ້າແອດມິນອະນຸມັດ');
     renderWallet();
-  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍຖອນເງິນ'; }
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍຖອນເງິນ'; }
 }
 
 /* ============================================================ COUPONS (seller's own discount / free-shipping coupons) ============================================================ */
@@ -975,16 +1024,16 @@ function editCoupon(id){
         expires_at: document.getElementById('cExpires').value ? document.getElementById('cExpires').value+'T23:59:59' : null,
         is_active: document.getElementById('cActive').checked
       };
-      if(!payload.code){ alert('ກະລຸນາໃສ່ລະຫັດຄູປອງ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+      if(!payload.code){ showToast('ກະລຸນາໃສ່ລະຫັດຄູປອງ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
       await sbRPC('seller_coupon_upsert', {p_seller_id: STATE.seller.id, p_coupon: payload});
       overlay.remove(); refreshCouponsList();
-    }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+    }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
   };
 }
 async function deleteCoupon(id){
   if(!confirm('ລຶບຄູປອງນີ້?')) return;
   try{ await sbRPC('seller_coupon_delete', {p_seller_id: STATE.seller.id, p_id: id}); refreshCouponsList(); }
-  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 
 /* ============================================================ SELLER GUIDE (shown before applying to sell) ============================================================ */
