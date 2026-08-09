@@ -826,17 +826,12 @@ const CARRIER_PRESETS = [
   {name:'ໄປສະນີລາວ (Lao Post / EMS)', url:'http://www.laopost.com.la/'},
   {name:'ອື່ນໆ (ລະບຸເອງ)', url:''}
 ];
-// True when this order item is safe for the seller to start packing/shipping: either the customer
-// has already paid (bank transfer/QR — confirmed by admin or auto-confirmed), or it's a
-// cash-on-delivery item where payment only happens once the courier hands it over, so there's
-// nothing to wait for. Requires seller_order_items_list to return payment_status/payment_method
-// (or is_cod) per item — missing/older data defaults to "not yet payable" so unpaid orders never
-// slip through, matching the "don't ship until payment is confirmed, except COD" rule.
+// True when this order item is safe for the seller to start packing/shipping: the backend
+// (seller_order_items_list) computes this from the parent order's real payment status —
+// COD orders are always allowed; qr/wallet/transfer orders need order.status to have moved past
+// pending/pending_verification (i.e. actually paid/confirmed) first.
 function canArrangeShipment(i){
-  const method = (i.payment_method||'').toLowerCase();
-  const isCod = i.is_cod === true || method==='cod' || method==='cash_on_delivery' || method==='collect';
-  if(isCod) return true;
-  return i.payment_status === 'paid' || i.is_paid === true;
+  return i.payment_confirmed === true;
 }
 let ORDERS_CACHE = [];
 async function renderOrders(){
@@ -989,12 +984,6 @@ async function uploadShipStep(itemId, step){
       body.p_tracking_url = document.getElementById('shipTrackingUrl').value || null;
     }
     await sbRPC('seller_order_item_update_shipment', body);
-    // Step 1 (packing photo) uploaded → immediately flip the order to "ແພັກແລ້ວ" (packed) so both
-    // the seller's list and the customer's order status reflect real progress right away, instead
-    // of sitting on "ລໍຖ້າແພັກ" until all 3 photos + final confirm are done.
-    if(step===1){
-      try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'confirmed'}); }catch(e){ /* non-fatal — confirmShipment will still flip it later */ }
-    }
     if(window._closeShipSheet) window._closeShipSheet();
     openShipmentSheet(itemId);
     renderOrders();
