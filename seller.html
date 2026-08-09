@@ -163,6 +163,12 @@ nav.bottom .icon{font-size:19px;}
     <div id="ordersBody" style="padding-bottom:10px;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
   </div>
 
+  <!-- PAGE: WALLET -->
+  <div id="pageWallet" class="apppage hidden">
+    <div class="page-topbar">💰 ກະເປົາເງິນຮ້ານຄ້າ</div>
+    <div id="walletBody"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+  </div>
+
   <!-- PAGE: ACCOUNT -->
   <div id="pageAccount" class="apppage hidden">
     <div class="page-topbar">👤 ບັນຊີຮ້ານຄ້າ</div>
@@ -173,6 +179,7 @@ nav.bottom .icon{font-size:19px;}
     <button class="navbtn active" data-page="dashboard"><span class="icon">📊</span><span>ພາບລວມ</span></button>
     <button class="navbtn" data-page="products"><span class="icon">🛍️</span><span>ສິນຄ້າ</span></button>
     <button class="navbtn" data-page="orders"><span class="icon">📦</span><span>ອໍເດີ</span></button>
+    <button class="navbtn" data-page="wallet"><span class="icon">💰</span><span>ກະເປົາເງິນ</span></button>
     <button class="navbtn" data-page="account"><span class="icon">👤</span><span>ບັນຊີ</span></button>
   </nav>
 </div>
@@ -254,6 +261,7 @@ function showAuthScreen(mode){
       <div class="field"><label>ຮູບຖ່າຍບັດປະຈຳຕົວ (ຖືບັດຄູ່ກັບໜ້າ) *</label><input type="file" id="sRegIdCard" accept="image/*" capture="environment" onchange="onSellerIdCardChange()"></div>
       <div id="sRegIdPreview"></div>
       <div class="hint" style="margin:10px 0 12px;">📌 ຂໍ້ມູນທັງໝົດຈະຖືກສົ່ງໃຫ້ແອດມິນຫລັງບ້ານກວດສອບ ແລະ ຢືນຢັນຕົວຕົນກ່ອນ — ໄດ້ຮັບອະນຸມັດແລ້ວທ່ານຈຶ່ງຈະໃຊ້ອີເມວ/ລະຫັດຜ່ານຂ້າງເທິງເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້</div>
+      <button type="button" class="btn btn-ghost" style="margin-bottom:10px;" onclick="showSellerGuide()">📖 ອ່ານຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍກ່ອນ</button>
       <button class="btn btn-primary" id="sRegSubmitBtn" onclick="doSellerRegister()">📤 ສົ່ງຄຳຂໍສະໝັກ</button>
       <div class="hint" style="text-align:center; margin-top:12px;">ມີບັນຊີແລ້ວ? <a href="#" id="toLogin">ເຂົ້າສູ່ລະບົບ</a></div>`;
     document.getElementById('toLogin').onclick = (e)=>{ e.preventDefault(); showAuthScreen('login'); };
@@ -341,13 +349,14 @@ async function doSellerRegister(){
 function sellerLogout(){ STATE.seller = null; saveSeller(); location.reload(); }
 
 /* ============================================================ NAVIGATION ============================================================ */
-const PAGE_IDS = {dashboard:'pageDashboard', products:'pageProducts', orders:'pageOrders', account:'pageAccount'};
+const PAGE_IDS = {dashboard:'pageDashboard', products:'pageProducts', orders:'pageOrders', wallet:'pageWallet', account:'pageAccount'};
 function goPage(page){
   Object.entries(PAGE_IDS).forEach(([key,id])=>{ document.getElementById(id).classList.toggle('hidden', key!==page); });
   document.querySelectorAll('.navbtn').forEach(b=> b.classList.toggle('active', b.dataset.page===page));
   if(page==='dashboard') renderDashboard();
   else if(page==='products') renderProducts();
   else if(page==='orders') renderOrders();
+  else if(page==='wallet') renderWallet();
   else if(page==='account') renderAccount();
 }
 document.querySelectorAll('.navbtn').forEach(b=> b.onclick = ()=> goPage(b.dataset.page));
@@ -387,31 +396,146 @@ async function renderProducts(){
         </div>`).join(''));
   }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດສິນຄ້າໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
 }
-function editProduct(id){
+let pAttrDefs = [];      // category_attributes for the currently selected category
+let pAttrValues = {};    // {attribute_id: value}
+let pGroups = [];        // [{name, values:[{value,image_url}]}]
+let pVariants = [];      // [{value_labels:[...], price, compare_price, stock, sku}]
+
+async function loadCategoryAttrs(categoryId){
+  try{ pAttrDefs = await sbSelect('category_attributes', `category_id=eq.${categoryId}&order=sort_order.asc`); }
+  catch(e){ pAttrDefs = []; }
+}
+function renderAttrsBox(){
+  const box = document.getElementById('pAttrsBox');
+  if(!box) return;
+  if(!pAttrDefs.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div style="border-top:1px dashed var(--line); margin:14px 0 10px; padding-top:12px;">
+    <label style="font-weight:700; font-size:13px;">📋 ລາຍລະອຽດຕາມໝວດໝູ່ (ຍີ່ຫໍ້ / ຮຸ່ນ / ຂະໜາດ ...)</label></div>` +
+    pAttrDefs.map(a=>{
+      const val = pAttrValues[a.id] ?? '';
+      const req = a.is_required ? ' *' : '';
+      let inputHtml;
+      if(a.input_type==='select'){
+        const opts = (a.options||[]);
+        inputHtml = `<select data-attr="${a.id}" onchange="pAttrValues[${a.id}]=this.value">
+          <option value="">— ເລືອກ —</option>
+          ${opts.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
+        </select>`;
+      }else if(a.input_type==='number'){
+        inputHtml = `<input type="number" data-attr="${a.id}" value="${val}" oninput="pAttrValues[${a.id}]=this.value">`;
+      }else{
+        inputHtml = `<input type="text" data-attr="${a.id}" value="${val}" oninput="pAttrValues[${a.id}]=this.value">`;
+      }
+      return `<div class="field"><label>${a.name_lo}${req}</label>${inputHtml}</div>`;
+    }).join('');
+}
+function addVariantGroup(){
+  pGroups.push({name:'', values:[]});
+  renderGroupsBox();
+}
+function removeVariantGroup(i){ pGroups.splice(i,1); rebuildVariants(); renderGroupsBox(); }
+function renderGroupsBox(){
+  const box = document.getElementById('pGroupsBox');
+  if(!box) return;
+  box.innerHTML = pGroups.map((g,i)=>`
+    <div style="background:var(--cream); border-radius:10px; padding:10px; margin-bottom:8px;">
+      <div class="row2">
+        <div class="field" style="margin-bottom:6px;"><label>ຊື່ກຸ່ມ (ເຊັ່ນ: ໄຊສ໌, ສີ)</label><input value="${g.name}" oninput="pGroups[${i}].name=this.value"></div>
+        <div class="field" style="margin-bottom:6px;"><label>ຄ່າ (ຄັ້ນດ້ວຍ ,)</label><input value="${(g.values||[]).map(v=>v.value).join(', ')}" oninput="pGroups[${i}].values=this.value.split(',').map(s=>({value:s.trim()})).filter(v=>v.value)"></div>
+      </div>
+      <button type="button" class="btn-sm btn-ghost" style="color:var(--danger); border-color:var(--danger);" onclick="removeVariantGroup(${i})">🗑️ ລຶບກຸ່ມນີ້</button>
+    </div>`).join('') +
+    `<button type="button" class="btn-sm btn-ghost" onclick="rebuildVariants()">🔄 ສ້າງຕາຕະລາງລາຄາ/ສະຕັອກ</button>`;
+}
+function cartesian(arrs){
+  return arrs.reduce((acc,cur)=> acc.flatMap(a=>cur.map(c=>[...a,c])), [[]]);
+}
+function rebuildVariants(){
+  const validGroups = pGroups.filter(g=>g.name && g.values && g.values.length);
+  if(!validGroups.length){ pVariants = []; renderVariantsBox(); return; }
+  const combos = cartesian(validGroups.map(g=>g.values.map(v=>v.value)));
+  const basePrice = Number(document.getElementById('pPrice')?.value)||0;
+  const baseStock = Number(document.getElementById('pStock')?.value)||0;
+  pVariants = combos.map(labels=>{
+    const existing = pVariants.find(v=> JSON.stringify(v.value_labels)===JSON.stringify(labels));
+    return existing || {value_labels:labels, price:basePrice, compare_price:null, stock:baseStock, sku:''};
+  });
+  renderVariantsBox();
+}
+function renderVariantsBox(){
+  const box = document.getElementById('pVariantsBox');
+  if(!box) return;
+  if(!pVariants.length){ box.innerHTML=''; return; }
+  box.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+    <tr style="text-align:left; color:var(--ink-soft);"><th style="padding:4px;">ຕົວເລືອກ</th><th style="padding:4px;">ລາຄາ</th><th style="padding:4px;">ສະຕັອກ</th></tr>
+    ${pVariants.map((v,i)=>`<tr>
+      <td style="padding:4px; font-weight:600;">${v.value_labels.join(' / ')}</td>
+      <td style="padding:4px;"><input type="number" value="${v.price??''}" style="width:80px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].price=Number(this.value)||0"></td>
+      <td style="padding:4px;"><input type="number" value="${v.stock??0}" style="width:60px; padding:5px; border:1px solid var(--line); border-radius:6px;" oninput="pVariants[${i}].stock=Number(this.value)||0"></td>
+    </tr>`).join('')}
+  </table>`;
+}
+async function editProduct(id){
   const p = id ? STATE.products.find(x=>x.id===id) : {};
+  pAttrValues = {}; pGroups = []; pVariants = []; pAttrDefs = [];
+  const initialCat = p.category_id || (STATE.categories[0] && STATE.categories[0].id);
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂສິນຄ້າ':'ເພີ່ມສິນຄ້າ'}</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="field"><label>ໝວດໝູ່</label><select id="pCat">${STATE.categories.map(c=>`<option value="${c.id}" ${p.category_id===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
+    <div class="field"><label>ໝວດໝູ່</label><select id="pCat" onchange="onProductCategoryChange()">${STATE.categories.map(c=>`<option value="${c.id}" ${initialCat===c.id?'selected':''}>${c.name_lo}</option>`).join('')}</select></div>
     <div class="field"><label>ຊື່ (ລາວ)</label><input id="pNameLo" value="${p.name_lo||''}"></div>
     <div class="field"><label>ຊື່ (ໄທ)</label><input id="pNameTh" value="${p.name_th||''}"></div>
     <div class="field"><label>ຊື່ (English)</label><input id="pNameEn" value="${p.name_en||''}"></div>
     <div class="field"><label>ຄຳອະທິບາຍ</label><textarea id="pDesc" rows="3">${p.description||''}</textarea></div>
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
-    <div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
+    <div class="row2"><div class="field"><label>ຈຳນວນສະຕັອກ</label><input type="number" id="pStock" value="${p.stock??''}"></div>
+    <div class="field"><label>ນ້ຳໜັກ (ກກ, ໃຊ້ຄິດຄ່າສົ່ງ)</label><input type="number" step="0.1" id="pWeight" value="${p.weight_kg??1}"></div></div>
     <div class="field"><label>ຮູບພາບສິນຄ້າ</label><input type="file" id="pImageFiles" accept="image/*" multiple></div>
     <div id="pImagePreview" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0;">
       ${(p.images||[]).map((url,i)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImg(${i})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join('')}
     </div>
-    <label style="display:flex; align-items:center; gap:8px; font-size:13px;"><input type="checkbox" id="pFeatured" ${p.is_featured?'checked':''}> ສິນຄ້າແນະນຳ</label>
+    <div id="pAttrsBox"></div>
+    <div style="border-top:1px dashed var(--line); margin:14px 0; padding-top:12px;">
+      <label style="font-weight:700; font-size:13px;">🎛️ ຕົວເລືອກສິນຄ້າ (ໄຊສ໌ / ສີ ...)</label>
+      <div class="hint">ຖ້າສິນຄ້າມີຫຼາຍໄຊສ໌/ສີ ໃສ່ໄວ້ຈະໃຫ້ລູກຄ້າເລືອກໄດ້ ແລະແຍກລາຄາ/ສະຕັອກ</div>
+      <div id="pGroupsBox"></div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="addVariantGroup()">+ ເພີ່ມກຸ່ມຕົວເລືອກ</button>
+      <div id="pVariantsBox" style="margin-top:10px;"></div>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:10px;"><input type="checkbox" id="pFeatured" ${p.is_featured?'checked':''}> ສິນຄ້າແນະນຳ</label>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px;"><input type="checkbox" id="pActive" ${p.is_active!==false?'checked':''}> ເປີດຂາຍ</label>
     <button class="btn btn-primary" style="margin-top:14px;" id="pSaveBtn">ບັນທຶກ</button>
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  window.onProductCategoryChange = async ()=>{
+    const catId = Number(document.getElementById('pCat').value);
+    await loadCategoryAttrs(catId);
+    renderAttrsBox();
+  };
   let pendingImages = [...(p.images||[])];
   window.removePImg = (i)=>{ pendingImages.splice(i,1); document.getElementById('pImagePreview').innerHTML = pendingImages.map((url,j)=>`<div style="position:relative;"><img src="${url}" style="width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--line);"><button type="button" onclick="removePImg(${j})" style="position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:#fff; font-size:10px; border:none;">✕</button></div>`).join(''); };
+  // Load category attributes + existing attribute values + existing variants (edit mode)
+  if(initialCat) await loadCategoryAttrs(initialCat);
+  if(id){
+    try{
+      const existingVals = await sbSelect('product_attribute_values', `product_id=eq.${id}`);
+      existingVals.forEach(v=> pAttrValues[v.attribute_id] = v.value);
+    }catch(e){}
+    try{
+      const vg = await sbRPC('product_variants_get', {p_product_id: id});
+      pGroups = (vg.groups||[]).map(g=>({name:g.name, values:(g.values||[]).map(v=>({value:v.value, image_url:v.image_url}))}));
+      pVariants = (vg.variants||[]).map(v=>{
+        const labels = (v.value_ids||[]).map(vid=>{
+          for(const g of vg.groups||[]){ const found=(g.values||[]).find(x=>x.id===vid); if(found) return found.value; }
+          return '';
+        });
+        return {value_labels:labels, price:v.price, compare_price:v.compare_price, stock:v.stock, sku:v.sku};
+      });
+    }catch(e){}
+  }
+  renderAttrsBox(); renderGroupsBox(); renderVariantsBox();
   overlay.querySelector('#pSaveBtn').onclick = async ()=>{
     const btn = overlay.querySelector('#pSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
     try{
@@ -425,10 +549,21 @@ function editProduct(id){
         name_lo: document.getElementById('pNameLo').value, name_th: document.getElementById('pNameTh').value,
         name_en: document.getElementById('pNameEn').value, description: document.getElementById('pDesc').value,
         price: Number(document.getElementById('pPrice').value), compare_price: Number(document.getElementById('pCompare').value)||null,
-        stock: Number(document.getElementById('pStock').value), images: pendingImages,
+        stock: Number(document.getElementById('pStock').value), weight_kg: Number(document.getElementById('pWeight').value)||1,
+        images: pendingImages,
         is_featured: document.getElementById('pFeatured').checked, is_active: document.getElementById('pActive').checked
       };
-      await sbRPC('seller_product_upsert', {p_seller_id: STATE.seller.id, p_product: payload});
+      const res = await sbRPC('seller_product_upsert', {p_seller_id: STATE.seller.id, p_product: payload});
+      const productId = id || res.id;
+      // Save category attributes
+      const attrPayload = Object.entries(pAttrValues).filter(([k,v])=>v!==undefined && v!==null && String(v).trim()!=='').map(([attribute_id,value])=>({attribute_id:Number(attribute_id), value:String(value)}));
+      await sbRPC('seller_product_set_attributes', {p_seller_id: STATE.seller.id, p_product_id: productId, p_values: attrPayload});
+      // Save variant groups + variants (if any)
+      const validGroups = pGroups.filter(g=>g.name && g.values && g.values.length);
+      if(validGroups.length){
+        await sbRPC('seller_set_product_variants', {p_seller_id: STATE.seller.id, p_product_id: productId,
+          p_groups: validGroups.map(g=>({name:g.name, values:g.values})), p_variants: pVariants});
+      }
       overlay.remove(); renderProducts();
     }catch(e){ alert('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
   };
@@ -440,29 +575,94 @@ async function deleteProduct(id){
 }
 
 /* ============================================================ ORDERS (order items belonging to this seller's products) ============================================================ */
-const SELLER_STATUSES = ['pending','confirmed','shipping','delivered','cancelled'];
+const STATUS_LABEL = {pending:'ລໍຖ້າແພັກ', confirmed:'ແພັກແລ້ວ', shipping:'ກຳລັງສົ່ງ', delivered:'ສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກ'};
+let ORDERS_CACHE = [];
 async function renderOrders(){
   const wrap = document.getElementById('ordersBody');
   wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   try{
-    const list = await sbRPC('seller_order_items_list', {p_seller_id: STATE.seller.id});
-    wrap.innerHTML = !list.length ? '<div class="empty">ຍັງບໍ່ມີອໍເດີສຳລັບສິນຄ້າຂອງທ່ານ</div>' :
-      list.map(i=>`
+    ORDERS_CACHE = await sbRPC('seller_order_items_list', {p_seller_id: STATE.seller.id});
+    wrap.innerHTML = !ORDERS_CACHE.length ? '<div class="empty">ຍັງບໍ່ມີອໍເດີສຳລັບສິນຄ້າຂອງທ່ານ</div>' :
+      ORDERS_CACHE.map(i=>`
         <div class="admin-list-item">
-          <div class="top"><span class="title">#${i.order_number}</span><span class="status-pill status-${i.seller_status}">${i.seller_status}</span></div>
+          <div class="top"><span class="title">#${i.order_number}</span><span class="status-pill status-${i.seller_status}">${STATUS_LABEL[i.seller_status]||i.seller_status}</span></div>
           <div class="hint">${new Date(i.order_created_at).toLocaleString('lo-LA')}</div>
           <div style="display:flex; gap:10px; align-items:center; margin-top:6px;">
             <img src="${i.image_url||'https://placehold.co/48x48/F1DFAE/7A1E2B?text=KD'}" style="width:44px; height:44px; border-radius:8px; object-fit:cover;">
             <div style="flex:1;"><div style="font-size:13px; font-weight:600;">${i.product_name}</div><div class="hint">x${i.qty} • ${fmtMoney(i.price)}</div></div>
           </div>
           <div class="hint" style="margin-top:6px;">📍 ${i.recipient_name||'-'} • ${i.recipient_phone||'-'}</div>
-          <div class="chiprow">${SELLER_STATUSES.map(s=>`<button class="${s===i.seller_status?'active':''}" onclick="setItemStatus(${i.order_item_id},'${s}')">${s}</button>`).join('')}</div>
+          <div class="chiprow">
+            ${i.seller_status==='pending'||i.seller_status==='confirmed' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">📦 ຈັດການການສົ່ງ</button>` : ''}
+            ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markDelivered(${i.order_item_id})">✅ ລູກຄ້າໄດ້ຮັບແລ້ວ</button>` : ''}
+            ${(i.seller_status==='pending') ? `<button onclick="setItemStatus(${i.order_item_id},'cancelled')" style="color:var(--danger);">✕ ຍົກເລີກ</button>` : ''}
+          </div>
         </div>`).join('');
   }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດອໍເດີໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
 }
 async function setItemStatus(itemId, status){
+  if(status==='cancelled' && !confirm('ຍົກເລີກລາຍການນີ້?')) return;
   try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: status}); renderOrders(); }
   catch(e){ alert('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function markDelivered(itemId){
+  if(!confirm('ຢືນຢັນວ່າລູກຄ້າໄດ້ຮັບສິນຄ້ານີ້ແລ້ວບໍ? (ແອດມິນຈະກວດສອບ ແລະ ໂອນເງິນເຂົ້າກະເປົາຂອງທ່ານຫລັງຈາກນີ້)')) return;
+  try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'delivered'}); renderOrders(); }
+  catch(e){ alert('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+}
+/* ---- 3-step packing / shipping photo flow ---- */
+async function openShipmentSheet(itemId){
+  let item;
+  try{ item = await sbRPC('seller_order_item_get', {p_seller_id: STATE.seller.id, p_order_item_id: itemId}); }
+  catch(e){ alert('ໂຫລດຂໍ້ມູນບໍ່ສຳເລັດ'); return; }
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  const stepBox = (n, label, url, atField)=>`
+    <div style="background:var(--cream); border-radius:10px; padding:12px; margin-bottom:10px;">
+      <div style="font-weight:700; font-size:13px; margin-bottom:6px;">${url?'✅':'⬜'} ຂັ້ນຕອນ ${n}: ${label}</div>
+      ${url?`<img src="${url}" style="width:100%; max-width:200px; border-radius:8px; margin-bottom:8px;">`:''}
+      <input type="file" accept="image/*" capture="environment" id="shipStep${n}File">
+      ${n===2?`<div class="row2" style="margin-top:8px;">
+        <div class="field" style="margin-bottom:0;"><label>ບໍລິສັດຂົນສົ່ງ</label><input id="shipCarrierName" value="${item.carrier_name||''}" placeholder="ເຊັ່ນ: ຂົນສົ່ງ A"></div>
+        <div class="field" style="margin-bottom:0;"><label>ລິ້ງຕິດຕາມພັດສະດຸ</label><input id="shipTrackingUrl" value="${item.tracking_url||''}" placeholder="https://..."></div>
+      </div>`:''}
+      <button type="button" class="btn btn-gold btn-sm" style="margin-top:8px;" onclick="uploadShipStep(${itemId},${n})">📤 ອັບໂຫລດຮູບຂັ້ນຕອນ ${n}</button>
+    </div>`;
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📦 ຈັດການການສົ່ງ #${item.id}</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <div class="hint" style="margin-bottom:10px;">ຖ່າຍຮູບໃຫ້ຄົບ 3 ຂັ້ນຕອນ ແລ້ວກົດຢືນຢັນ ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມຫຼັກຖານ ແລະ ລິ້ງຕິດຕາມພັດສະດຸທັນທີ</div>
+      ${stepBox(1,'ຖ່າຍຮູບແພັກສິນຄ້າ', item.step1_photo_url)}
+      ${stepBox(2,'ສົ່ງໃຫ້ຂົນສົ່ງ (ຖ່າຍຮູບ)', item.step2_photo_url)}
+      ${stepBox(3,'ຮູບຢືນຢັນຂຶ້ນລົດ/ອອກເດີນທາງ', item.step3_photo_url)}
+      <button class="btn btn-primary" id="shipConfirmBtn" ${(!item.step1_photo_url||!item.step2_photo_url||!item.step3_photo_url)?'disabled style="opacity:.5;"':''} onclick="confirmShipment(${itemId})">✅ ຢືນຢັນຈັດສົ່ງ ແລະ ແຈ້ງເຕືອນລູກຄ້າ</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  window._closeShipSheet = ()=> overlay.remove();
+}
+async function uploadShipStep(itemId, step){
+  const fileInput = document.getElementById(`shipStep${step}File`);
+  const file = fileInput.files[0];
+  if(!file){ alert('ກະລຸນາເລືອກຮູບກ່ອນ'); return; }
+  try{
+    const url = await sbUpload('khaidee-products', `shipment_${itemId}_step${step}_${Date.now()}_${file.name}`, file);
+    const body = {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_step: step, p_photo_url: url};
+    if(step===2){
+      body.p_carrier_name = document.getElementById('shipCarrierName').value || null;
+      body.p_tracking_url = document.getElementById('shipTrackingUrl').value || null;
+    }
+    await sbRPC('seller_order_item_update_shipment', body);
+    if(window._closeShipSheet) window._closeShipSheet();
+    openShipmentSheet(itemId);
+    renderOrders();
+  }catch(e){ alert('ອັບໂຫລດບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function confirmShipment(itemId){
+  try{
+    await sbRPC('seller_order_item_confirm_shipment', {p_seller_id: STATE.seller.id, p_order_item_id: itemId});
+    if(window._closeShipSheet) window._closeShipSheet();
+    alert('ຢືນຢັນແລ້ວ! ລູກຄ້າໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມລິ້ງຕິດຕາມແລ້ວ');
+    renderOrders();
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 
 /* ============================================================ ACCOUNT ============================================================ */
@@ -503,6 +703,13 @@ async function renderAccount(){
       <div class="field" style="padding:0 14px;"><label>ອີເມວ</label><input id="accEmail" value="${s.email||''}"></div>
       <div style="padding:0 14px 14px;"><button class="btn btn-primary" onclick="saveAccount()">ບັນທຶກ</button></div>
     </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
+      <div class="field" style="margin-bottom:8px;"><label>🚚 ອັດຕາຄ່າສົ່ງ (₭/ກກ ພາຍໃນແຂວງດຽວກັນ)</label><input type="number" id="accShipRate" value="${s.shipping_rate_per_kg||8000}"></div>
+      <div class="hint" style="margin-bottom:8px;">ສົ່ງອອກນອກແຂວງຄ່າສົ່ງຈະຄິດ x2 ອັດຕະໂນມັດ</div>
+      <button class="btn btn-ghost" onclick="saveShipRate()">ບັນທຶກອັດຕາຄ່າສົ່ງ</button>
+    </div>
+    <div style="padding:0 14px 20px;"><button class="btn btn-gold" onclick="openCouponsPage()">🎟️ ຈັດການຄູປອງຮ້ານ</button></div>
+    <div style="padding:0 14px 20px;"><button class="btn btn-ghost" onclick="showSellerGuide()">📖 ຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍ</button></div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
       <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">ປ່ຽນລະຫັດຜ່ານ</label>
       <div class="field" style="margin-top:8px;"><input type="password" id="accOldPw" placeholder="ລະຫັດຜ່ານເກົ່າ"></div>
@@ -558,11 +765,199 @@ async function saveAccount(){
     alert('ບັນທຶກແລ້ວ');
   }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
 }
+async function saveShipRate(){
+  const rate = Number(document.getElementById('accShipRate').value);
+  if(!rate || rate<0){ alert('ອັດຕາຄ່າສົ່ງບໍ່ຖືກຕ້ອງ'); return; }
+  try{
+    await sbRPC('seller_set_shipping_rate', {p_seller_id: STATE.seller.id, p_rate: rate});
+    STATE.seller.shipping_rate_per_kg = rate; saveSeller();
+    alert('ບັນທຶກອັດຕາຄ່າສົ່ງແລ້ວ');
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
 async function changePw(){
   try{
     await sbRPC('seller_change_password', {p_seller_id: STATE.seller.id, p_old: document.getElementById('accOldPw').value, p_new: document.getElementById('accNewPw').value});
     alert('ປ່ຽນລະຫັດຜ່ານສຳເລັດ');
   }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
+}
+
+/* ============================================================ WALLET ============================================================ */
+let WALLET_TAB = 'history';
+async function renderWallet(){
+  const wrap = document.getElementById('walletBody');
+  wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{
+    const [summary, history, withdrawals] = await Promise.all([
+      sbRPC('seller_wallet_summary', {p_seller_id: STATE.seller.id}),
+      sbRPC('seller_wallet_history', {p_seller_id: STATE.seller.id}),
+      sbRPC('seller_withdrawal_list', {p_seller_id: STATE.seller.id})
+    ]);
+    wrap.innerHTML = `
+      <div style="background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); border-radius:16px; margin:14px; padding:20px; color:#fff; text-align:center;">
+        <div style="font-size:11px; opacity:.85;">ຍອດເງິນໃນກະເປົາ</div>
+        <div style="font-size:26px; font-weight:800; margin:6px 0;">${fmtMoney(summary.wallet_balance)}</div>
+        ${summary.pending_withdraw>0?`<div style="font-size:11px; opacity:.85;">⏳ ກຳລັງລໍຖ້າອະນຸມັດການຖອນ: ${fmtMoney(summary.pending_withdraw)}</div>`:''}
+        <button class="btn btn-gold" style="margin-top:12px; width:auto; padding:10px 24px; display:inline-block;" onclick="openWithdrawSheet(${summary.wallet_balance})">💸 ຖອນເງິນ</button>
+      </div>
+      <div class="chiprow" style="margin:0 14px 10px;">
+        <button class="${WALLET_TAB==='history'?'active':''}" onclick="WALLET_TAB='history'; renderWallet();">ປະຫວັດທຸລະກຳ</button>
+        <button class="${WALLET_TAB==='withdrawals'?'active':''}" onclick="WALLET_TAB='withdrawals'; renderWallet();">ຄຳຂໍຖອນເງິນ</button>
+      </div>
+      ${WALLET_TAB==='history' ?
+        (!history.length ? '<div class="empty">ຍັງບໍ່ມີທຸລະກຳ</div>' :
+          history.map(h=>`<div class="admin-list-item">
+            <div class="top"><span class="title">${h.type==='order_income'?'💰 ລາຍຮັບອໍເດີ':h.type==='withdraw'?'💸 ຖອນເງິນ':h.type==='withdraw_refund'?'↩️ ຄືນເງິນຖອນ':'⚙️ ປັບຍອດ'}</span>
+            <span style="font-weight:700; color:${h.amount>=0?'var(--ok)':'var(--danger)'};">${h.amount>=0?'+':''}${fmtMoney(h.amount)}</span></div>
+            <div class="hint">${h.note||''}</div>
+            <div class="hint">${new Date(h.created_at).toLocaleString('lo-LA')} • <span class="status-pill status-${h.status}">${h.status}</span></div>
+          </div>`).join(''))
+        :
+        (!withdrawals.length ? '<div class="empty">ຍັງບໍ່ມີຄຳຂໍຖອນເງິນ</div>' :
+          withdrawals.map(w=>`<div class="admin-list-item">
+            <div class="top"><span class="title">${fmtMoney(w.amount)}</span><span class="status-pill status-${w.status}">${w.status}</span></div>
+            <div class="hint">${new Date(w.created_at).toLocaleString('lo-LA')}</div>
+            ${w.admin_note?`<div class="hint">ໝາຍເຫດແອດມິນ: ${w.admin_note}</div>`:''}
+          </div>`).join(''))
+      }`;
+  }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນກະເປົາເງິນໄດ້</div>'; }
+}
+function openWithdrawSheet(balance){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>💸 ຖອນເງິນ</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <div class="hint" style="margin-bottom:10px;">ຍອດເງິນທີ່ຖອນໄດ້: <b>${fmtMoney(balance)}</b> — ແອດມິນຈະໂອນເງິນຕາມ QR ທີ່ທ່ານແນບ ຫຼັງຈາກກວດສອບ ແລະ ອະນຸມັດແລ້ວ</div>
+      <div class="field"><label>ຈຳນວນທີ່ຕ້ອງການຖອນ</label><input type="number" id="wAmount" max="${balance}" placeholder="0"></div>
+      <div class="field"><label>ຮູບ QR Code ຮັບເງິນ ${STATE.seller.withdraw_qr_url?'(ມີແລ້ວ — ອັບໂຫລດໃໝ່ຖ້າຕ້ອງການປ່ຽນ)':'*'}</label>
+        ${STATE.seller.withdraw_qr_url?`<img src="${STATE.seller.withdraw_qr_url}" style="width:120px; border-radius:8px; margin-bottom:6px; border:1px solid var(--line);">`:''}
+        <input type="file" id="wQrFile" accept="image/*">
+      </div>
+      <button class="btn btn-primary" id="wSubmitBtn" onclick="submitWithdraw(${balance})">📤 ສົ່ງຄຳຂໍຖອນເງິນ</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  window._closeWithdrawSheet = ()=> overlay.remove();
+}
+async function submitWithdraw(balance){
+  const amount = Number(document.getElementById('wAmount').value);
+  const qrFile = document.getElementById('wQrFile').files[0];
+  if(!amount || amount<=0 || amount>balance){ alert('ຈຳນວນເງິນບໍ່ຖືກຕ້ອງ'); return; }
+  if(!qrFile && !STATE.seller.withdraw_qr_url){ alert('ກະລຸນາອັບໂຫລດຮູບ QR Code'); return; }
+  const btn = document.getElementById('wSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...';
+  try{
+    let qrUrl = STATE.seller.withdraw_qr_url || null;
+    if(qrFile){ qrUrl = await sbUpload('khaidee-products', `seller_qr_${STATE.seller.id}_${Date.now()}_${qrFile.name}`, qrFile); STATE.seller.withdraw_qr_url = qrUrl; saveSeller(); }
+    await sbRPC('seller_request_withdraw', {p_seller_id: STATE.seller.id, p_amount: amount, p_qr_url: qrUrl});
+    if(window._closeWithdrawSheet) window._closeWithdrawSheet();
+    alert('ສົ່ງຄຳຂໍຖອນເງິນແລ້ວ ລໍຖ້າແອດມິນອະນຸມັດ');
+    renderWallet();
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍຖອນເງິນ'; }
+}
+
+/* ============================================================ COUPONS (seller's own discount / free-shipping coupons) ============================================================ */
+async function openCouponsPage(){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🎟️ ຄູປອງຂອງຮ້ານ</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <button class="btn btn-gold" style="margin-bottom:12px;" onclick="editCoupon(null)">➕ ສ້າງຄູປອງໃໝ່</button>
+      <div id="couponsListBox"><div class="loader">ກຳລັງໂຫລດ...</div></div>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  window._closeCouponsPage = ()=> overlay.remove();
+  await refreshCouponsList();
+}
+let COUPONS_CACHE = [];
+async function refreshCouponsList(){
+  const box = document.getElementById('couponsListBox');
+  if(!box) return;
+  try{
+    COUPONS_CACHE = await sbRPC('seller_coupon_list', {p_seller_id: STATE.seller.id});
+    box.innerHTML = !COUPONS_CACHE.length ? '<div class="empty">ຍັງບໍ່ມີຄູປອງ</div>' :
+      COUPONS_CACHE.map(c=>`<div class="admin-list-item" style="margin:0 0 10px;">
+        <div class="top"><span class="title">${c.code}</span><span class="status-pill ${c.is_active?'status-approved':'status-rejected'}">${c.is_active?'ເປີດໃຊ້':'ປິດ'}</span></div>
+        <div class="hint">${c.discount_type==='percent'?`ຫລຸດ ${c.discount_value}%`:c.discount_type==='fixed'?`ຫລຸດ ${fmtMoney(c.discount_value)}`:'🚚 ສົ່ງຟຣີ'} • ຂັ້ນຕ່ຳ ${fmtMoney(c.min_order)}</div>
+        <div class="hint">ໃຊ້ແລ້ວ ${c.used_count||0}${c.usage_limit?`/${c.usage_limit}`:''} • ${c.expires_at?'ໝົດອາຍຸ '+new Date(c.expires_at).toLocaleDateString('lo-LA'):'ບໍ່ໝົດອາຍຸ'}</div>
+        <div class="chiprow"><button onclick="editCoupon(${c.id})">✏️ ແກ້ໄຂ</button><button onclick="deleteCoupon(${c.id})" style="color:var(--danger);">🗑️ ລຶບ</button></div>
+      </div>`).join('');
+  }catch(e){ box.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຄູປອງໄດ້</div>'; }
+}
+function editCoupon(id){
+  const c = id ? COUPONS_CACHE.find(x=>x.id===id) : {};
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.style.zIndex = 110;
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂຄູປອງ':'ສ້າງຄູປອງ'}</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <div class="field"><label>ລະຫັດຄູປອງ</label><input id="cCode" value="${c.code||''}" placeholder="ເຊັ່ນ: SALE50" style="text-transform:uppercase;"></div>
+      <div class="field"><label>ປະເພດສ່ວນຫລຸດ</label><select id="cType">
+        <option value="fixed" ${c.discount_type==='fixed'?'selected':''}>ຫລຸດຈຳນວນເງິນ (₭)</option>
+        <option value="percent" ${c.discount_type==='percent'?'selected':''}>ຫລຸດເປັນເປີເຊັນ (%)</option>
+        <option value="free_shipping" ${c.discount_type==='free_shipping'?'selected':''}>ສົ່ງຟຣີ</option>
+      </select></div>
+      <div class="field"><label>ມູນຄ່າສ່ວນຫລຸດ (ບໍ່ໃຊ້ກັບສົ່ງຟຣີ)</label><input type="number" id="cValue" value="${c.discount_value||0}"></div>
+      <div class="row2">
+        <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ</label><input type="number" id="cMin" value="${c.min_order||0}"></div>
+        <div class="field"><label>ຈຳນວນໃບ (ຄົນລະຄັ້ງ)</label><input type="number" id="cLimit" value="${c.usage_limit||''}" placeholder="ບໍ່ຈຳກັດ"></div>
+      </div>
+      <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cExpires" value="${c.expires_at?c.expires_at.slice(0,10):''}"></div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:13px;"><input type="checkbox" id="cActive" ${c.is_active!==false?'checked':''}> ເປີດໃຊ້ງານ</label>
+      <button class="btn btn-primary" id="cSaveBtn" style="margin-top:14px;">ບັນທຶກ</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  overlay.querySelector('#cSaveBtn').onclick = async ()=>{
+    const btn = overlay.querySelector('#cSaveBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    try{
+      const payload = {
+        id: id||undefined, code: document.getElementById('cCode').value.trim().toUpperCase(),
+        discount_type: document.getElementById('cType').value, discount_value: Number(document.getElementById('cValue').value)||0,
+        min_order: Number(document.getElementById('cMin').value)||0,
+        usage_limit: document.getElementById('cLimit').value ? Number(document.getElementById('cLimit').value) : null,
+        expires_at: document.getElementById('cExpires').value ? document.getElementById('cExpires').value+'T23:59:59' : null,
+        is_active: document.getElementById('cActive').checked
+      };
+      if(!payload.code){ alert('ກະລຸນາໃສ່ລະຫັດຄູປອງ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+      await sbRPC('seller_coupon_upsert', {p_seller_id: STATE.seller.id, p_coupon: payload});
+      overlay.remove(); refreshCouponsList();
+    }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+  };
+}
+async function deleteCoupon(id){
+  if(!confirm('ລຶບຄູປອງນີ້?')) return;
+  try{ await sbRPC('seller_coupon_delete', {p_seller_id: STATE.seller.id, p_id: id}); refreshCouponsList(); }
+  catch(e){ alert('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+}
+
+/* ============================================================ SELLER GUIDE (shown before applying to sell) ============================================================ */
+function showSellerGuide(){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📖 ຄຳແນະນຳກ່ອນສະໝັກເປັນຜູ້ຂາຍ</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body" style="font-size:13px; line-height:1.7;">
+      <b>✅ ເງື່ອນໄຂການເປັນຜູ້ຂາຍ KhaiDee</b>
+      <ul style="padding-left:18px; margin:8px 0 16px;">
+        <li>ຕ້ອງຢືນຢັນຕົວຕົນດ້ວຍບັດປະຈຳຕົວ ແລະ ເບີໂທຜ່ານ WhatsApp</li>
+        <li>ຂໍ້ມູນ ແລະ ສິນຄ້າທຸກຢ່າງຕ້ອງຜ່ານການກວດສອບຈາກແອດມິນກ່ອນຈຶ່ງຈະຂາຍໄດ້</li>
+        <li>ຫ້າມຂາຍສິນຄ້າປອມ, ຂອງຜິດກົດໝາຍ, ຫຼື ຫລອກລວງລູກຄ້າ — ພົບເຫັນຈະຖືກລະງັບຮ້ານທັນທີ</li>
+        <li>ຕັ້ງລາຄາໃຫ້ຍຸຕິທຳ ບໍ່ໂຂ່ງລາຄາເກີນຄວາມເປັນຈິງ</li>
+      </ul>
+      <b>💰 ຄ່າທຳນຽມ ແລະ ການຈ່າຍເງິນ</b>
+      <ul style="padding-left:18px; margin:8px 0 16px;">
+        <li>ຫັກຄ່າທຳນຽມ 5% ຈາກທຸກຍອດຂາຍ ເພື່ອນຳໄປພັດທະນາແອັບຕໍ່</li>
+        <li>ເງິນຈະເຂົ້າກະເປົາ Wallet ຂອງທ່ານ ຫລັງຈາກລູກຄ້າໄດ້ຮັບສິນຄ້າ ແລະ ແອດມິນອະນຸມັດແລ້ວເທົ່ານັ້ນ</li>
+        <li>ການຖອນເງິນອອກຈາກ Wallet ຕ້ອງແນບ QR Code ຮັບເງິນ ແລະ ລໍຖ້າແອດມິນອະນຸມັດທຸກຄັ້ງ (ຈ່າຍກາງໂດຍແອດມິນ ເພື່ອຄວາມປອດໄພ)</li>
+      </ul>
+      <b>🚚 ຄ່າສົ່ງ</b>
+      <ul style="padding-left:18px; margin:8px 0 16px;">
+        <li>ທ່ານກຳນົດອັດຕາຄ່າສົ່ງເອງ (ເລີ່ມຕົ້ນ 8,000 ກີບ/ກກ ພາຍໃນແຂວງດຽວກັນ)</li>
+        <li>ສົ່ງອອກນອກແຂວງຄ່າສົ່ງຈະຄິດເພີ່ມເປັນ 2 ເທົ່າອັດຕະໂນມັດ</li>
+        <li>ຖ້າໃຫ້ຄູປອງສົ່ງຟຣີ ຄ່າສົ່ງນັ້ນຮ້ານທ່ານຈະເປັນຜູ້ຮັບຜິດຊອບເອງ</li>
+      </ul>
+      <b>📦 ການສົ່ງສິນຄ້າ</b>
+      <ul style="padding-left:18px; margin:8px 0 0;">
+        <li>ຕ້ອງຖ່າຍຮູບ 3 ຂັ້ນຕອນ (ແພັກ → ສົ່ງໃຫ້ຂົນສົ່ງ → ຢືນຢັນອອກເດີນທາງ) ທຸກອໍເດີ ເພື່ອເປັນຫຼັກຖານໃຫ້ລູກຄ້າ</li>
+      </ul>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
 }
 
 /* ============================================================ BOOT ============================================================ */
