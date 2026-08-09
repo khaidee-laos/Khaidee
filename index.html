@@ -79,6 +79,16 @@ button{font-family:inherit; cursor:pointer;}
   letter-spacing:.5px; transform:rotate(-4deg); background:rgba(122,30,43,.05);
 }
 
+/* ---- Verified / admin-endorsed seller badge (LazMall-style trust ribbon) ----
+   Shown wherever a shop name appears (product card, shop page header, product-detail
+   store row) so customers can tell an admin-vetted seller from an ordinary one at a glance. */
+.verified-store-badge{
+  display:inline-flex; align-items:center; gap:3px; font-size:9.5px; font-weight:800; color:#fff;
+  background:linear-gradient(135deg,var(--gold),#B9862E); padding:2.5px 7px; border-radius:6px;
+  letter-spacing:.2px; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+.verified-store-badge.on-card{position:absolute; top:6px; right:6px; z-index:2;}
+
 /* ---------- HEADER ---------- */
 header.top{
   position:sticky; top:0; z-index:40; background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));
@@ -425,7 +435,7 @@ nav.bottom .icon{font-size:19px;}
 <!-- Checkout -->
 <div class="overlay" id="modalCheckout"><div class="sheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-header"><h3 data-i18n="checkout">ຢືນຢັນການສັ່ງຊື້</h3><button class="closex" onclick="closeModal('modalCheckout')">✕</button></div>
+  <div class="sheet-header"><h3 data-i18n="checkout">ຢືນຢັນການສັ່ງຊື້</h3><button class="closex" onclick="closeModal('modalCheckout'); exitBuyNowMode();">✕</button></div>
   <div class="sheet-body" id="checkoutBody"></div>
 </div></div>
 
@@ -859,6 +869,15 @@ async function loadSellersPublic(){
   catch(e){ STATE.sellers = []; console.warn('loadSellersPublic failed', e); }
 }
 function sellerById(id){ return (STATE.sellers||[]).find(s=>s.id===id); }
+/* Backend requirement (SQL side, not in this file): sellers table needs an
+   is_verified boolean (default false) that only the admin can set — see
+   admin_set_seller_verified() near the seller-admin section below. Both
+   admin_list_sellers() and whatever RPC/select feeds loadSellersPublic() must
+   return this column so the badge shows up for customers, not just admins. */
+function sellerVerifiedBadge(seller, extraClass){
+  if(!seller || !seller.is_verified) return '';
+  return `<span class="verified-store-badge${extraClass?' '+extraClass:''}">✅ ຮ້ານຢືນຢັນ</span>`;
+}
 
 /* ============================================================ SHOP PAGE (public storefront) ============================================================ */
 async function openShop(sellerId){
@@ -885,7 +904,7 @@ function paintShop(){
           ${shop.logo_url?`<img src="${shop.logo_url}" style="width:100%; height:100%; object-fit:cover;">`:'🏪'}
         </div>
         <div style="flex:1; min-width:0; padding-bottom:2px;">
-          <div style="font-size:16px; font-weight:800;">${shop.store_name}</div>
+          <div style="font-size:16px; font-weight:800; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">${shop.store_name} ${sellerVerifiedBadge(shop)}</div>
           <div class="hint" style="margin-top:2px;">👥 ${shop.follower_count||0} ຜູ້ຕິດຕາມ • 🛍️ ${products.length} ສິນຄ້າ</div>
         </div>
       </div>
@@ -898,6 +917,7 @@ function paintShop(){
         <div class="card" onclick="closeModal('modalShop'); openProduct(${p.id})">
           <div class="imgwrap">
             ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+            ${sellerVerifiedBadge(shop,'on-card')}
             <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
           </div>
           <div class="body">
@@ -929,6 +949,7 @@ function renderProducts(){
     <div class="card" onclick="openProduct(${p.id})">
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+        ${sellerVerifiedBadge(sellerById(p.seller_id),'on-card')}
         <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
         <button class="card-heart ${isFavorite(p.id)?'liked':''}" onclick="toggleFavorite(${p.id}, event)">${isFavorite(p.id)?'❤️':'🤍'}</button>
       </div>
@@ -968,6 +989,7 @@ async function openProduct(id){
   detailQty = 1;
   detailProductId = id;
   detailGroups = []; detailVariants = []; detailSelection = {}; detailSpecs = [];
+  detailCanReview = false;
   STATE.activeDetailTab = 'details';
   // Fetch real variant options + spec attributes for this product (size_options/attributes
   // used to be free-text fields on products that were never actually saved by any form —
@@ -981,6 +1003,7 @@ async function openProduct(id){
     const vals = await sbSelect('product_attribute_values', `product_id=eq.${id}&select=value,category_attributes(name_lo,name_th,name_en)`);
     detailSpecs = vals.filter(v=>v.category_attributes && String(v.value||'').trim()!=='').map(v=>({label: nameFor(v.category_attributes), value: v.value}));
   }catch(e){ console.warn('product_attribute_values failed', e); }
+  await checkReviewEligibility(id);
   paintProductDetail(id);
   loadComments(id);
   openModal('modalProduct');
@@ -1026,7 +1049,7 @@ function paintProductDetail(id){
       <div class="pd-storerow" style="cursor:pointer;" onclick="closeModal('modalProduct'); openShop('${seller.id}')">
         <div class="ico" style="overflow:hidden;">${seller.logo_url?`<img src="${seller.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">`:'🏪'}</div>
         <div style="flex:1;">
-          <div style="font-size:13px; font-weight:700;">${seller.store_name}</div>
+          <div style="font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">${seller.store_name} ${sellerVerifiedBadge(seller)}</div>
           <div class="hint" style="margin:0;">👥 ${seller.follower_count||0} ຜູ້ຕິດຕາມ • ແຕະເພື່ອເບິ່ງຮ້ານ</div>
         </div>
         <div class="arrow">›</div>
@@ -1052,10 +1075,7 @@ function paintProductDetail(id){
       </div>
       <div id="pdTabReviews" class="hidden">
         <div id="pdCommentsList" style="margin:10px 0;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
-        ${STATE.customer?`<div class="hint" style="margin-bottom:2px;">ໃຫ້ດາວ ແລະ ຂຽນລີວິວສິນຄ້າທີ່ທ່ານສັ່ງຊື້ ຮັບຫຼຽນສະສົມສູງສຸດ 5 ຫຼຽນ/ລີວິວ 🪙</div>`:''}
-        <div class="starpick" id="pdStarPick">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setPdRating(${n})">★</span>`).join('')}</div>
-        <div class="field"><textarea id="pdNewComment" rows="2" placeholder="${STATE.customer?'ຂຽນຄວາມຄິດເຫັນກ່ຽວກັບສິນຄ້ານີ້...':'ເຂົ້າສູ່ລະບົບກ່ອນເພື່ອຂຽນຄວາມຄິດເຫັນ'}" ${STATE.customer?'':'disabled'}></textarea></div>
-        <button class="btn btn-ghost btn-sm" onclick="submitComment(${p.id})" ${STATE.customer?'':'disabled'}>ສົ່ງລີວິວ ຮັບຫຼຽນ</button>
+        ${renderReviewComposer(p.id)}
       </div>
 
       ${related.length?`<h4 style="font-size:13px; margin-top:20px;">ສິນຄ້າທີ່ກ່ຽວຂ້ອງ</h4>
@@ -1070,7 +1090,8 @@ function paintProductDetail(id){
       <div class="qty-select" style="margin:0;">
         <button onclick="changeDetailQty(-1)">−</button><span id="detailQtyLabel">1</span><button onclick="changeDetailQty(1)">+</button>
       </div>
-      <button class="btn btn-primary" onclick="confirmAddToCart(${p.id})">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
+      <button class="btn btn-ghost" onclick="confirmAddToCart(${p.id})">🛒 ເພີ່ມໃສ່ກະຕ່າ</button>
+      <button class="btn btn-primary" onclick="confirmBuyNow(${p.id})">⚡ ຊື້ເລີຍ</button>
     </div>`;
 }
 function selectDetailVariantValue(groupId, valueId){
@@ -1087,23 +1108,36 @@ function selectDetailVariantValue(groupId, valueId){
     if(stockEl) stockEl.innerHTML = `ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}`;
   }
 }
+// Shared by confirmAddToCart() and confirmBuyNow() — validates that a full variant selection
+// has been made (when the product has variant groups) and resolves it to the matched variant
+// row + a human-readable label. Returns {ok:false} (after alerting) if the selection is invalid,
+// or {ok:true, variant} — variant is null for products with no variant groups at all.
+function resolveDetailVariantOrAlert(actionLabel){
+  if(!detailGroups.length) return {ok:true, variant:null};
+  if(detailGroups.some(g=>detailSelection[g.id]===undefined)){ alert(`ກະລຸນາເລືອກຕົວເລືອກສິນຄ້າໃຫ້ຄົບກ່ອນ${actionLabel}`); return {ok:false}; }
+  let variant = matchedDetailVariant();
+  if(!variant){ alert('ບໍ່ພົບຕົວເລືອກສິນຄ້ານີ້'); return {ok:false}; }
+  if((variant.stock??0) <= 0){ alert('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return {ok:false}; }
+  const label = detailGroups.map(g=>{
+    const valId = detailSelection[g.id];
+    const val = (g.values||[]).find(v=>v.id===valId);
+    return val ? val.value : '';
+  }).filter(Boolean).join(' / ');
+  return {ok:true, variant:{...variant, label}};
+}
 function confirmAddToCart(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
-  let variant = null;
-  if(detailGroups.length){
-    if(detailGroups.some(g=>detailSelection[g.id]===undefined)){ alert('ກະລຸນາເລືອກຕົວເລືອກສິນຄ້າໃຫ້ຄົບກ່ອນເພີ່ມໃສ່ກະຕ່າ'); return; }
-    variant = matchedDetailVariant();
-    if(!variant){ alert('ບໍ່ພົບຕົວເລືອກສິນຄ້ານີ້'); return; }
-    if((variant.stock??0) <= 0){ alert('ຕົວເລືອກນີ້ສິນຄ້າໝົດແລ້ວ'); return; }
-    const label = detailGroups.map(g=>{
-      const valId = detailSelection[g.id];
-      const val = (g.values||[]).find(v=>v.id===valId);
-      return val ? val.value : '';
-    }).filter(Boolean).join(' / ');
-    variant = {...variant, label};
-  }
-  addToCart(id, detailQty, variant);
+  const r = resolveDetailVariantOrAlert('ເພີ່ມໃສ່ກະຕ່າ'); if(!r.ok) return;
+  addToCart(id, detailQty, r.variant);
   closeModal('modalProduct');
+}
+// "ຊື້ເລີຍ" — skips the cart entirely and jumps straight to checkout for just this product,
+// while leaving whatever is already in the customer's real cart untouched.
+function confirmBuyNow(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  const r = resolveDetailVariantOrAlert('ຊື້ເລີຍ'); if(!r.ok) return;
+  closeModal('modalProduct');
+  buyNow(id, detailQty, r.variant);
 }
 function onPdGalleryScroll(){
   const track = document.getElementById('pdGalleryTrack');
@@ -1119,9 +1153,40 @@ function switchPdTab(tab){
   document.getElementById('pdTabReviews').classList.toggle('hidden', tab!=='reviews');
 }
 /* ---- Comments / reviews (needs the product_comments table + RPCs — see Group F SQL notes).
-   Reviews add a star rating and award coins server-side: coin_add = rating (1-5), capped at 5/review,
-   and should only be granted by the RPC when the customer actually purchased & received this product —
-   the client can't be trusted to enforce that, so comment_add/review RPC must check order history itself. ---- */
+   Reviews add a star rating and award coins server-side: coin_add = rating (1-5), capped at 5/review.
+   Eligibility rule: only a customer who ordered THIS product and had that order marked "delivered"
+   may rate/comment on it — everyone else (including logged-in customers who never bought it) sees
+   a locked message instead of the star-picker/textarea. This check runs twice, on purpose:
+   1) HERE, client-side, via order_list_for_customer — purely cosmetic, decides what UI to show.
+   2) Inside the comment_add RPC itself, server-side — this is the ONLY check that actually matters
+      for security, since a customer can call any RPC directly and skip the UI entirely. If that
+      RPC doesn't already re-verify a delivered order containing this product before inserting the
+      row / awarding coins, item 4 of this request ("only buyers who received the item can review")
+      is not actually enforced no matter what this file does — that piece must be added on the
+      Supabase/SQL side. Backend requirement: order_list_for_customer's `items` array must include
+      product_id per line (order_create already receives product_id, so the column should exist to
+      copy from) so this client-side check has something to match against. */
+let detailCanReview = false;
+async function checkReviewEligibility(productId){
+  detailCanReview = false;
+  if(!STATE.customer) return;
+  try{
+    const orders = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
+    detailCanReview = (orders||[]).some(o=> o.status==='delivered' && (o.items||[]).some(i=> Number(i.product_id)===Number(productId)));
+  }catch(e){ console.warn('checkReviewEligibility failed', e); }
+}
+function renderReviewComposer(productId){
+  if(!STATE.customer){
+    return `<div class="hint">ເຂົ້າສູ່ລະບົບກ່ອນເພື່ອຂຽນຄວາມຄິດເຫັນ</div>`;
+  }
+  if(!detailCanReview){
+    return `<div class="hint">🔒 ສາມາດໃຫ້ດາວ ແລະ ຂຽນລີວິວໄດ້ ສະເພາະລູກຄ້າທີ່ສັ່ງຊື້ ແລະ ໄດ້ຮັບສິນຄ້ານີ້ແລ້ວເທົ່ານັ້ນ</div>`;
+  }
+  return `<div class="hint" style="margin-bottom:2px;">ໃຫ້ດາວ ແລະ ຂຽນລີວິວສິນຄ້າທີ່ທ່ານສັ່ງຊື້ ຮັບຫຼຽນສະສົມສູງສຸດ 5 ຫຼຽນ/ລີວິວ 🪙</div>
+    <div class="starpick" id="pdStarPick">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="setPdRating(${n})">★</span>`).join('')}</div>
+    <div class="field"><textarea id="pdNewComment" rows="2" placeholder="ຂຽນຄວາມຄິດເຫັນກ່ຽວກັບສິນຄ້ານີ້..."></textarea></div>
+    <button class="btn btn-ghost btn-sm" onclick="submitComment(${productId})">ສົ່ງລີວິວ ຮັບຫຼຽນ</button>`;
+}
 let pdRating = 0;
 function setPdRating(n){
   pdRating = n;
@@ -1140,7 +1205,7 @@ async function loadComments(productId){
   }
 }
 async function submitComment(productId){
-  if(!STATE.customer) return;
+  if(!STATE.customer || !detailCanReview) return;
   const text = document.getElementById('pdNewComment').value.trim();
   if(!text){ alert('ກະລຸນາຂຽນຄວາມຄິດເຫັນ'); return; }
   if(!pdRating){ alert('ກະລຸນາໃຫ້ດາວກ່ອນ'); return; }
@@ -1160,22 +1225,49 @@ function quickAdd(id){ addToCart(id, 1); pulseCart(); }
 function pulseCart(){ const b=document.getElementById('cartCount'); b.style.transform='scale(1.4)'; setTimeout(()=>b.style.transform='scale(1)',150); }
 
 /* ============================================================ CART ============================================================ */
-function addToCart(id, qty, variant){
-  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+// Shared by addToCart() and buyNow() so a "buy now" line is built exactly the same way a
+// regular cart line is (same price/weight/seller resolution) — the only difference is which
+// array it ends up in.
+function buildCartLine(p, qty, variant){
   const variantId = variant ? variant.id : null;
   const variantLabel = variant ? variant.label : null;
   const price = variant ? (variant.price ?? p.price) : p.price;
-  // Same product with a different variant is a separate cart line (can't merge qty across variants).
-  const existing = STATE.cart.find(i=>i.product_id===id && i.variant_id===variantId);
-  if(existing) existing.qty += qty;
-  else STATE.cart.push({
-    product_id:id, name: nameFor(p) + (variantLabel?` (${variantLabel})`:''), price, qty,
+  return {
+    product_id:p.id, name: nameFor(p) + (variantLabel?` (${variantLabel})`:''), price, qty,
     variant_id: variantId, variant_label: variantLabel,
     image:(p.images&&p.images[0])||'',
     seller_id: p.seller_id || null,        // which shop this item belongs to — drives per-seller shipping & wallet split
     weight: Number(p.weight_kg)||1          // kg per unit — drives shipping calc
-  });
+  };
+}
+function addToCart(id, qty, variant){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  const variantId = variant ? variant.id : null;
+  // Same product with a different variant is a separate cart line (can't merge qty across variants).
+  const existing = STATE.cart.find(i=>i.product_id===id && i.variant_id===variantId);
+  if(existing) existing.qty += qty;
+  else STATE.cart.push(buildCartLine(p, qty, variant));
   saveCart();
+}
+/* ---- "Buy Now" — checks out a single product immediately without touching the real cart.
+   The "ເພີ່ມໃສ່ກະຕ່າ" button still exists and behaves exactly as before; this is a second,
+   parallel path that feeds the *same* checkout modal/submitOrder logic but reads from
+   buyNowItems instead of STATE.cart while buyNowMode is on, then clears itself afterwards
+   (or on cancel) instead of clearing the customer's actual cart. */
+let buyNowMode = false;
+let buyNowItems = [];
+function activeCart(){ return buyNowMode ? buyNowItems : STATE.cart; }
+function exitBuyNowMode(){ buyNowMode = false; buyNowItems = []; }
+function buyNow(id, qty, variant){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  requireLogin(()=>{
+    buyNowItems = [buildCartLine(p, qty, variant)];
+    buyNowMode = true;
+    const savedAddrs = getSavedAddresses();
+    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
+    renderCheckout();
+    openModal('modalCheckout');
+  });
 }
 /* ============================================================ PER-SELLER SHIPPING CALCULATOR ============================================================
    Replaces the old "flat carrier base_fee for the whole order" model with per-seller rates:
@@ -1200,7 +1292,7 @@ function calcGroupShipping(group, address, carrier){
 // since each group gets its own shipping fee and becomes its own order at checkout.
 function groupCartBySeller(){
   const map = new Map();
-  STATE.cart.forEach(i=>{
+  activeCart().forEach(i=>{
     const key = i.seller_id || '__official__';
     if(!map.has(key)) map.set(key, {sellerId: i.seller_id||null, items:[], weight:0, subtotal:0, freeShipping:false});
     const g = map.get(key);
@@ -1325,6 +1417,7 @@ function logout(){ STATE.customer = null; saveCustomer(); renderAccount(); docum
 let checkoutState = {address:null, carrier:null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
 function startCheckout(){
   if(!STATE.cart.length) return;
+  exitBuyNowMode(); // this is the ordinary "checkout my cart" entry point, not Buy Now
   requireLogin(()=>{
     const savedAddrs = getSavedAddresses();
     checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
@@ -1336,7 +1429,7 @@ function renderCheckout(){
   const groups = groupCartBySeller();
   groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
   const groupDiscounts = computeGroupDiscounts(groups, checkoutState.discount||0);
-  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const subtotal = activeCart().reduce((s,i)=>s+i.price*i.qty,0);
   const shipping = groups.reduce((s,g)=> s + calcGroupShipping(g, checkoutState.address, checkoutState.carrier), 0);
   const total = subtotal + shipping - (checkoutState.discount||0);
   const shipRows = groups.map((g,idx)=>{
@@ -1390,7 +1483,7 @@ async function applyCoupon(){
   onGuard('coupon', async ()=>{
     const code = document.getElementById('couponCode').value.trim();
     if(!code) return;
-    const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+    const subtotal = activeCart().reduce((s,i)=>s+i.price*i.qty,0);
     try{
       const res = await sbRPC('coupon_validate', {p_code:code, p_subtotal:subtotal});
       checkoutState.coupon = code;
@@ -1415,7 +1508,7 @@ function proceedCheckout(){
   const groups = groupCartBySeller();
   groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
   const shipping = groups.reduce((s,g)=> s + calcGroupShipping(g, checkoutState.address, checkoutState.carrier), 0);
-  const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+  const subtotal = activeCart().reduce((s,i)=>s+i.price*i.qty,0);
   const total = subtotal + shipping - (checkoutState.discount||0);
   if(payment==='wallet' && Number(STATE.customer.wallet_balance||0) < total){
     playErrorSound();
@@ -1497,7 +1590,7 @@ async function submitOrder(payment, needsSlip){
     groups.forEach(g=> g.freeShipping = checkoutState.freeShipping && (!checkoutState.couponSellerId || checkoutState.couponSellerId===g.sellerId));
     const groupDiscounts = computeGroupDiscounts(groups, checkoutState.discount||0);
     const shipping = groups.reduce((s,g)=> s + calcGroupShipping(g, checkoutState.address, checkoutState.carrier), 0);
-    const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
+    const subtotal = activeCart().reduce((s,i)=>s+i.price*i.qty,0);
     const total = subtotal + shipping - (checkoutState.discount||0);
     const btn = document.getElementById('submitOrderBtn');
     let file = null;
@@ -1540,7 +1633,7 @@ async function submitOrder(payment, needsSlip){
         });
         results.push(res);
       }
-      STATE.cart = []; saveCart();
+      if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
       closeModal('modalCheckout');
       const combinedTotal = results.reduce((s,r)=>s+Number(r.total||0),0);
       const orderNumbers = results.map(r=>r.order_number).join(', ');
@@ -2734,7 +2827,7 @@ function renderAdminSellerList(){
   wrap.innerHTML = list.map(s=>`
     <div class="admin-list-item">
       <div class="top">
-        <span class="title">${s.logo_url?`<img src="${s.logo_url}" style="width:22px; height:22px; border-radius:6px; object-fit:cover; vertical-align:middle; margin-right:4px;">`:''}${s.store_name}</span>
+        <span class="title">${s.logo_url?`<img src="${s.logo_url}" style="width:22px; height:22px; border-radius:6px; object-fit:cover; vertical-align:middle; margin-right:4px;">`:''}${s.store_name} ${sellerVerifiedBadge(s)}</span>
         <span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span>
       </div>
       <div class="hint">${s.phone||'-'} • ${s.email||'-'} • 👥 ${s.follower_count||0} ຜູ້ຕິດຕາມ</div>
@@ -2749,9 +2842,23 @@ function renderAdminSellerList(){
         ${s.status==='approved' ? `<button onclick="adminSuspendSeller('${s.id}')" style="color:var(--warn);">🚫 ລະງັບ</button><button onclick="adminResetSellerPw('${s.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>` : ''}
         ${s.status==='suspended' ? `<button onclick="adminReactivateSeller('${s.id}')" style="color:var(--ok);">✅ ເປີດຄືນ</button>` : ''}
         ${s.status==='rejected' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button>` : ''}
+        ${s.status==='approved' ? `<button onclick="adminToggleSellerVerified('${s.id}', ${!s.is_verified})" style="color:var(--gold);">${s.is_verified?'✖️ ຖອນການຢືນຢັນ':'🏆 ຢືນຢັນຮ້ານ (ຂາຍດີ)'}</button>` : ''}
         <button onclick="adminDeleteSeller('${s.id}')" style="color:var(--danger);">🗑️ ລຶບຮ້ານ</button>
       </div>
     </div>`).join('');
+}
+// Admin-only endorsement, separate from a seller's KYC approval status: this is the "trusted
+// by the platform" mark (shown to customers as sellerVerifiedBadge) rather than a login gate.
+// Backend requirement (SQL side, not in this file): admin_set_seller_verified(p_password,
+// p_seller_id, p_verified) — UPDATE sellers SET is_verified = p_verified WHERE id = p_seller_id,
+// admin-only via the same p_password check every other admin_* RPC here uses.
+async function adminToggleSellerVerified(id, verified){
+  try{
+    await sbRPC('admin_set_seller_verified', {p_password:STATE.adminPassword, p_seller_id:id, p_verified:verified});
+    const s = STATE.adminSellers.find(x=>x.id===id); if(s) s.is_verified = verified;
+    const pub = sellerById(id); if(pub) pub.is_verified = verified;
+    renderAdminSellerList();
+  }catch(e){ alert('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 function adminEditSellerProfile(id){
   const s = id ? STATE.adminSellers.find(x=>x.id===id) : {};
