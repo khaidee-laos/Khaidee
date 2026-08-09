@@ -2295,7 +2295,39 @@ function selectTransferBank(id, total){
    and poll the order row until the phajay-webhook Edge Function (triggered by the bank on real
    payment) flips status to 'paid'. No slip upload, no admin step. */
 const QR_BANKS = ['BCEL','LDB','JDB']; // banks PhaJay currently supports — matches bank_accounts.bank_name_en
+const QR_EXPIRY_MS = 24*60*60*1000; // a generated QR is only shown/scannable for 24h from order creation;
+                                     // after that this UI treats it as failed/expired (see renderQrExpiredBox below).
 let qrPollTimer = null;
+let qrCountdownTimer = null;
+// Shared "expired" box for both the checkout QR step and the order-detail QR box. Stops whatever
+// timers are running for that box and swaps its contents to a clear failure state so the QR image
+// (which PhaJay would reject as stale anyway) is never left on screen looking scannable.
+function renderQrExpiredBox(el){
+  if(!el) return;
+  el.innerHTML = `
+    <div style="text-align:center; padding:20px 14px; border:1.5px dashed var(--danger); border-radius:12px;">
+      <div style="font-size:30px;">❌</div>
+      <div style="margin-top:8px; font-weight:800; color:var(--danger);">ການສັ່ງຊື້ບໍ່ສຳເລັດ</div>
+      <div class="hint" style="margin-top:4px;">ໝົດເວລາຊຳລະເງິນ (24 ຊົ່ວໂມງ) ນັບຈາກສ້າງອໍເດີ — QR ນີ້ໃຊ້ບໍ່ໄດ້ອີກຕໍ່ໄປ</div>
+    </div>`;
+}
+// Starts a 1s-tick countdown inside #<countdownElId> that counts down to expiresAtMs, then calls
+// onExpire() once (and stops itself). Returns the interval id so callers can clear it on cleanup.
+function startQrCountdown(countdownElId, expiresAtMs, onExpire){
+  const tick = ()=>{
+    const remain = expiresAtMs - Date.now();
+    const el = document.getElementById(countdownElId);
+    if(remain<=0){
+      clearInterval(timerId);
+      onExpire();
+      return;
+    }
+    if(el) el.textContent = `⏱️ ໝົດອາຍຸໃນ ${fmtCountdown(new Date(expiresAtMs).toISOString())}`;
+  };
+  const timerId = setInterval(tick, 1000);
+  tick();
+  return timerId;
+}
 function renderQrPaymentStep(total){
   const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active && QR_BANKS.includes(b.bank_name_en));
   const selectedId = checkoutState.bankAccountId;
@@ -2334,15 +2366,21 @@ async function requestQrAndShow(orderNumber, total){
     const data = await r.json();
     if(!r.ok) throw new Error(data.error || 'ສ້າງ QR ບໍ່ສຳເລັດ');
     const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(data.qrCode)}`;
+    const expiresAtMs = Date.now() + QR_EXPIRY_MS; // order was just created right now, so the 24h window starts here
     body.innerHTML = `
       <div style="text-align:center;">
         <div class="sumrow total" style="margin-bottom:10px; justify-content:center; gap:8px;"><span>ຍອດຈ່າຍ</span><span>${fmtMoney(total)}</span></div>
         <img src="${qrImg}" style="width:220px; height:220px; border-radius:14px; border:1.5px solid var(--line);">
         <div class="hint" style="margin-top:10px;">ເປີດແອັບທະນາຄານ (${bankCode}) ແລ້ວສະແກນ QR ນີ້ເພື່ອຈ່າຍ</div>
         <div id="qrWaitingLine" style="margin-top:14px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
+        <div id="qrCheckoutCountdown" class="hint" style="margin-top:6px; font-weight:600;"></div>
         <div class="hint" style="margin-top:6px;">ອໍເດີເລກທີ: ${orderNumber} — ໜ້ານີ້ຈະອັບເດດອັດຕະໂນມັດທັນທີທີ່ຈ່າຍສຳເລັດ, ບໍ່ຕ້ອງອັບໂຫລດຫຼັກຖານໃດໆ</div>
       </div>`;
     startQrPolling(orderNumber);
+    qrCountdownTimer = startQrCountdown('qrCheckoutCountdown', expiresAtMs, ()=>{
+      if(qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer=null; }
+      renderQrExpiredBox(document.getElementById('checkoutBody'));
+    });
   }catch(e){
     body.innerHTML = `<div class="err">ສ້າງ QR ບໍ່ສຳເລັດ: ${e.message}</div>
       <button class="btn btn-ghost" onclick="renderCheckout()">← ລອງໃໝ່</button>`;
@@ -2790,15 +2828,24 @@ async function openOrderDetail(orderId){
       // and the status flips" behavior as the checkout flow, but reachable any time the customer
       // reopens this order instead of only right after placing it.
       if(o.status==='pending' && o.payment_method==='qr'){
-        renderOrderDetailQr(orderId, o.order_number, o.total, o.bank_name_en);
+        renderOrderDetailQr(orderId, o.order_number, o.total, o.bank_name_en, o.created_at);
       }
     }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດລາຍລະອຽດຄຳສັ່ງຊື້ໄດ້</div>'; }
   });
 }
 let orderDetailQrPollTimer = null;
-async function renderOrderDetailQr(orderId, orderNumber, total, bankNameEn){
+let orderDetailQrCountdownTimer = null;
+async function renderOrderDetailQr(orderId, orderNumber, total, bankNameEn, createdAt){
   const box = document.getElementById('orderDetailQrBox');
   if(!box) return;
+  // Orders left unpaid more than 24h after creation are treated as failed/expired here — the QR
+  // is never (re)generated for them, so a customer coming back days later doesn't see a scannable
+  // code that PhaJay would reject anyway.
+  const expiresAtMs = new Date(createdAt).getTime() + QR_EXPIRY_MS;
+  if(!createdAt || Date.now() >= expiresAtMs){
+    renderQrExpiredBox(box);
+    return;
+  }
   box.innerHTML = `<div class="hint" style="text-align:center; padding:16px 0;">⏳ ກຳລັງໂຫລດ QR ...</div>`;
   // Older pending orders created before bank_account_id was saved for the QR flow won't have a
   // bank on file — fall back to the first bank PhaJay supports so the QR can still be regenerated.
@@ -2817,8 +2864,13 @@ async function renderOrderDetailQr(orderId, orderNumber, total, bankNameEn){
         <img src="${qrImg}" style="width:200px; height:200px; border-radius:14px; border:1.5px solid var(--line);">
         <div class="hint" style="margin-top:8px;">ເປີດແອັບທະນາຄານ (${bankCode}) ແລ້ວສະແກນ QR ນີ້</div>
         <div style="margin-top:8px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
+        <div id="orderDetailQrCountdown" class="hint" style="margin-top:6px; font-weight:600;"></div>
       </div>`;
     startOrderDetailQrPolling(orderId, orderNumber);
+    orderDetailQrCountdownTimer = startQrCountdown('orderDetailQrCountdown', expiresAtMs, ()=>{
+      if(orderDetailQrPollTimer){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer=null; }
+      renderQrExpiredBox(document.getElementById('orderDetailQrBox'));
+    });
   }catch(e){
     box.innerHTML = `<div class="hint" style="color:var(--danger); margin-top:8px;">ບໍ່ສາມາດໂຫລດ QR ໄດ້: ${e.message}</div>`;
   }
@@ -2845,12 +2897,19 @@ function startOrderDetailQrPolling(orderId, orderNumber){
     if(tries > 180){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; } // ~15 min
   }, 5000);
 }
-// Stop polling if the customer closes the order detail sheet without paying, so it doesn't keep
-// hitting the DB in the background after they've navigated away.
+// Stop polling/countdowns if the customer closes the order detail or checkout sheet without
+// paying, so they don't keep running in the background after the customer navigates away.
 (function(){
   const origCloseModal = window.closeModal;
   window.closeModal = function(id){
-    if(id==='modalOrderDetail' && orderDetailQrPollTimer){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; }
+    if(id==='modalOrderDetail'){
+      if(orderDetailQrPollTimer){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; }
+      if(orderDetailQrCountdownTimer){ clearInterval(orderDetailQrCountdownTimer); orderDetailQrCountdownTimer = null; }
+    }
+    if(id==='modalCheckout'){
+      if(qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; }
+      if(qrCountdownTimer){ clearInterval(qrCountdownTimer); qrCountdownTimer = null; }
+    }
     return origCloseModal.apply(this, arguments);
   };
 })();
