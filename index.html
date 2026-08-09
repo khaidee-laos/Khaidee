@@ -2157,7 +2157,7 @@ function renderCheckout(){
     </div>
     <div class="field">
       <label>💳 ວິທີຊຳລະເງິນ</label>
-      <select id="paymentMethod"><option value="transfer">ໂອນຜ່ານທະນາຄານ</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
+      <select id="paymentMethod"><option value="qr">📱 ສະແກນ QR ຈ່າຍເງິນ (ຢືນຢັນທັນທີ)</option><option value="transfer">ໂອນຜ່ານທະນາຄານ (ອັບໂຫລດສະລິບ)</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
     </div>
     <div class="sumrow"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(subtotal)}</span></div>
     ${shipRows}
@@ -2226,6 +2226,7 @@ function proceedCheckout(){
     return;
   }
   if(payment==='transfer'){ renderTransferProofStep(total); return; }
+  if(payment==='qr'){ renderQrPaymentStep(total); return; }
   submitOrder(payment, null);
 }
 /* ---- Step 2 (transfer only): pick a bank, see ITS QR + account, then attach the slip ----
@@ -2280,6 +2281,86 @@ function selectTransferBank(id, total){
   checkoutState.bankAccountId = id;
   renderTransferProofStep(total);
 }
+/* ============================================================ QR AUTO-PAY (PhaJay) ============================================================
+   "ສະແກນ QR ຈ່າຍເງິນ" — customer picks a bank, we create the order (status stays 'pending'),
+   ask the phajay-generate-qr Edge Function for a QR tied to that exact order+amount, show it,
+   and poll the order row until the phajay-webhook Edge Function (triggered by the bank on real
+   payment) flips status to 'paid'. No slip upload, no admin step. */
+const QR_BANKS = ['BCEL','LDB','JDB']; // banks PhaJay currently supports — matches bank_accounts.bank_name_en
+let qrPollTimer = null;
+function renderQrPaymentStep(total){
+  const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active && QR_BANKS.includes(b.bank_name_en));
+  const selectedId = checkoutState.bankAccountId;
+  const selected = banks.find(b=>b.id===selectedId);
+  document.getElementById('checkoutBody').innerHTML = `
+    <div class="hint" style="cursor:pointer; margin-bottom:10px;" onclick="renderCheckout()">← ຍ້ອນກັບ ແກ້ໄຂຄຳສັ່ງຊື້</div>
+    <div class="field">
+      <label>📱 ສະແກນ QR ຈ່າຍເງິນ — ຢືນຢັນອັດຕະໂນມັດທັນທີ</label>
+      <div class="sumrow total" style="margin-bottom:10px;"><span>ຍອດທີ່ຕ້ອງຈ່າຍ</span><span>${fmtMoney(total)}</span></div>
+    </div>
+    ${banks.length ? `<div class="field">
+      <label>🏦 ເລືອກທະນາຄານ</label>
+      ${banks.map(b=>`
+        <div class="optcard ${selectedId===b.id?'selected':''}" onclick="checkoutState.bankAccountId=${b.id}; renderQrPaymentStep(${total})">
+          <div class="ico">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">`:(b.logo_emoji||'🏦')}</div>
+          <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
+          <div class="arrow">›</div>
+        </div>`).join('')}
+    </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າທະນາຄານທີ່ຮອງຮັບ QR ອັດຕະໂນມັດ (BCEL / LDB / JDB) — ກະລຸນາເລືອກວິທີຊຳລະອື່ນ</div>`}
+    <button class="btn btn-primary" id="submitOrderBtn" ${selected?'':'disabled'} onclick="submitOrder('qr', false)">⚡ ສ້າງ QR ຈ່າຍເງິນ</button>
+    <div class="hint" style="margin-top:8px;">ສະແກນຈ່າຍແລ້ວລະບົບຈະຢືນຢັນອໍເດີໃຫ້ທັນທີ ບໍ່ຕ້ອງລໍຖ້າແອດມິນ</div>`;
+}
+// Called after order_create succeeds with payment_method 'qr'. Asks the Edge Function for a QR
+// tied to this exact order, then shows it and starts polling for the webhook-driven status flip.
+async function requestQrAndShow(orderNumber, total){
+  const body = document.getElementById('checkoutBody');
+  body.innerHTML = `<div class="hint" style="text-align:center; padding:30px 0;">⏳ ກຳລັງສ້າງ QR ...</div>`;
+  const bankAcc = (STATE.bankAccounts||[]).find(b=>b.id===checkoutState.bankAccountId);
+  const bankCode = bankAcc ? bankAcc.bank_name_en : 'BCEL';
+  try{
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/phajay-generate-qr`, {
+      method:'POST',
+      headers: sbHeaders(),
+      body: JSON.stringify({order_number: orderNumber, bank: bankCode})
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'ສ້າງ QR ບໍ່ສຳເລັດ');
+    const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(data.qrCode)}`;
+    body.innerHTML = `
+      <div style="text-align:center;">
+        <div class="sumrow total" style="margin-bottom:10px; justify-content:center; gap:8px;"><span>ຍອດຈ່າຍ</span><span>${fmtMoney(total)}</span></div>
+        <img src="${qrImg}" style="width:220px; height:220px; border-radius:14px; border:1.5px solid var(--line);">
+        <div class="hint" style="margin-top:10px;">ເປີດແອັບທະນາຄານ (${bankCode}) ແລ້ວສະແກນ QR ນີ້ເພື່ອຈ່າຍ</div>
+        <div id="qrWaitingLine" style="margin-top:14px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
+        <div class="hint" style="margin-top:6px;">ອໍເດີເລກທີ: ${orderNumber} — ໜ້ານີ້ຈະອັບເດດອັດຕະໂນມັດທັນທີທີ່ຈ່າຍສຳເລັດ, ບໍ່ຕ້ອງອັບໂຫລດຫຼັກຖານໃດໆ</div>
+      </div>`;
+    startQrPolling(orderNumber);
+  }catch(e){
+    body.innerHTML = `<div class="err">ສ້າງ QR ບໍ່ສຳເລັດ: ${e.message}</div>
+      <button class="btn btn-ghost" onclick="renderCheckout()">← ລອງໃໝ່</button>`;
+  }
+}
+function startQrPolling(orderNumber){
+  if(qrPollTimer) clearInterval(qrPollTimer);
+  let tries = 0;
+  qrPollTimer = setInterval(async ()=>{
+    tries++;
+    try{
+      const rows = await sbSelect('orders', `order_number=eq.${orderNumber}&select=status`);
+      const status = rows && rows[0] && rows[0].status;
+      if(status === 'paid'){
+        clearInterval(qrPollTimer); qrPollTimer = null;
+        playSuccessSound();
+        closeModal('modalCheckout');
+        if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
+        showToast(`✅ ຊຳລະເງິນສຳເລັດ! ອໍເດີເລກທີ: ${orderNumber}`);
+        loadProducts().then(()=>renderProducts());
+        renderOrders && renderOrders();
+      }
+    }catch(e){ /* transient network hiccup — just try again next tick */ }
+    if(tries > 180){ clearInterval(qrPollTimer); qrPollTimer = null; } // stop after ~15 min (5s * 180)
+  }, 5000);
+}
 /* ---- Order submission — one order PER SELLER ----
    A cart can span several shops, each with its own shipping fee, its own wallet to be credited,
    and its own 5% commission line — so one order_create call happens per seller group instead of
@@ -2312,6 +2393,11 @@ async function submitOrder(payment, needsSlip){
       file = document.getElementById('orderSlip').files[0];
       if(!file){ if(waTab) waTab.close(); showToast('ກະລຸນາອັບໂຫລດສະລິບໂອນເງິນ ເພື່ອຄວາມປອດໄພໃນການກວດສອບ'); return; }
     }
+    if(payment==='qr'){
+      if(waTab) waTab.close(); // QR flow never redirects to WhatsApp — no reserved tab needed
+      if(!checkoutState.bankAccountId){ showToast('ກະລຸນາເລືອກທະນາຄານກ່ອນ'); return; }
+      if(groups.length>1){ showToast('ກະຕ່າມີສິນຄ້າຈາກຫຼາຍຮ້ານ — QR ອັດຕະໂນມັດຮອງຮັບອໍເດີດຽວ ກະລຸນາເລືອກ "ໂອນຜ່ານທະນາຄານ" ແທນ'); return; }
+    }
     if(btn){ btn.disabled = true; btn.textContent = needsSlip ? 'ກຳລັງບີບອັດຮູບ...' : 'ກຳລັງດຳເນີນການ...'; } // onGuard() above is what actually blocks repeat taps / double-charge
     try{
       let slipUrl = null;
@@ -2343,10 +2429,18 @@ async function submitOrder(payment, needsSlip){
         });
         results.push(res);
       }
-      if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
-      closeModal('modalCheckout');
       const combinedTotal = results.reduce((s,r)=>s+Number(r.total||0),0);
       const orderNumbers = results.map(r=>r.order_number).join(', ');
+      if(payment==='qr'){
+        // Don't clear the cart / close the modal / go to WhatsApp yet — the order is still
+        // 'pending' until the customer actually scans & pays. requestQrAndShow() takes over the
+        // checkout body to show the QR, and startQrPolling() finishes the cart-clear + close
+        // + success toast once the phajay-webhook Edge Function flips the order to 'paid'.
+        requestQrAndShow(results[0].order_number, combinedTotal);
+        return;
+      }
+      if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
+      closeModal('modalCheckout');
       notifyWhatsApp(orderNumbers, combinedTotal, needsSlip, waTab);
       playSuccessSound();
       showToast(needsSlip
