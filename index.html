@@ -365,6 +365,41 @@ nav.bottom .icon{font-size:19px;}
 .tile .tile-dot{position:absolute; top:5px; left:5px; width:8px; height:8px; border-radius:50%; box-shadow:0 0 0 2px #fff; z-index:2;}
 .tile .tile-del{position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:rgba(43,27,20,.55); color:#fff; font-size:10px; border:none; z-index:2; display:flex; align-items:center; justify-content:center;}
 .status-select{font-size:11px; font-weight:700; padding:6px 8px; border-radius:8px; border:1.5px solid var(--line); background:#fff; color:var(--maroon); font-family:inherit;}
+/* ---------- COUPON TICKET (visual coupon card — used in admin coupon designer, admin coupon list, and the seller's admin-coupon pool) ---------- */
+.coupon-ticket{position:relative; display:flex; align-items:stretch; min-height:88px; border-radius:16px; overflow:hidden; box-shadow:0 8px 18px rgba(0,0,0,.16); color:#fff; margin-bottom:12px;}
+.coupon-ticket .ct-main{flex:1; padding:12px 14px; display:flex; flex-direction:column; justify-content:center; gap:2px; min-width:0;
+  background-image:linear-gradient(135deg, var(--maroon), var(--maroon-dark)), repeating-linear-gradient(45deg, rgba(255,255,255,.07) 0 10px, transparent 10px 20px);}
+.coupon-ticket.type-free .ct-main{background-image:linear-gradient(135deg, #12938A, #0B5C55), repeating-linear-gradient(45deg, rgba(255,255,255,.07) 0 10px, transparent 10px 20px);}
+.coupon-ticket .ct-value{font-size:24px; font-weight:900; line-height:1.1; letter-spacing:.3px;}
+.coupon-ticket .ct-label{font-size:11.5px; font-weight:700; opacity:.95;}
+.coupon-ticket .ct-sub{font-size:10px; opacity:.85; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.coupon-ticket .ct-stub{width:82px; flex-shrink:0; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-align:center; padding:8px 4px;
+  border-left:2px dashed rgba(255,255,255,.55);
+  background-image:linear-gradient(160deg, var(--gold), #B9862C);}
+.coupon-ticket.type-free .ct-stub{background-image:linear-gradient(160deg, #1FC0AE, #0B5C55);}
+.coupon-ticket .ct-stub::before, .coupon-ticket .ct-stub::after{content:''; position:absolute; width:16px; height:16px; border-radius:50%; background:rgba(0,0,0,.20); left:-9px;}
+.coupon-ticket .ct-stub::before{top:-8px;}
+.coupon-ticket .ct-stub::after{bottom:-8px;}
+.coupon-ticket .ct-icon{font-size:20px;}
+.coupon-ticket .ct-code{font-size:10.5px; font-weight:800; letter-spacing:.5px; word-break:break-all;}
+.coupon-ticket .ct-expiry{font-size:9.5px; opacity:.9;}
+.coupon-ticket .ct-del{position:absolute; top:6px; right:6px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,.28); color:#fff; border:none; font-size:11px; z-index:3; display:flex; align-items:center; justify-content:center;}
+.coupon-ticket.dim{filter:grayscale(.5); opacity:.6;}
+/* small badge shown on product cards / detail page when a product has an active coupon */
+.coupon-flag{position:absolute; z-index:3; top:6px; right:6px; background:linear-gradient(135deg, var(--maroon), var(--maroon-dark)); color:#fff; font-size:10px; font-weight:800; padding:4px 8px 4px 7px; border-radius:999px; display:flex; align-items:center; gap:3px; box-shadow:0 3px 8px rgba(0,0,0,.25);}
+.coupon-flag.type-free{background:linear-gradient(135deg, #12938A, #0B5C55);}
+.coupon-cd{font-weight:700; font-variant-numeric:tabular-nums;}
+.pd-coupon-banner{margin:10px 0; border-radius:14px; padding:12px 14px; color:#fff; display:flex; align-items:center; gap:10px;
+  background-image:linear-gradient(135deg, var(--maroon), var(--maroon-dark)), repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 10px, transparent 10px 20px);}
+.pd-coupon-banner.type-free{background-image:linear-gradient(135deg, #12938A, #0B5C55), repeating-linear-gradient(45deg, rgba(255,255,255,.06) 0 10px, transparent 10px 20px);}
+.pd-coupon-banner .ico{font-size:22px; flex-shrink:0;}
+.pd-coupon-banner .txt{flex:1; min-width:0;}
+.pd-coupon-banner .txt .t1{font-size:13px; font-weight:800;}
+.pd-coupon-banner .txt .t2{font-size:11px; opacity:.9; margin-top:1px;}
+.pd-coupon-banner .cd{font-size:11px; font-weight:800; background:rgba(255,255,255,.18); padding:4px 8px; border-radius:999px; flex-shrink:0;}
+.coupon-type-toggle{display:flex; gap:8px; margin-bottom:14px;}
+.coupon-type-toggle button{flex:1; padding:10px; border-radius:12px; border:1.5px solid var(--line); background:#fff; font-weight:700; font-size:12.5px; color:var(--ink-soft);}
+.coupon-type-toggle button.active{border-color:var(--maroon); color:var(--maroon); background:var(--gold-light);}
 .admin-list-item .top{display:flex; justify-content:space-between; align-items:center;}
 .admin-list-item .title{font-weight:700; font-size:13.5px;}
 .status-pill{font-size:10px; font-weight:700; padding:3px 9px; border-radius:999px;}
@@ -876,7 +911,7 @@ document.querySelectorAll('.lang-switch button').forEach(b=>{
 
 /* ============================================================ STATE ============================================================ */
 let STATE = {
-  products: [], categories: [], carriers: [], settings: {}, bankAccounts: [], sellers: [],
+  products: [], categories: [], carriers: [], settings: {}, bankAccounts: [], sellers: [], productCoupons: {},
   activeCategory: null, cart: JSON.parse(localStorage.getItem('kd_cart')||'[]'),
   customer: JSON.parse(localStorage.getItem('kd_customer')||'null'),
   favorites: JSON.parse(localStorage.getItem('kd_favorites')||'[]'),
@@ -1044,6 +1079,51 @@ function filterCategory(id){
 async function loadProducts(){
   STATE.products = await sbSelect('products', 'select=*&order=created_at.desc');
 }
+/* ---------- PRODUCT COUPONS (badge + countdown shown on product cards / detail page) ----------
+   public_product_coupons() returns one row per product that currently has an active, non-expired,
+   not-yet-quantity-exhausted coupon attached by its seller. Purely informational/marketing for now —
+   this does not (yet) change the price charged at checkout. */
+async function loadProductCoupons(){
+  try{
+    const rows = await sbRPC('public_product_coupons', {});
+    const map = {};
+    rows.forEach(r=> map[r.product_id] = r);
+    STATE.productCoupons = map;
+  }catch(e){ console.warn('public_product_coupons failed', e); STATE.productCoupons = {}; }
+}
+function fmtCountdown(expiresAt){
+  if(!expiresAt) return '';
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if(diff<=0) return 'ໝົດອາຍຸແລ້ວ';
+  const d = Math.floor(diff/86400000), h = Math.floor(diff%86400000/3600000), m = Math.floor(diff%3600000/60000), s = Math.floor(diff%60000/1000);
+  if(d>0) return `${d}ມື້ ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+// Small ribbon shown on the top-right corner of a product card image.
+function couponFlagHtml(productId){
+  const c = STATE.productCoupons[productId]; if(!c) return '';
+  const isFree = c.discount_type==='free_shipping';
+  const label = isFree ? 'ສົ່ງຟຣີ' : (c.discount_type==='percent' ? `-${c.discount_value}%` : `-${fmtMoney(c.discount_value)}`);
+  return `<div class="coupon-flag ${isFree?'type-free':''}">🎟️ ${label}${c.expires_at?` <span class="coupon-cd" data-expires="${c.expires_at}">${fmtCountdown(c.expires_at)}</span>`:''}</div>`;
+}
+// Bigger banner shown inside the product detail page.
+function couponBannerHtml(productId){
+  const c = STATE.productCoupons[productId]; if(!c) return '';
+  const isFree = c.discount_type==='free_shipping';
+  const title = isFree ? '🚚 ສິນຄ້ານີ້ມີຄູປອງສົ່ງຟຣີ' : (c.discount_type==='percent' ? `🎟️ ຫລຸດ ${c.discount_value}% ດ້ວຍຄູປອງ` : `🎟️ ຫລຸດ ${fmtMoney(c.discount_value)} ດ້ວຍຄູປອງ`);
+  return `<div class="pd-coupon-banner ${isFree?'type-free':''}">
+    <div class="ico">${isFree?'🚚':'🎟️'}</div>
+    <div class="txt"><div class="t1">${title}</div><div class="t2">ໂຄ້ດ: ${c.code}</div></div>
+    ${c.expires_at?`<div class="cd">⏳ <span class="coupon-cd" data-expires="${c.expires_at}">${fmtCountdown(c.expires_at)}</span></div>`:''}
+  </div>`;
+}
+// Ticks every active .coupon-cd element on screen once a second so countdowns stay live without re-rendering whole cards.
+setInterval(()=>{
+  document.querySelectorAll('.coupon-cd').forEach(el=>{
+    const exp = el.getAttribute('data-expires'); if(!exp) return;
+    el.textContent = fmtCountdown(exp);
+  });
+}, 1000);
 async function loadCarriers(){
   STATE.carriers = await sbSelect('shipping_carriers', 'select=*&order=sort_order.asc');
 }
@@ -1150,6 +1230,7 @@ function renderShopGrid(){
     <div class="card ${oos?'out-of-stock':''}" onclick="closeModal('modalShop'); openProduct(${p.id})">
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+        ${couponFlagHtml(p.id)}
         ${sellerVerifiedBadge(shop,'on-card')}
         <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
         ${oos?outOfStockRibbon():''}
@@ -1190,6 +1271,7 @@ function renderProducts(){
     <div class="card ${oos?'out-of-stock':''}" onclick="openProduct(${p.id})">
       <div class="imgwrap">
         ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+        ${couponFlagHtml(p.id)}
         ${sellerVerifiedBadge(sellerById(p.seller_id),'on-card')}
         <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
         ${oos?outOfStockRibbon():''}
@@ -1319,6 +1401,7 @@ function paintProductDetail(id){
       <div class="price" style="font-size:20px;" id="pdPrice">${fmtMoney(displayPrice)} ${displayCompare?`<span class="compare" style="font-size:13px;">${fmtMoney(displayCompare)}</span>`:''}</div>
       <div class="meta" style="margin:8px 0 0;" id="pdStockLine">ຄົງເຫຼືອ ${displayStock??0} ຊິ້ນ • ຂາຍແລ້ວ ${p.sold_count||0} • ⭐ ${p.rating_avg||'-'}</div>
       <div id="pdOosBanner">${(displayStock??0)<=0?'<div class="pd-oos-banner">⛔ ສິນຄ້ານີ້ໝົດແລ້ວ — ບໍ່ສາມາດສັ່ງຊື້ໄດ້ໃນຕອນນີ້</div>':''}</div>
+      ${couponBannerHtml(p.id)}
 
       ${detailGroups.length ? `
       <div class="hint" style="margin-top:8px;">🎛️ ມີຕົວເລືອກ: ${detailGroups.map(g=>g.name).join(', ')} — ເລືອກໄດ້ຕາມໃຈມັກ (ບໍ່ບັງຄັບ) ຕອນກົດ “ເພີ່ມໃສ່ກະຕ່າ” ຫຼື “ຊື້ເລີຍ” ຂ້າງລຸ່ມ</div>` : ''}
@@ -1363,6 +1446,7 @@ function paintProductDetail(id){
         <div class="card ${rOos?'out-of-stock':''}" onclick="openProduct(${r.id})">
           <div class="imgwrap">
             ${r.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+            ${couponFlagHtml(r.id)}
             <img src="${(r.images&&r.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
             ${rOos?outOfStockRibbon():''}
           </div>
@@ -3701,53 +3785,93 @@ function adminEditBank(id){
     }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); } finally { saveBtn.disabled = false; }
   };
 }
+// Auto-generates a short, unique-looking coupon code so the admin never has to type one —
+// e.g. "SALE20-K7F2" for a 20%-off coupon, or "FREESHIP-9QX1" for free shipping.
+function autoCouponCode(discountType, percent){
+  const rand = Math.random().toString(36).slice(2,6).toUpperCase();
+  if(discountType==='free_shipping') return `FREESHIP-${rand}`;
+  return `SALE${percent||0}-${rand}`;
+}
+function couponTicketPreviewHtml(discountType, value, expiresAt){
+  const isFree = discountType==='free_shipping';
+  const big = isFree ? '🚚' : `${value||0}%`;
+  const label = isFree ? 'ສົ່ງຟຣີ' : 'ສ່ວນຫລຸດ';
+  const expTxt = expiresAt ? new Date(expiresAt).toLocaleDateString('lo-LA') : 'ບໍ່ໝົດອາຍຸ';
+  return `<div class="coupon-ticket ${isFree?'type-free':''}">
+    <div class="ct-main">
+      <div class="ct-value">${big}</div>
+      <div class="ct-label">${label}${!isFree ? ' ເມື່ອຊື້ສິນຄ້າ' : 'ທົ່ວປະເທດ'}</div>
+    </div>
+    <div class="ct-stub">
+      <div class="ct-icon">${isFree?'📦':'🎟️'}</div>
+      <div class="ct-expiry">⏳ ${expTxt}</div>
+    </div>
+  </div>`;
+}
 async function renderAdminCoupons(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   let list = [];
   try{ list = await sbRPC('admin_list_coupons', {p_password: STATE.adminPassword}); }catch(e){ list = []; }
   STATE.adminCouponsCache = list;
-  const valueLabel = cp => cp.discount_type==='percent' ? `${cp.discount_value}%` : cp.discount_type==='free_shipping' ? 'ສົ່ງຟຣີ' : fmtMoney(cp.discount_value);
-  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditCoupon()">➕ ສ້າງຄູປອງ</button>` +
-    (!list.length ? '<div class="empty">ຍັງບໍ່ມີຄູປອງ</div>' : `<div class="tile-grid">${list.map(cp=>`
-      <div class="tile" onclick="adminEditCoupon(${cp.id})">
-        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCoupon(${cp.id})">✕</button>
-        <div class="tile-dot" style="background:${cp.is_active?'var(--ok)':'var(--ink-soft)'}"></div>
-        <div class="tile-img" style="font-size:20px;">🎟️</div>
-        <div class="tile-title">${cp.code}</div>
-        <div class="tile-sub">${valueLabel(cp)}</div>
-      </div>`).join('')}</div>`);
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:14px;" onclick="adminEditCoupon()">➕ ສ້າງຄູປອງໃໝ່</button>
+    <div class="hint" style="margin:-6px 0 14px;">ຄູປອງທີ່ສ້າງທີ່ນີ້ຈະສົ່ງໄປໃຫ້ຮ້ານຄ້າທຸກຮ້ານ — ຜູ້ຂາຍຈະເລືອກເອົາໄປຕິດໃສ່ສິນຄ້າຂອງເຂົາເອງ (ພ້ອມກຳນົດຈຳນວນ ຫຼື ບໍ່ຈຳກັດ) ຈາກໜ້າຮ້ານຄ້າຂອງເຂົາ</div>` +
+    (!list.length ? '<div class="empty">ຍັງບໍ່ມີຄູປອງ</div>' : list.map(cp=>{
+      const expired = cp.expires_at && new Date(cp.expires_at).getTime() < Date.now();
+      return `<div style="position:relative;" onclick="adminEditCoupon(${cp.id})">
+        <button class="ct-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCoupon(${cp.id})">✕</button>
+        <div class="${(!cp.is_active||expired)?'dim':''}">${couponTicketPreviewHtml(cp.discount_type, cp.discount_value, cp.expires_at)}</div>
+      </div>`;
+    }).join(''));
 }
 function adminEditCoupon(id){
   const cp = id ? (STATE.adminCouponsCache||[]).find(x=>x.id===id) : null;
+  let type = cp?.discount_type || 'percent';
   const overlay = document.createElement('div'); overlay.className='overlay show center';
-  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂ':'ສ້າງ'}ຄູປອງ</h3><button class="closex" data-close>✕</button></div>
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🎟️ ${id?'ແກ້ໄຂ':'ສ້າງ'}ຄູປອງ</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="field"><label>ລະຫັດຄູປອງ</label><input id="cpCode" placeholder="KHAIDEE10" value="${cp?.code||''}"></div>
-    <div class="field"><label>ປະເພດສ່ວນຫຼຸດ</label><select id="cpType" onchange="document.getElementById('cpValueField').style.display = this.value==='free_shipping'?'none':'block';">
-      <option value="fixed" ${cp&&cp.discount_type==='fixed'?'selected':''}>ຫຼຸດຈຳນວນເງິນ</option>
-      <option value="percent" ${cp&&cp.discount_type==='percent'?'selected':''}>ຫຼຸດເປັນ %</option>
-      <option value="free_shipping" ${cp&&cp.discount_type==='free_shipping'?'selected':''}>🚚 ສົ່ງຟຣີ</option></select></div>
-    <div class="field" id="cpValueField" style="${cp&&cp.discount_type==='free_shipping'?'display:none;':''}"><label>ມູນຄ່າສ່ວນຫຼຸດ</label><input type="number" id="cpValue" value="${cp?.discount_value||''}"></div>
-    <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ</label><input type="number" id="cpMin" value="${cp?.min_order||0}"></div>
-    <div class="field"><label>ຈຳນວນຄັ້ງທີ່ໃຊ້ໄດ້</label><input type="number" id="cpLimit" value="${cp?.usage_limit||''}"></div>
-    <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cpExpire" value="${cp?.expires_at ? cp.expires_at.slice(0,10) : ''}"></div>
+    <div id="cpPreview" style="margin-bottom:14px;"></div>
+    <div class="coupon-type-toggle">
+      <button type="button" id="cpTypePercentBtn" onclick="cpSetType('percent')">🎟️ ສ່ວນຫລຸດ %</button>
+      <button type="button" id="cpTypeFreeBtn" onclick="cpSetType('free_shipping')">🚚 ສົ່ງຟຣີ</button>
+    </div>
+    <div class="field" id="cpValueField"><label>ສ່ວນຫລຸດ (%)</label><input type="number" id="cpValue" min="1" max="90" value="${cp&&cp.discount_type==='percent'?cp.discount_value:''}" placeholder="ເຊັ່ນ: 20" oninput="cpRepaint()"></div>
+    <div class="field"><label>ວັນໝົດອາຍຸ</label><input type="date" id="cpExpire" value="${cp?.expires_at ? cp.expires_at.slice(0,10) : ''}" oninput="cpRepaint()"></div>
+    <div class="hint" style="margin:-4px 0 12px;">ລາຍລະອຽດອື່ນໆ (ໂຄ້ດ ແລະ ອື່ນໆ) ຈະຖືກສ້າງໃຫ້ອັດຕະໂນມັດ</div>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;"><input type="checkbox" id="cpActive" ${!cp||cp.is_active?'checked':''}> ເປີດໃຊ້ງານ</label>
     <button class="btn btn-primary" id="cpSave">ບັນທຶກ</button>
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  window.cpSetType = (t)=>{
+    type = t;
+    document.getElementById('cpTypePercentBtn').classList.toggle('active', t==='percent');
+    document.getElementById('cpTypeFreeBtn').classList.toggle('active', t==='free_shipping');
+    document.getElementById('cpValueField').style.display = t==='free_shipping' ? 'none' : 'block';
+    cpRepaint();
+  };
+  window.cpRepaint = ()=>{
+    const val = Number(document.getElementById('cpValue').value)||0;
+    const exp = document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null;
+    document.getElementById('cpPreview').innerHTML = couponTicketPreviewHtml(type, val, exp);
+  };
+  cpSetType(type);
   overlay.querySelector('#cpSave').onclick=async()=>{
-    const discountType = document.getElementById('cpType').value;
+    const btn = overlay.querySelector('#cpSave'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    const val = Number(document.getElementById('cpValue').value)||0;
+    if(type==='percent' && (val<=0||val>=100)){ showToast('ກະລຸນາໃສ່ສ່ວນຫລຸດລະຫວ່າງ 1-99%'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
     try{
       await sbRPC('admin_upsert_coupon', {p_password:STATE.adminPassword, p_coupon:{
-        id: id||undefined, code:document.getElementById('cpCode').value, discount_type:discountType,
-        discount_value: discountType==='free_shipping' ? 0 : Number(document.getElementById('cpValue').value), min_order:Number(document.getElementById('cpMin').value)||0,
-        usage_limit:Number(document.getElementById('cpLimit').value)||null,
-        expires_at:document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
-        is_active:document.getElementById('cpActive').checked}});
+        id: id||undefined,
+        code: cp?.code || autoCouponCode(type, val),
+        discount_type: type,
+        discount_value: type==='free_shipping' ? 0 : val,
+        min_order: cp?.min_order || 0,
+        usage_limit: cp?.usage_limit ?? null,
+        expires_at: document.getElementById('cpExpire').value ? document.getElementById('cpExpire').value+'T23:59:59' : null,
+        is_active: document.getElementById('cpActive').checked}});
       overlay.remove(); renderAdminCoupons();
-    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); }
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
   };
 }
 // Needs new admin_list_coupons(p_password) and admin_delete_coupon(p_password, p_coupon_id) RPCs;
@@ -3953,7 +4077,7 @@ function hideSplash(){
     if(STATE.settings.logo_url){
       document.getElementById('splashLogo').innerHTML = `<img src="${STATE.settings.logo_url}">`;
     }
-    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts(), loadSellersPublic()]);
+    await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts(), loadSellersPublic(), loadProductCoupons()]);
     renderProducts();
     updateCartBadge();
     if(STATE.customer){
