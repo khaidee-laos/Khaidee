@@ -1198,9 +1198,31 @@ async function refreshCouponsList(){
         <div class="top"><span class="title">${c.code}</span><span class="status-pill ${c.is_active?'status-approved':'status-rejected'}">${c.is_active?'ເປີດໃຊ້':'ປິດ'}</span></div>
         <div class="hint">${c.discount_type==='percent'?`ຫລຸດ ${c.discount_value}%`:c.discount_type==='fixed'?`ຫລຸດ ${fmtMoney(c.discount_value)}`:'🚚 ສົ່ງຟຣີ'} • ຂັ້ນຕ່ຳ ${fmtMoney(c.min_order)}</div>
         <div class="hint">ໃຊ້ແລ້ວ ${c.used_count||0}${c.usage_limit?`/${c.usage_limit}`:''} • ${c.expires_at?'ໝົດອາຍຸ '+new Date(c.expires_at).toLocaleDateString('lo-LA'):'ບໍ່ໝົດອາຍຸ'}</div>
-        <div class="chiprow"><button onclick="editCoupon(${c.id})">✏️ ແກ້ໄຂ</button><button onclick="deleteCoupon(${c.id})" style="color:var(--danger);">🗑️ ລຶບ</button></div>
+        <div class="hint" style="color:${c.broadcast_at?'var(--ok)':'var(--ink-soft)'};">${c.broadcast_at?`📢 ປ່ອຍໄປແລ້ວ ${new Date(c.broadcast_at).toLocaleDateString('lo-LA')} — ລູກຄ້າເກັບໄປ ${c.claimed_count||0} ຄົນ`:'ຍັງບໍ່ໄດ້ປ່ອຍ — ລູກຄ້າຈະບໍ່ເຫັນຄູປອງນີ້ຈົນກວ່າຈະປ່ອຍ'}</div>
+        <div class="chiprow">
+          <button onclick="editCoupon(${c.id})">✏️ ແກ້ໄຂ</button>
+          <button onclick="deleteCoupon(${c.id})" style="color:var(--danger);">🗑️ ລຶບ</button>
+          ${c.is_active?`<button onclick="broadcastCoupon(${c.id})" style="color:var(--maroon); font-weight:800;">${c.broadcast_at?'🔁 ປ່ອຍອີກຄັ້ງ':'🚀 ປ່ອຍຄູປອງ'}</button>`:''}
+        </div>
       </div>`).join('');
   }catch(e){ box.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຄູປອງໄດ້</div>'; }
+}
+/* "ປ່ອຍຄູປອງ" (release the coupon) is a deliberate, separate action from just saving it —
+   this is the button that makes every logged-in customer who hasn't claimed this coupon yet
+   get a "new coupon!" popup on their next open/login (see checkNewSellerCoupons() in the
+   customer app). Needs a backend RPC:
+     seller_coupon_broadcast(p_seller_id uuid, p_coupon_id bigint) — sets broadcast_at = now()
+     on that coupon (only if it belongs to p_seller_id and is_active), so it starts showing up
+     in coupon_list_new_for_customer() on the customer side. Re-clicking "release again" can
+     just bump broadcast_at again if the seller wants to re-nudge customers who dismissed it —
+     that's a seller-side product decision, not something this file enforces. */
+async function broadcastCoupon(id){
+  if(!confirm('ປ່ອຍຄູປອງນີ້ອອກ? ລູກຄ້າທຸກຄົນທີ່ຍັງບໍ່ໄດ້ເກັບຈະໄດ້ຮັບແຈ້ງເຕືອນ')) return;
+  try{
+    await sbRPC('seller_coupon_broadcast', {p_seller_id: STATE.seller.id, p_coupon_id: id});
+    showToast('🚀 ປ່ອຍຄູປອງແລ້ວ — ລູກຄ້າຈະເລີ່ມເຫັນແຈ້ງເຕືອນ');
+    refreshCouponsList();
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 function editCoupon(id){
   const c = id ? COUPONS_CACHE.find(x=>x.id===id) : {};

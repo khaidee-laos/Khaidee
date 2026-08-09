@@ -451,6 +451,34 @@ nav.bottom .icon{font-size:19px;}
 .od-coupon-card{border:1.5px dashed var(--gold); border-radius:12px; padding:12px 14px; margin-bottom:10px; background:var(--gold-light);}
 .od-coupon-card.expired{opacity:.5; border-color:var(--line); background:var(--cream);}
 
+/* ---------- NEW SELLER-COUPON ALERT (small popup) — shown to a logged-in customer when a
+   seller "releases" (broadcasts) a coupon they haven't claimed/dismissed yet. Sits above the
+   bottom nav like a little notification card rather than blocking the whole screen, since this
+   is a single coupon and doesn't need the customer's full attention. ---------- */
+#newCouponPopup{position:fixed; left:50%; bottom:88px; transform:translateX(-50%) translateY(16px); z-index:125;
+  width:calc(100% - 32px); max-width:400px; opacity:0; pointer-events:none; transition:opacity .3s ease, transform .3s ease;}
+#newCouponPopup.show{opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto;}
+#newCouponPopup .ncp-card{position:relative; background:#fff; border-radius:16px; box-shadow:0 12px 32px rgba(0,0,0,.28); padding:12px; display:flex; align-items:center; gap:10px;}
+#newCouponPopup .ncp-shop{width:38px; height:38px; border-radius:10px; overflow:hidden; flex-shrink:0; background:var(--gold-light); display:flex; align-items:center; justify-content:center; font-size:18px;}
+#newCouponPopup .ncp-shop img{width:100%; height:100%; object-fit:cover;}
+#newCouponPopup .ncp-txt{flex:1; min-width:0;}
+#newCouponPopup .ncp-txt .t1{font-size:12.5px; font-weight:800; color:var(--maroon-dark); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+#newCouponPopup .ncp-txt .t2{font-size:11px; color:var(--ink-soft); margin-top:1px;}
+#newCouponPopup .ncp-close{position:absolute; top:-8px; right:-6px; width:22px; height:22px; border-radius:50%; background:var(--ink); color:#fff; font-size:11px; border:none; box-shadow:0 3px 8px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center;}
+#newCouponPopup .ncp-actions{display:flex; flex-direction:column; gap:4px; flex-shrink:0;}
+#newCouponPopup .ncp-actions button{font-size:11px; font-weight:800; padding:6px 10px; border-radius:999px; border:none; white-space:nowrap;}
+#newCouponPopup .ncp-claim{background:var(--maroon); color:#fff;}
+#newCouponPopup .ncp-shopbtn{background:var(--gold-light); color:var(--maroon-dark);}
+
+/* ---------- multi-coupon variant (several sellers released coupons since the customer's last
+   visit) — reuses the .overlay/.sheet + .ad-card/.coupon-ticket look so it visually matches the
+   existing promo-ad popup instead of introducing a third visual style. ---------- */
+.ncm-item{margin-bottom:6px;}
+.ncm-actions{display:flex; gap:8px; margin:0 0 16px;}
+.ncm-actions button{flex:1; padding:9px; border-radius:10px; border:none; font-size:12px; font-weight:800;}
+.ncm-claim{background:var(--maroon); color:#fff;}
+.ncm-shopbtn{background:var(--gold-light); color:var(--maroon-dark);}
+
 .hidden{display:none !important;}
 .empty{text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:13px;}
 .loader{text-align:center; padding:30px; color:var(--ink-soft); font-size:13px;}
@@ -479,6 +507,10 @@ nav.bottom .icon{font-size:19px;}
 <!-- Custom toast notifications live above everything else (splash, modals) so every
      success/error message the app shows is drawn in KhaiDee's own style. -->
 <div id="toastStack"></div>
+
+<!-- Small floating "a seller just released a coupon" alert (filled by checkNewSellerCoupons()
+     in JS below — stays empty/hidden until there's actually something new to claim). -->
+<div id="newCouponPopup"></div>
 
 <!-- ============================================================ SPLASH SCREEN ============================================================ -->
 <div id="splashScreen">
@@ -1124,6 +1156,113 @@ setInterval(()=>{
     el.textContent = fmtCountdown(exp);
   });
 }, 1000);
+
+/* ============================================================ NEW SELLER-COUPON ALERTS ============================================================
+   Sellers can create their own coupons in the seller app (seller_coupon_upsert — already
+   restricted to that seller's own shop, since coupon_validate returns seller_id and checkout
+   only ever discounts/frees-shipping that seller's items with it). This section adds the piece
+   the user actually asked for: when a seller hits "🚀 ປ່ອຍຄູປອງ" (release) on their coupon, every
+   logged-in customer who hasn't claimed it yet gets nudged to come back and grab it — either a
+   small popup (one new coupon) or a bigger promo-style popup (several at once), exactly like the
+   existing ad-popup. Claiming drops it straight into "My Coupons" (🎟️), and it disappears from
+   there on its own once it expires.
+
+   Needs two backend RPCs (SQL side, not in this file), following the same anti-join pattern as
+   the rest of this app so nothing ever gets written per-customer just because a seller clicked
+   "release" — that keeps it cheap no matter how many accounts are registered, instead of fanning
+   a row out to every customer up front:
+
+     coupon_list_new_for_customer(p_customer_id uuid) returns setof jsonb — each row:
+       {id, code, title, seller_id, seller_name, seller_logo, discount_type, discount_value,
+        min_order, free_shipping, expires_at, quantity_remaining}
+     Should select seller coupons where broadcast_at is not null, is_active, not expired,
+     quantity_remaining is null or > 0, and NOT EXISTS a matching row in coupon_claims or a
+     coupon_dismissals table for (p_customer_id, coupon.id) — so it's naturally "unseen so far",
+     computed fresh on each check rather than pre-inserted for every registered ID.
+
+     coupon_dismiss(p_customer_id uuid, p_coupon_id bigint) — upserts one row into
+     coupon_dismissals so this same coupon stops showing up in the list above, whether the
+     customer claimed it or just closed the popup with ✕. */
+async function checkNewSellerCoupons(){
+  if(!STATE.customer) return;
+  try{
+    const list = await sbRPC('coupon_list_new_for_customer', {p_customer_id: STATE.customer.id});
+    if(!list || !list.length) return;
+    if(list.length === 1) renderSingleCouponPopup(list[0]);
+    else renderMultiCouponPopup(list);
+  }catch(e){ /* RPC not deployed yet — silently skip, same fallback style as the rest of the app */ }
+}
+function couponDescShort(c){
+  return (c.free_shipping || c.discount_type==='free_shipping') ? '🚚 ຄູປອງສົ່ງຟຣີ'
+    : c.discount_type==='percent' ? `🎟️ ຫລຸດ ${c.discount_value}%`
+    : `🎟️ ຫລຸດ ${fmtMoney(c.discount_value)}`;
+}
+function renderSingleCouponPopup(c){
+  const pop = document.getElementById('newCouponPopup');
+  if(!pop) return;
+  pop.innerHTML = `<div class="ncp-card">
+    <button class="ncp-close" onclick="dismissCouponPopup(${c.id})" aria-label="close">✕</button>
+    <div class="ncp-shop">${c.seller_logo?`<img src="${c.seller_logo}">`:'🏪'}</div>
+    <div class="ncp-txt">
+      <div class="t1">${(c.seller_name||'ຮ້ານຄ້າ')} ປ່ອຍຄູປອງໃໝ່!</div>
+      <div class="t2">${couponDescShort(c)}${c.min_order?` • ຂັ້ນຕ່ຳ ${fmtMoney(c.min_order)}`:''}</div>
+    </div>
+    <div class="ncp-actions">
+      <button class="ncp-claim" onclick="claimBroadcastCoupon(${c.id}, '${c.code}', ${c.seller_id||'null'}, false)">🎁 ເກັບ</button>
+      <button class="ncp-shopbtn" onclick="claimBroadcastCoupon(${c.id}, '${c.code}', ${c.seller_id||'null'}, true)">🏪 ໄປຊື້</button>
+    </div>
+  </div>`;
+  pop.classList.add('show');
+}
+function renderMultiCouponPopup(list){
+  const overlay = document.createElement('div'); overlay.id='multiCouponOverlay'; overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet" style="max-width:420px;"><div style="position:relative;">
+    <button class="ad-close" data-close>✕</button>
+    <div class="ad-card" style="padding:18px 16px 4px;">
+      <div style="text-align:center; margin-bottom:12px;">
+        <div style="font-size:16px; font-weight:900; color:var(--maroon-dark);">🎉 ມີຄູປອງໃໝ່ ${list.length} ໃບ!</div>
+        <div class="hint" style="margin-top:2px;">ຮ້ານຄ້າຕ່າງໆປ່ອຍຄູປອງອອກມາ — ເກັບໄວ້ກ່ອນໝົດ</div>
+      </div>
+      ${list.map(c=>`
+        <div class="coupon-ticket ncm-item ${(c.free_shipping||c.discount_type==='free_shipping')?'type-free':''}">
+          <div class="ct-main">
+            <div class="ct-value">${c.discount_type==='percent'?`-${c.discount_value}%`:(c.free_shipping||c.discount_type==='free_shipping')?'ຟຣີ':`-${fmtMoney(c.discount_value)}`}</div>
+            <div class="ct-label">${c.seller_name||'ຮ້ານຄ້າ'}</div>
+            <div class="ct-sub">${c.min_order?`ຂັ້ນຕ່ຳ ${fmtMoney(c.min_order)}`:'ບໍ່ຈຳກັດຍອດຊື້'}</div>
+          </div>
+          <div class="ct-stub">
+            <div class="ct-icon">🎟️</div>
+            <div class="ct-code">${c.code}</div>
+            ${c.expires_at?`<div class="ct-expiry">ໝົດ ${new Date(c.expires_at).toLocaleDateString('lo-LA')}</div>`:''}
+          </div>
+        </div>
+        <div class="ncm-actions">
+          <button class="ncm-claim" onclick="claimBroadcastCoupon(${c.id}, '${c.code}', ${c.seller_id||'null'}, false)">🎁 ເກັບ</button>
+          <button class="ncm-shopbtn" onclick="claimBroadcastCoupon(${c.id}, '${c.code}', ${c.seller_id||'null'}, true)">🏪 ໄປຊື້</button>
+        </div>
+      `).join('')}
+    </div>
+  </div></div>`;
+  overlay.querySelector('[data-close]').onclick = ()=>{ list.forEach(c=>dismissCouponPopup(c.id, true)); overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+async function claimBroadcastCoupon(couponId, code, sellerId, goShop){
+  try{ await sbRPC('coupon_claim', {p_customer_id: STATE.customer.id, p_code: code}); }
+  catch(e){ /* already claimed / expired — still close up and let them shop if they tapped "go" */ }
+  try{ await sbRPC('coupon_dismiss', {p_customer_id: STATE.customer.id, p_coupon_id: couponId}); }catch(e){}
+  playSuccessSound();
+  showToast(`🎉 ເກັບຄູປອງ ${code} ໄວ້ໃນ "ບັດສ່ວນຫຼຸດ" ແລ້ວ`);
+  hideCouponPopups();
+  if(goShop && sellerId) openShop(sellerId);
+}
+function dismissCouponPopup(couponId){
+  if(STATE.customer) sbRPC('coupon_dismiss', {p_customer_id: STATE.customer.id, p_coupon_id: couponId}).catch(()=>{});
+  hideCouponPopups();
+}
+function hideCouponPopups(){
+  const pop = document.getElementById('newCouponPopup'); if(pop) pop.classList.remove('show');
+  const overlay = document.getElementById('multiCouponOverlay'); if(overlay) overlay.remove();
+}
 async function loadCarriers(){
   STATE.carriers = await sbSelect('shipping_carriers', 'select=*&order=sort_order.asc');
 }
@@ -1905,6 +2044,7 @@ async function doLogin(){
       STATE.customer = c; saveCustomer(); closeModal('modalAuth');
       playSuccessSound();
       renderAccount(); refreshNotifBadge();
+      setTimeout(checkNewSellerCoupons, 500); // "when the customer logs in" — nudge them about any coupon they haven't claimed yet
       if(window.__authSuccess) window.__authSuccess();
     }catch(e){ playErrorSound(); document.getElementById('authErr').innerHTML = `<div class="err">ເບີ ຫຼື ລະຫັດຜ່ານບໍ່ຖືກຕ້ອງ</div>`; }
   });
@@ -1921,6 +2061,7 @@ async function doRegister(){
       STATE.customer = c; saveCustomer(); closeModal('modalAuth');
       playSuccessSound();
       renderAccount(); refreshNotifBadge();
+      setTimeout(checkNewSellerCoupons, 500);
       if(window.__authSuccess) window.__authSuccess();
     }catch(e){ playErrorSound(); document.getElementById('authErr').innerHTML = `<div class="err">ເບີໂທ ຫຼື ອີເມວນີ້ຖືກໃຊ້ແລ້ວ</div>`; }
   });
@@ -2583,7 +2724,12 @@ async function submitTopup(){
 
 /* ============================================================ MY COUPONS WALLET ============================================================
    Needs a coupon_list_for_customer RPC returning each claimed coupon joined with the coupons table:
-   {code, title, discount_type, discount_value, min_spend, free_shipping, expires_at, used} — see coupon_claim above. */
+   {code, title, discount_type, discount_value, min_spend, free_shipping, expires_at, used,
+   seller_id, seller_name} — see coupon_claim above. seller_id/seller_name are new: they let the
+   wallet show a "🏪 go to this shop" button on seller-issued coupons (null for platform-wide
+   admin coupons, which just show the code as before).
+   Expired coupons are filtered out entirely below rather than shown greyed-out, so a coupon
+   really does "disappear" once its time is up instead of cluttering the wallet forever. */
 async function showMyCoupons(){
   requireLogin(async ()=>{
     openModal('modalMyCoupons');
@@ -2591,17 +2737,18 @@ async function showMyCoupons(){
     wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
     try{
       const list = await sbRPC('coupon_list_for_customer', {p_customer_id: STATE.customer.id});
-      wrap.innerHTML = !list.length ? '<div class="empty">ທ່ານຍັງບໍ່ມີບັດສ່ວນຫຼຸດ — ເກັບໄດ້ຈາກປ້າຍໂຄສະນາ ຫຼື ໂປຣໂມຊັ່ນຕ່າງໆ 🎟️</div>' :
-        list.map(c=>{
-          const expired = c.expires_at && new Date(c.expires_at) < new Date();
+      const visible = (list||[]).filter(c => !c.expires_at || new Date(c.expires_at) >= new Date());
+      wrap.innerHTML = !visible.length ? '<div class="empty">ທ່ານຍັງບໍ່ມີບັດສ່ວນຫຼຸດ — ເກັບໄດ້ຈາກປ້າຍໂຄສະນາ ຫຼື ໂປຣໂມຊັ່ນຕ່າງໆ 🎟️</div>' :
+        visible.map(c=>{
           const desc = c.free_shipping ? 'ຟຣີຄ່າຂົນສົ່ງ' : (c.discount_type==='percent' ? `ຫຼຸດ ${c.discount_value}%` : `ຫຼຸດ ${fmtMoney(c.discount_value)}`);
-          return `<div class="od-coupon-card ${expired||c.used?'expired':''}">
-            <div style="font-weight:800; color:var(--maroon);">${c.title||c.code}</div>
+          return `<div class="od-coupon-card ${c.used?'expired':''}">
+            <div style="font-weight:800; color:var(--maroon);">${c.title||c.code}${c.seller_name?` <span class="hint" style="font-weight:400;">• ${c.seller_name}</span>`:''}</div>
             <div class="hint" style="margin:2px 0;">${desc}${c.min_spend?` • ຊື້ຂັ້ນຕ່ຳ ${fmtMoney(c.min_spend)}`:''}</div>
             <div style="display:flex; align-items:center; justify-content:space-between; margin-top:6px;">
-              <span class="hint">${c.used?'ໃຊ້ແລ້ວ':expired?'ໝົດອາຍຸແລ້ວ':(c.expires_at?`ໝົດອາຍຸ ${new Date(c.expires_at).toLocaleDateString('lo-LA')}`:'ບໍ່ມີວັນໝົດອາຍຸ')}</span>
+              <span class="hint">${c.used?'ໃຊ້ແລ້ວ':(c.expires_at?`ໝົດອາຍຸ ${new Date(c.expires_at).toLocaleDateString('lo-LA')}`:'ບໍ່ມີວັນໝົດອາຍຸ')}</span>
               <code style="font-weight:700; letter-spacing:.5px;">${c.code}</code>
             </div>
+            ${(!c.used && c.seller_id)?`<button class="btn-sm btn-ghost" style="width:100%; margin-top:8px;" onclick="closeModal('modalMyCoupons'); openShop(${c.seller_id});">🏪 ໄປຊື້ຢູ່ຮ້ານນີ້</button>`:''}
           </div>`;
         }).join('');
     }catch(e){ wrap.innerHTML = '<div class="empty">ລະບົບບັດສ່ວນຫຼຸດຍັງບໍ່ພ້ອມໃຊ້ງານ</div>'; }
@@ -4068,6 +4215,7 @@ function hideSplash(){
   const splash = document.getElementById('splashScreen');
   if(splash){ splash.classList.add('fade-out'); setTimeout(()=>splash.remove(), 550); }
   setTimeout(maybeShowPopupAd, 600); // let the splash finish fading before the promo popup appears
+  setTimeout(checkNewSellerCoupons, 1500); // a little after the ad popup, for a returning logged-in customer
 }
 (async function init(){
   const splashStart = Date.now();
