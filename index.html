@@ -1137,6 +1137,37 @@ function matchedDetailVariant(){
   });
   return bestScore > 0 ? best : null;
 }
+// Related-products shelf shown at the bottom of the product detail page. The goal (per how the
+// storefront should feel): mostly show items from the *same category* as what's being viewed
+// (clothing → more clothing), with a little variety mixed in so the shelf doesn't feel like a
+// wall of near-duplicates. If the category itself is thin, widen the net — first to other
+// categories from the *same store*, then to the rest of the marketplace — so the shelf is
+// never left half-empty just because this one category doesn't have much in it.
+function buildRelatedProducts(p, want){
+  want = want || 8;
+  const pool = STATE.products.filter(x=>x.id!==p.id);
+  const sameCat = pool.filter(x=>x.category_id===p.category_id);
+  const sameStoreOther = pool.filter(x=>x.seller_id===p.seller_id && x.category_id!==p.category_id);
+  const rest = pool.filter(x=>x.category_id!==p.category_id && x.seller_id!==p.seller_id);
+
+  const result = []; const seen = new Set();
+  const push = (arr, limit)=>{ for(const x of arr){ if(result.length>=limit) break; if(!seen.has(x.id)){ seen.add(x.id); result.push(x); } } };
+
+  if(sameCat.length >= want){
+    // Same category alone can fill the shelf — lead with it, sprinkle ~1/4 with other
+    // categories (e.g. a phone or two showing up under a clothing item) for variety.
+    const sprinkleCount = Math.max(1, Math.round(want*0.25));
+    push(sameCat, want - sprinkleCount);
+    push(rest, want);
+  } else {
+    // Category is thin — show everything in it, then fall back to the rest of this store,
+    // then the rest of the marketplace, so the shelf still ends up reasonably full.
+    push(sameCat, want);
+    push(sameStoreOther, want);
+    push(rest, want);
+  }
+  return result.slice(0, want);
+}
 async function openProduct(id){
   const p = STATE.products.find(x=>x.id===id); if(!p) return;
   detailQty = 1;
@@ -1167,7 +1198,7 @@ function paintProductDetail(id){
   (p.images||[]).forEach(url=> media.push({type:'image', url}));
   if(p.video_url) media.push({type:'video', url:p.video_url});
   if(!media.length) media.push({type:'image', url:'https://placehold.co/400x400/F1DFAE/7A1E2B?text=KhaiDee'});
-  const related = STATE.products.filter(x=>x.id!==p.id && x.category_id===p.category_id).slice(0,4);
+  const related = buildRelatedProducts(p, 8);
   const mv = matchedDetailVariant();
   const displayPrice = mv ? (mv.price ?? p.price) : p.price;
   const displayCompare = mv ? mv.compare_price : p.compare_price;
@@ -1226,8 +1257,15 @@ function paintProductDetail(id){
       ${related.length?`<h4 style="font-size:13px; margin-top:20px;">ສິນຄ້າທີ່ກ່ຽວຂ້ອງ</h4>
       <div class="pd-related-grid">${related.map(r=>`
         <div class="card" onclick="openProduct(${r.id})">
-          <div class="imgwrap"><img src="${(r.images&&r.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy"></div>
-          <div class="body"><div class="name">${nameFor(r)}</div><div class="price-row"><span class="price">${fmtMoney(r.price)}</span></div></div>
+          <div class="imgwrap">
+            ${r.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+            <img src="${(r.images&&r.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+          </div>
+          <div class="body">
+            <div class="name">${nameFor(r)}</div>
+            <div class="price-row"><span class="price">${fmtMoney(r.price)}</span>${r.compare_price?`<span class="compare">${fmtMoney(r.compare_price)}</span>`:''}</div>
+            <div class="meta"><span>ຂາຍແລ້ວ ${r.sold_count||0}</span><span>⭐ ${r.rating_avg||'-'}</span></div>
+          </div>
         </div>`).join('')}</div>`:''}
     </div>
 
