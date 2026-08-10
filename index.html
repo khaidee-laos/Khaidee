@@ -527,6 +527,7 @@ nav.bottom .icon{font-size:19px;}
 .toast.warn{border-left-color:var(--warn);}
 .toast.info{border-left-color:var(--gold);}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 
@@ -1172,6 +1173,43 @@ function filterCategory(id){
 }
 async function loadProducts(){
   STATE.products = await sbSelect('products', 'select=*&order=created_at.desc');
+}
+/* ---- Live stock updates (Supabase Realtime) -------------------------------------------------
+   Without this, two customers can both be staring at "1 left" and both successfully check out —
+   order_create now blocks the actual double-sell server-side (row-locked stock check), but the
+   UI itself would still show the stale "1 left" to the second customer until they reloaded.
+   This subscribes to product/variant stock changes and patches STATE.products + whatever's on
+   screen in place, so stock counts and "sold out" states update live for every connected
+   customer the instant anyone (including this same tab) completes an order — no reload needed. */
+let sbRealtimeClient = null;
+function initProductsRealtime(){
+  try{
+    if(typeof supabase === 'undefined' || !supabase.createClient) return; // CDN blocked/offline — fail quietly, polling-free UI still works, just not live
+    sbRealtimeClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sbRealtimeClient.channel('public:products-stock')
+      .on('postgres_changes', {event:'UPDATE', schema:'public', table:'products'}, payload=>{
+        const row = payload.new;
+        const idx = STATE.products.findIndex(p=>p.id===row.id);
+        if(idx>-1){
+          STATE.products[idx] = Object.assign({}, STATE.products[idx], row);
+          renderProducts();
+          if(detailProductId===row.id && document.getElementById('modalProduct').classList.contains('show')){
+            paintProductDetail(row.id);
+          }
+        }
+      })
+      .on('postgres_changes', {event:'UPDATE', schema:'public', table:'product_variants'}, payload=>{
+        const row = payload.new;
+        const vi = (detailVariants||[]).findIndex(v=>v.id===row.id);
+        if(vi>-1){
+          detailVariants[vi] = Object.assign({}, detailVariants[vi], row);
+          if(document.getElementById('modalProduct').classList.contains('show') && detailProductId){
+            paintProductDetail(detailProductId);
+          }
+        }
+      })
+      .subscribe();
+  }catch(e){ console.warn('realtime init failed', e); }
 }
 /* ---------- PRODUCT COUPONS (badge + countdown shown on product cards / detail page) ----------
    public_product_coupons() returns one row per product that currently has an active, non-expired,
@@ -2273,6 +2311,7 @@ const QR_BANKS = ['BCEL','LDB','JDB']; // banks PhaJay currently supports — ma
 const QR_EXPIRY_MS = 24*60*60*1000; // a generated QR is only shown/scannable for 24h from order creation;
                                      // after that this UI treats it as failed/expired (see renderQrExpiredBox below).
 let qrPollTimer = null;
+let activeQrCheck = null; // whichever QR-poll's checkNow() is currently live — see initQrForegroundRecheck
 let qrCountdownTimer = null;
 // Shared "expired" box for both the checkout QR step and the order-detail QR box. Stops whatever
 // timers are running for that box and swaps its contents to a clear failure state so the QR image
@@ -2382,13 +2421,14 @@ async function requestQrAndShow(orderNumber, total){
 function startQrPolling(orderNumber){
   if(qrPollTimer) clearInterval(qrPollTimer);
   let tries = 0;
-  qrPollTimer = setInterval(async ()=>{
+  async function checkNow(){
     tries++;
     try{
       const rows = await sbSelect('orders', `order_number=eq.${orderNumber}&select=status`);
       const status = rows && rows[0] && rows[0].status;
       if(status === 'paid'){
         clearInterval(qrPollTimer); qrPollTimer = null;
+        activeQrCheck = null;
         if(qrCountdownTimer){ clearInterval(qrCountdownTimer); qrCountdownTimer = null; }
         playSuccessSound();
         renderThankYouBox(document.getElementById('checkoutBody'), orderNumber);
@@ -2401,8 +2441,15 @@ function startQrPolling(orderNumber){
         }, 2200);
       }
     }catch(e){ /* transient network hiccup — just try again next tick */ }
-    if(tries > 180){ clearInterval(qrPollTimer); qrPollTimer = null; } // stop after ~15 min (5s * 180)
-  }, 5000);
+    if(tries > 180){ clearInterval(qrPollTimer); qrPollTimer = null; activeQrCheck = null; } // stop after ~15 min (5s * 180)
+  }
+  // Exposed so the visibilitychange/pageshow listener (see initQrForegroundRecheck below) can
+  // force an immediate check the instant the customer comes back — e.g. after screenshotting the
+  // QR, switching to their banking app to pay, then returning. Mobile browsers throttle or fully
+  // suspend background setInterval timers, so without this the customer could sit looking at a
+  // stale QR for a while even though the payment already succeeded on the bank's side.
+  activeQrCheck = checkNow;
+  qrPollTimer = setInterval(checkNow, 5000);
 }
 /* ---- Order submission — one order PER SELLER ----
    A cart can span several shops, each with its own shipping fee, its own wallet to be credited,
@@ -2478,7 +2525,12 @@ async function submitOrder(payment){
     }catch(e){
       if(waTab) waTab.close();
       playErrorSound();
-      showToast('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
+      if(/insufficient_stock/.test(e.message)){
+        showToast('❌ ຂໍອະໄພ ສິນຄ້າບາງລາຍການໝົດ ຫຼືມີບໍ່ພຽງພໍ ໃນຂະນະທີ່ທ່ານກຳລັງສັ່ງຊື້ (ອາດມີລູກຄ້າຄົນອື່ນສັ່ງໄປກ່ອນ) — ກະລຸນາກວດຈຳນວນໃນກະຕ່າອີກຄັ້ງ');
+        loadProducts().then(()=>{ renderProducts(); if(document.getElementById('modalProduct').classList.contains('show') && detailProductId) paintProductDetail(detailProductId); renderCart(); });
+      }else{
+        showToast('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
+      }
     }finally{
       if(btn){ btn.disabled = false; btn.textContent = '✅ ຢືນຢັນສັ່ງຊື້'; }
     }
@@ -2987,13 +3039,14 @@ async function renderOrderDetailQr(orderId, orderNumber, total, bankNameEn, crea
 function startOrderDetailQrPolling(orderId, orderNumber){
   if(orderDetailQrPollTimer) clearInterval(orderDetailQrPollTimer);
   let tries = 0;
-  orderDetailQrPollTimer = setInterval(async ()=>{
+  async function checkNow(){
     tries++;
     try{
       const rows = await sbSelect('orders', `order_number=eq.${orderNumber}&select=status`);
       const status = rows && rows[0] && rows[0].status;
       if(status === 'paid'){
         clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null;
+        activeQrCheck = null;
         if(orderDetailQrCountdownTimer){ clearInterval(orderDetailQrCountdownTimer); orderDetailQrCountdownTimer = null; }
         playSuccessSound();
         renderThankYouBox(document.getElementById('orderDetailQrBox'), orderNumber);
@@ -3008,8 +3061,23 @@ function startOrderDetailQrPolling(orderId, orderNumber){
         }, 2200);
       }
     }catch(e){ /* transient network hiccup — just try again next tick */ }
-    if(tries > 180){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; } // ~15 min
-  }, 5000);
+    if(tries > 180){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; activeQrCheck = null; } // ~15 min
+  }
+  activeQrCheck = checkNow; // see initQrForegroundRecheck — lets returning-to-the-app trigger an instant check
+  orderDetailQrPollTimer = setInterval(checkNow, 5000);
+}
+// Mobile browsers throttle or fully pause setInterval timers while the tab/app is backgrounded —
+// e.g. the customer screenshots the QR, switches to their banking app to actually pay, then comes
+// back. Without this, they could land back on a stale "waiting for payment" QR for anywhere up to
+// the next throttled tick even though the payment already went through. Whichever QR flow is
+// currently active (checkout or order-detail) registers itself as `activeQrCheck` above; the
+// instant the page becomes visible/focused again, re-run that check immediately instead of
+// waiting on the timer.
+function initQrForegroundRecheck(){
+  const recheck = ()=>{ if(activeQrCheck) activeQrCheck(); };
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') recheck(); });
+  window.addEventListener('focus', recheck);
+  window.addEventListener('pageshow', recheck);
 }
 // Stop polling/countdowns if the customer closes the order detail or checkout sheet without
 // paying, so they don't keep running in the background after the customer navigates away.
@@ -3017,11 +3085,11 @@ function startOrderDetailQrPolling(orderId, orderNumber){
   const origCloseModal = window.closeModal;
   window.closeModal = function(id){
     if(id==='modalOrderDetail'){
-      if(orderDetailQrPollTimer){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; }
+      if(orderDetailQrPollTimer){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; activeQrCheck = null; }
       if(orderDetailQrCountdownTimer){ clearInterval(orderDetailQrCountdownTimer); orderDetailQrCountdownTimer = null; }
     }
     if(id==='modalCheckout'){
-      if(qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; }
+      if(qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; activeQrCheck = null; }
       if(qrCountdownTimer){ clearInterval(qrCountdownTimer); qrCountdownTimer = null; }
     }
     if(id==='modalWallet'){
@@ -5056,6 +5124,8 @@ function hideSplash(){
     await Promise.all([loadCategories(), loadProducts(), loadCarriers(), loadAds(), loadBankAccounts(), loadSellersPublic(), loadProductCoupons()]);
     renderProducts();
     updateCartBadge();
+    initQrForegroundRecheck();
+    initProductsRealtime();
     if(STATE.customer){
       refreshNotifBadge();
       setInterval(refreshNotifBadge, 30000); // poll for new order/promo notifications, like Shopee/Lazada's chat badge
