@@ -4598,7 +4598,7 @@ function autoCouponCode(discountType, percent){
   if(discountType==='free_shipping') return `FREESHIP-${rand}`;
   return `SALE${percent||0}-${rand}`;
 }
-function couponTicketPreviewHtml(discountType, value, expiresAt){
+function couponTicketPreviewHtml(discountType, value, expiresAt, code){
   const isFree = discountType==='free_shipping';
   const big = isFree ? '🚚' : `${value||0}%`;
   const label = isFree ? 'ສົ່ງຟຣີ' : 'ສ່ວນຫລຸດ';
@@ -4607,6 +4607,7 @@ function couponTicketPreviewHtml(discountType, value, expiresAt){
     <div class="ct-main">
       <div class="ct-value">${big}</div>
       <div class="ct-label">${label}${!isFree ? ' ເມື່ອຊື້ສິນຄ້າ' : 'ທົ່ວປະເທດ'}</div>
+      ${code?`<div class="ct-sub">ໂຄ້ດ: ${code}</div>`:''}
     </div>
     <div class="ct-stub">
       <div class="ct-icon">${isFree?'📦':'🎟️'}</div>
@@ -4626,7 +4627,7 @@ async function renderAdminCoupons(){
       const expired = cp.expires_at && new Date(cp.expires_at).getTime() < Date.now();
       return `<div style="position:relative;" onclick="adminEditCoupon(${cp.id})">
         <button class="ct-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCoupon(${cp.id})">✕</button>
-        <div class="${(!cp.is_active||expired)?'dim':''}">${couponTicketPreviewHtml(cp.discount_type, cp.discount_value, cp.expires_at)}</div>
+        <div class="${(!cp.is_active||expired)?'dim':''}">${couponTicketPreviewHtml(cp.discount_type, cp.discount_value, cp.expires_at, cp.code)}</div>
       </div>`;
     }).join(''));
 }
