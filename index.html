@@ -3005,6 +3005,11 @@ async function showWallet(){
           ${t.status==='pending' && t.slip_url ? `<div class="hint" style="margin-top:4px;">⏳ ລໍຖ້າແອດມິນກວດສະລິບ</div>` : ''}
           <div style="margin-top:4px; font-weight:700;">${fmtMoney(t.amount)}</div>
         </div>`).join('') : '<div class="empty">ຍັງບໍ່ມີປະຫວັດ</div>'}`;
+    // If a top-up QR generated earlier in this session is still within its 10-minute window,
+    // show it again immediately instead of making the customer tap "ເຕີມເງິນ" and generate a
+    // brand new one — see savePendingTopup/loadPendingTopup above.
+    const pending = loadPendingTopup();
+    if(pending) renderPendingTopupBox(pending);
   });
 }
 /* ---- Wallet top-up — two methods ----
@@ -3027,8 +3032,31 @@ const TOPUP_QR_EXPIRY_MS = 10*60*1000; // the auto/self-generated QR is single-u
                                         // PhaJay transaction, so it's only shown/scannable for 10
                                         // minutes — separate from QR_EXPIRY_MS (24h), which is for
                                         // the checkout/order QR and is untouched by this.
+/* ---- Persisted pending top-up QR ----
+   Previously the generated QR only lived in memory (topupQrState/#topupQrBox), so leaving the
+   wallet sheet (closing it, switching tabs, even just the sheet re-rendering) wiped it instantly —
+   the customer had to generate a brand new QR every time they came back, even seconds later, even
+   though the underlying 10-minute PhaJay transaction was still perfectly valid. This stores the
+   live QR (image, amount, bank, txn id, and the real expiry timestamp) in localStorage the moment
+   it's generated, so re-opening the wallet within that 10-minute window just re-shows the exact
+   same QR with the countdown continuing from where it actually is — not restarting it — instead of
+   silently dropping it. It's cleared as soon as it expires, is cancelled, or is paid. */
+function pendingTopupKey(){ return `kd_pending_topup_${STATE.customer && STATE.customer.id}`; }
+function savePendingTopup(data){ try{ localStorage.setItem(pendingTopupKey(), JSON.stringify(data)); }catch(e){} }
+function loadPendingTopup(){
+  try{
+    const raw = localStorage.getItem(pendingTopupKey());
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(!data || !data.expiresAtMs || data.expiresAtMs <= Date.now()){ clearPendingTopup(); return null; }
+    return data;
+  }catch(e){ return null; }
+}
+function clearPendingTopup(){ try{ localStorage.removeItem(pendingTopupKey()); }catch(e){} }
 function setTopupMethod(m){ topupQrState.method = m; showTopupForm(); }
 function showTopupForm(){
+  const pending = loadPendingTopup();
+  if(pending){ renderPendingTopupBox(pending); return; }
   const method = topupQrState.method || 'auto';
   const tabsHtml = `<div style="display:flex; gap:6px; margin-bottom:12px;">
     <button onclick="setTopupMethod('auto')" style="flex:1; border:1.5px solid ${method==='auto'?'var(--maroon)':'var(--line)'}; background:${method==='auto'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='auto'?'800':'600'}; font-size:12.5px; color:var(--ink);">⚡ QR ອັດຕະໂນມັດ</button>
@@ -3159,10 +3187,13 @@ async function requestTopupQrAndShow(txnId, topupNumber, amount){
         <div class="hint" style="margin-top:10px;">ເປີດແອັບທະນາຄານ (${bankCode}) ແລ້ວສະແກນ QR ນີ້ເພື່ອເຕີມເງິນ</div>
         <div id="topupWaitingLine" style="margin-top:14px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
         <div id="topupQrCountdown" class="hint" style="margin-top:6px; font-weight:600;"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:14px;" onclick="cancelPendingTopupAndRestart()">✕ ຍົກເລີກ ແລະ ສ້າງ QR ໃໝ່</button>
       </div>`;
+    savePendingTopup({txnId, topupNumber, amount, bankCode, qrImg, expiresAtMs});
     startTopupPolling(txnId);
     topupCountdownTimer = startQrCountdown('topupQrCountdown', expiresAtMs, ()=>{
       if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
+      clearPendingTopup();
       renderQrExpiredBox(box);
     });
   }catch(e){
@@ -3170,6 +3201,39 @@ async function requestTopupQrAndShow(txnId, topupNumber, amount){
     const btn = document.getElementById('topupSubmitBtn');
     if(btn){ btn.disabled=false; btn.textContent='⚡ ສ້າງ QR ເຕີມເງິນ'; }
   }
+}
+// Rebuilds the exact same QR box from localStorage (see savePendingTopup) when the customer
+// re-opens the wallet while a top-up is still within its 10-minute window — same markup as
+// requestTopupQrAndShow's success branch, just fed from storage instead of a fresh API call, and
+// with the countdown resuming from the real remaining time rather than restarting at 10:00.
+function renderPendingTopupBox(pending){
+  const wrap = document.getElementById('topupFormWrap');
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <div style="text-align:center; margin-top:4px;">
+      <div class="sumrow total" style="margin-bottom:10px; justify-content:center; gap:8px;"><span>ຈຳນວນເຕີມ</span><span>${fmtMoney(pending.amount)}</span></div>
+      <img src="${pending.qrImg}" style="width:220px; height:220px; border-radius:14px; border:1.5px solid var(--line);">
+      <div class="hint" style="margin-top:10px;">ເປີດແອັບທະນາຄານ (${pending.bankCode}) ແລ້ວສະແກນ QR ນີ້ເພື່ອເຕີມເງິນ</div>
+      <div id="topupWaitingLine" style="margin-top:14px; font-size:13px; font-weight:700; color:var(--maroon);">⏳ ລໍຖ້າການຊຳລະ...</div>
+      <div id="topupQrCountdown" class="hint" style="margin-top:6px; font-weight:600;"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:14px;" onclick="cancelPendingTopupAndRestart()">✕ ຍົກເລີກ ແລະ ສ້າງ QR ໃໝ່</button>
+    </div>`;
+  startTopupPolling(pending.txnId);
+  if(topupCountdownTimer) clearInterval(topupCountdownTimer);
+  topupCountdownTimer = startQrCountdown('topupQrCountdown', pending.expiresAtMs, ()=>{
+    if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
+    clearPendingTopup();
+    renderQrExpiredBox(wrap);
+  });
+}
+// Lets the customer deliberately drop a still-valid pending QR and start a new one (e.g. wrong
+// amount/bank picked) instead of being stuck waiting out the full 10 minutes for it to expire.
+function cancelPendingTopupAndRestart(){
+  clearPendingTopup();
+  if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
+  if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer=null; }
+  topupQrState = {method:'auto'};
+  showTopupForm();
 }
 function startTopupPolling(txnId){
   if(topupPollTimer) clearInterval(topupPollTimer);
@@ -3182,6 +3246,7 @@ function startTopupPolling(txnId){
       if(status === 'approved'){
         clearInterval(topupPollTimer); topupPollTimer = null;
         if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer = null; }
+        clearPendingTopup();
         playSuccessSound();
         await refreshWalletBalance();
         showToast('✅ ເຕີມເງິນສຳເລັດ!');
