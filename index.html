@@ -165,7 +165,7 @@ header.top{
 .banner-carousel-track{display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch;}
 .banner-carousel-track::-webkit-scrollbar{display:none;}
 .banner-carousel-slide{flex:0 0 100%; scroll-snap-align:center; aspect-ratio:16/7; cursor:pointer;}
-.banner-carousel-slide img{width:100%; height:100%; object-fit:cover;}
+.banner-carousel-slide img{width:100%; height:100%; object-fit:contain; background:var(--gold-light);}
 .banner-carousel-dots{position:absolute; bottom:8px; left:0; right:0; display:flex; justify-content:center; gap:5px;}
 .banner-carousel-dots span{width:5px; height:5px; border-radius:99px; background:rgba(255,255,255,.6);}
 .banner-carousel-dots span.active{background:#fff; width:14px; border-radius:99px;}
@@ -173,7 +173,7 @@ header.top{
 /* ---- Popup ad (shown after splash, once per day) ---- */
 #adPopupOverlay .sheet{max-width:340px; padding:0; overflow:visible; background:transparent; box-shadow:none;}
 #adPopupOverlay .ad-card{background:#fff; border-radius:20px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.35);}
-#adPopupOverlay .ad-card img{width:100%; aspect-ratio:1/1; object-fit:cover; display:block;}
+#adPopupOverlay .ad-card img{width:100%; aspect-ratio:1/1; object-fit:contain; background:#fff; display:block;}
 #adPopupOverlay .ad-body{padding:16px; text-align:center;}
 #adPopupOverlay .ad-close{position:absolute; top:-14px; right:-6px; width:30px; height:30px; border-radius:50%; background:#fff; color:var(--ink); font-size:15px; box-shadow:0 3px 10px rgba(0,0,0,.3); z-index:2;}
 .banner h2{margin:0 0 4px; font-size:17px; color:var(--maroon-dark);}
