@@ -2966,6 +2966,7 @@ function startOrderDetailQrPolling(orderId, orderNumber){
 })();
 
 /* ============================================================ WALLET ============================================================ */
+const WALLET_TXN_STATUS_LABELS = {pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'};
 async function showWallet(){
   requireLogin(async ()=>{
     openModal('modalWallet');
@@ -2980,26 +2981,46 @@ async function showWallet(){
       <h4 style="font-size:13px;">ປະຫວັດທຸລະກຳ</h4>
       ${list.length? list.map(t=>`
         <div class="admin-list-item">
-          <div class="top"><span class="title">${t.type==='topup'?'➕ ເຕີມເງິນ':'➖ ຫັກເງິນ'}</span><span class="status-pill status-${t.status}">${t.status}</span></div>
+          <div class="top"><span class="title">${t.type==='topup'?'➕ ເຕີມເງິນ':'➖ ຫັກເງິນ'}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span></div>
           <div class="hint">${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+          ${t.slip_url ? `<img src="${t.slip_url}" onclick="window.open('${t.slip_url}','_blank')" style="width:56px; height:56px; object-fit:cover; border-radius:8px; margin-top:6px; cursor:pointer; border:1px solid var(--line);">` : ''}
+          ${t.status==='pending' && t.slip_url ? `<div class="hint" style="margin-top:4px;">⏳ ລໍຖ້າແອດມິນກວດສະລິບ</div>` : ''}
           <div style="margin-top:4px; font-weight:700;">${fmtMoney(t.amount)}</div>
         </div>`).join('') : '<div class="empty">ຍັງບໍ່ມີປະຫວັດ</div>'}`;
   });
 }
-/* ---- Wallet top-up — QR auto-pay only (no more slip upload / admin approval) ----
-   Mirrors the checkout "ສະແກນ QR ຈ່າຍເງິນ" flow: customer picks a bank + amount, we open a
-   pending wallet_transactions row, ask phajay-generate-qr for a QR tied to that top-up, show it,
-   and poll until it's credited. Kept separate state/timers from the checkout QR flow (qrPollTimer
-   etc. above) so a top-up and a checkout can't stomp on each other's polling if both were ever
-   open in the same session. */
-let topupQrState = {};
+/* ---- Wallet top-up — two methods ----
+   1) "auto": mirrors the checkout "ສະແກນ QR ຈ່າຍເງິນ" flow — customer picks a bank, we open a
+      pending wallet_transactions row, ask phajay-generate-qr for a QR tied to that top-up, show
+      it, and poll until PhaJay's webhook credits it automatically. Only works for the banks
+      PhaJay actually supports (QR_BANKS).
+   2) "manual": for banks PhaJay can't auto-confirm (some accounts can only be paid by scanning
+      straight from inside that bank's own app, not through PhaJay's aggregator) — show that
+      bank's own static QR code (bank_accounts.qr_url), have the customer upload their transfer
+      slip, and an admin reviews + approves it from the admin panel (admin_approve_topup). This
+      re-uses wallet_topup_request's p_slip_url param, which already existed for exactly this but
+      had no UI wired up to it. No polling here — admin_approve_topup fires a notification once
+      it's checked, and the wallet balance/history simply reflect it next time this sheet opens. */
+let topupQrState = {method:'auto'};
 let topupPollTimer = null;
 let topupCountdownTimer = null;
+let topupSlipFile = null;
+const TOPUP_QR_EXPIRY_MS = 10*60*1000; // the auto/self-generated QR is single-use and tied to one
+                                        // PhaJay transaction, so it's only shown/scannable for 10
+                                        // minutes — separate from QR_EXPIRY_MS (24h), which is for
+                                        // the checkout/order QR and is untouched by this.
+function setTopupMethod(m){ topupQrState.method = m; showTopupForm(); }
 function showTopupForm(){
+  const method = topupQrState.method || 'auto';
+  const tabsHtml = `<div style="display:flex; gap:6px; margin-bottom:12px;">
+    <button onclick="setTopupMethod('auto')" style="flex:1; border:1.5px solid ${method==='auto'?'var(--maroon)':'var(--line)'}; background:${method==='auto'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='auto'?'800':'600'}; font-size:12.5px; color:var(--ink);">⚡ QR ອັດຕະໂນມັດ</button>
+    <button onclick="setTopupMethod('manual')" style="flex:1; border:1.5px solid ${method==='manual'?'var(--maroon)':'var(--line)'}; background:${method==='manual'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='manual'?'800':'600'}; font-size:12.5px; color:var(--ink);">🏦 ໂອນທະນາຄານ (ແອດມິນຢືນຢັນ)</button>
+  </div>`;
+  if(method==='manual'){ showTopupFormManual(tabsHtml); return; }
   const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active && QR_BANKS.includes(b.bank_name_en));
   if(topupQrState.bankAccountId==null && banks.length) topupQrState.bankAccountId = banks[0].id;
   const selectedId = topupQrState.bankAccountId;
-  document.getElementById('topupFormWrap').innerHTML = `
+  document.getElementById('topupFormWrap').innerHTML = tabsHtml + `
     <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000" value="${topupQrState.amount||''}"></div>
     ${banks.length ? `<div class="field">
       <label>🏦 ເລືອກທະນາຄານ</label>
@@ -3009,10 +3030,72 @@ function showTopupForm(){
           <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
           <div class="arrow">›</div>
         </div>`).join('')}
-    </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າທະນາຄານທີ່ຮອງຮັບ QR ອັດຕະໂນມັດ (BCEL / LDB / JDB) — ກະລຸນາຕິດຕໍ່ຮ້ານ</div>`}
+    </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າທະນາຄານທີ່ຮອງຮັບ QR ອັດຕະໂນມັດ (BCEL / LDB / JDB) — ລອງໃຊ້ "ໂອນທະນາຄານ (ແອດມິນຢືນຢັນ)" ແທນ</div>`}
     <button class="btn btn-primary" id="topupSubmitBtn" ${banks.length?'':'disabled'} onclick="submitTopup()">⚡ ສ້າງ QR ເຕີມເງິນ</button>
-    <div class="hint" style="margin-top:8px;">ສະແກນຈ່າຍແລ້ວຍອດຈະເຂົ້າກະເປົາໃຫ້ທັນທີ ບໍ່ຕ້ອງລໍຖ້າແອດມິນ</div>
+    <div class="hint" style="margin-top:8px;">ສະແກນຈ່າຍແລ້ວຍອດຈະເຂົ້າກະເປົາໃຫ້ທັນທີ ບໍ່ຕ້ອງລໍຖ້າແອດມິນ — QR ນີ້ໃຊ້ໄດ້ພາຍໃນ 10 ນາທີ</div>
     <div id="topupQrBox"></div>`;
+}
+// Manual/admin-verified path — all active bank accounts are eligible here (not just the PhaJay
+// ones), since this is exactly the fallback for accounts that can't do the automatic scan.
+function showTopupFormManual(tabsHtml){
+  const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active);
+  if(topupQrState.manualBankId==null && banks.length) topupQrState.manualBankId = banks[0].id;
+  const selectedId = topupQrState.manualBankId;
+  const bank = banks.find(b=>b.id===selectedId);
+  document.getElementById('topupFormWrap').innerHTML = tabsHtml + `
+    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000" value="${topupQrState.amount||''}"></div>
+    ${banks.length ? `<div class="field">
+      <label>🏦 ເລືອກທະນາຄານ</label>
+      ${banks.map(b=>`
+        <div class="optcard ${selectedId===b.id?'selected':''}" onclick="selectTopupManualBank(${b.id})">
+          <div class="ico">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">`:(b.logo_emoji||'🏦')}</div>
+          <div class="t">${b.bank_name}${b.bank_name_en?` <span class="hint">(${b.bank_name_en})</span>`:''}</div>
+          <div class="arrow">›</div>
+        </div>`).join('')}
+    </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າບັນຊີທະນາຄານ — ກະລຸນາຕິດຕໍ່ຮ້ານ</div>`}
+    ${bank ? `<div style="background:var(--cream); border-radius:12px; padding:14px; margin:10px 0; text-align:center;">
+      ${bank.qr_url ? `<img src="${bank.qr_url}" style="width:170px; height:170px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">` : ''}
+      <div class="hint" style="margin-top:10px; font-weight:700; color:var(--maroon);">${bank.account_name||''}</div>
+      <div class="hint">${bank.bank_name||''}${bank.account_number?' • '+bank.account_number:''}</div>
+      <div class="hint" style="margin-top:6px;">ເປີດແອັບທະນາຄານແລ້ວສະແກນ QR ນີ້ໂດຍກົງ (ບໍ່ຕ້ອງຜ່ານ PhaJay) ຈາກນັ້ນອັບໂຫລດສະລິບດ້ານລຸ່ມ</div>
+    </div>` : ''}
+    <div class="field"><label>📎 ອັບໂຫລດສະລິບການໂອນເງິນ</label><input type="file" accept="image/*" id="topupSlipFile" onchange="onTopupSlipChange()"></div>
+    <div id="topupSlipPreview"></div>
+    <button class="btn btn-primary" id="topupManualSubmitBtn" disabled onclick="submitManualTopup()">📤 ສົ່ງສະລິບ ລໍຖ້າແອດມິນຢືນຢັນ</button>
+    <div class="hint" style="margin-top:8px;">ແອດມິນຈະກວດສະລິບ ແລະ ເພີ່ມຍອດເງິນເຂົ້າກະເປົາໃຫ້ຫຼັງຈາກນັ້ນ — ຈະໄດ້ຮັບການແຈ້ງເຕືອນທັນທີທີ່ອະນຸມັດ</div>`;
+}
+function selectTopupManualBank(id){ topupQrState.manualBankId = id; showTopupForm(); }
+function onTopupSlipChange(){
+  const f = document.getElementById('topupSlipFile').files[0];
+  const prev = document.getElementById('topupSlipPreview');
+  const btn = document.getElementById('topupManualSubmitBtn');
+  topupSlipFile = f || null;
+  if(f){ prev.innerHTML = `<img src="${URL.createObjectURL(f)}" style="width:100px; height:100px; object-fit:cover; border-radius:10px; margin-top:6px; border:1px solid var(--line);">`; }
+  else{ prev.innerHTML = ''; }
+  if(btn) btn.disabled = !f;
+}
+async function submitManualTopup(){
+  onGuard('topup-manual', async ()=>{
+    const amount = Number(document.getElementById('topupAmount').value);
+    if(!amount || amount<=0){ showToast('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
+    if(!topupSlipFile){ showToast('ກະລຸນາອັບໂຫລດສະລິບການໂອນເງິນ'); return; }
+    const btn = document.getElementById('topupManualSubmitBtn');
+    btn.disabled = true; btn.textContent = 'ກຳລັງອັບໂຫລດ... 0%';
+    try{
+      const small = await compressImageFile(topupSlipFile);
+      const slipUrl = await sbUploadWithProgress('khaidee-products', `topup_slip_${STATE.customer.id}_${Date.now()}_${small.name}`, small, (pct)=>{
+        if(btn) btn.textContent = `ກຳລັງອັບໂຫລດ... ${pct}%`;
+      });
+      await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
+      playSuccessSound();
+      showToast('ສົ່ງສະລິບແລ້ວ — ລໍຖ້າແອດມິນກວດສອບ ແລະ ຢືນຢັນ');
+      topupQrState = {method:'manual'}; topupSlipFile = null;
+      showWallet();
+    }catch(e){
+      playErrorSound(); showToast('ຜິດພາດ: ' + e.message);
+      btn.disabled=false; btn.textContent='📤 ສົ່ງສະລິບ ລໍຖ້າແອດມິນຢືນຢັນ';
+    }
+  });
 }
 function selectTopupBank(id){ topupQrState.bankAccountId = id; showTopupForm(); }
 async function submitTopup(){
@@ -3050,7 +3133,7 @@ async function requestTopupQrAndShow(txnId, topupNumber, amount){
     const data = await r.json();
     if(!r.ok) throw new Error(data.error || 'ສ້າງ QR ບໍ່ສຳເລັດ');
     const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(data.qrCode)}`;
-    const expiresAtMs = Date.now() + QR_EXPIRY_MS;
+    const expiresAtMs = Date.now() + TOPUP_QR_EXPIRY_MS; // 10 min top-up-only expiry — see TOPUP_QR_EXPIRY_MS above
     box.innerHTML = `
       <div style="text-align:center; margin-top:12px;">
         <div class="sumrow total" style="margin-bottom:10px; justify-content:center; gap:8px;"><span>ຈຳນວນເຕີມ</span><span>${fmtMoney(amount)}</span></div>
