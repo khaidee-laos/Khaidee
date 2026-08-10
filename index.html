@@ -227,6 +227,7 @@ nav.bottom .icon{font-size:19px;}
 .sheet{background:#fff; width:100%; max-width:480px; border-radius:20px 20px 0 0; max-height:90vh; overflow-y:auto; animation:slideup .25s ease;}
 .overlay.center .sheet{border-radius:20px; max-height:85vh;}
 @keyframes slideup{from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+@keyframes fadeInUp{from{transform:translateY(12px); opacity:0;} to{transform:translateY(0); opacity:1;}}
 .sheet-handle{width:40px; height:4px; background:var(--line); border-radius:99px; margin:10px auto 4px;}
 .sheet-header{display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--line);}
 .sheet-header h3{margin:0; font-size:15.5px;}
@@ -2302,6 +2303,21 @@ function startQrCountdown(countdownElId, expiresAtMs, onExpire){
   tick();
   return timerId;
 }
+// Shown in place of the QR the instant polling detects status==='paid' — same spot on screen,
+// so the customer's eyes don't have to jump anywhere. Swaps back out a couple seconds later when
+// the caller closes/reloads the sheet.
+function renderThankYouBox(el, orderNumber){
+  if(!el) return;
+  const logoSrc = (STATE.settings && STATE.settings.logo_url) || 'logo.png';
+  el.innerHTML = `
+    <div style="text-align:center; padding:26px 14px; border:1.5px dashed var(--gold); border-radius:12px; background:linear-gradient(180deg, rgba(241,223,174,0.28), transparent); animation:fadeInUp .35s ease;">
+      <div style="width:86px; height:86px; margin:0 auto 14px; border-radius:50%; overflow:hidden; border:2.5px solid var(--gold); display:flex; align-items:center; justify-content:center; background:#fff; box-shadow:0 4px 14px rgba(122,30,43,0.15);">
+        <img src="${logoSrc}" alt="KhaiDee" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null; this.parentElement.innerHTML='✅'; this.parentElement.style.fontSize='38px';">
+      </div>
+      <div style="font-size:17px; font-weight:800; color:var(--maroon);">🎉 ຂອບໃຈທີ່ໃຊ້ບໍລິການ KhaiDee</div>
+      <div class="hint" style="margin-top:6px;">ຊຳລະເງິນສຳເລັດແລ້ວ — ອໍເດີເລກທີ ${orderNumber}</div>
+    </div>`;
+}
 function renderQrPaymentStep(total){
   const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active && QR_BANKS.includes(b.bank_name_en));
   const selectedId = checkoutState.bankAccountId;
@@ -2370,12 +2386,16 @@ function startQrPolling(orderNumber){
       const status = rows && rows[0] && rows[0].status;
       if(status === 'paid'){
         clearInterval(qrPollTimer); qrPollTimer = null;
+        if(qrCountdownTimer){ clearInterval(qrCountdownTimer); qrCountdownTimer = null; }
         playSuccessSound();
-        closeModal('modalCheckout');
-        if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
+        renderThankYouBox(document.getElementById('checkoutBody'), orderNumber);
         showToast(`✅ ຊຳລະເງິນສຳເລັດ! ອໍເດີເລກທີ: ${orderNumber}`);
-        loadProducts().then(()=>renderProducts());
-        renderOrders && renderOrders();
+        setTimeout(()=>{
+          closeModal('modalCheckout');
+          if(buyNowMode){ exitBuyNowMode(); } else { STATE.cart = []; saveCart(); }
+          loadProducts().then(()=>renderProducts());
+          renderOrders && renderOrders();
+        }, 2200);
       }
     }catch(e){ /* transient network hiccup — just try again next tick */ }
     if(tries > 180){ clearInterval(qrPollTimer); qrPollTimer = null; } // stop after ~15 min (5s * 180)
@@ -2970,13 +2990,18 @@ function startOrderDetailQrPolling(orderId, orderNumber){
       const status = rows && rows[0] && rows[0].status;
       if(status === 'paid'){
         clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null;
+        if(orderDetailQrCountdownTimer){ clearInterval(orderDetailQrCountdownTimer); orderDetailQrCountdownTimer = null; }
         playSuccessSound();
+        renderThankYouBox(document.getElementById('orderDetailQrBox'), orderNumber);
         showToast(`✅ ຊຳລະເງິນສຳເລັດ! ອໍເດີເລກທີ: ${orderNumber}`);
-        // Reload the whole sheet so the status pill/track flips to paid and the QR box disappears
-        // (openOrderDetail only re-renders the QR box when status is still 'pending').
-        openOrderDetail(orderId);
-        loadProducts().then(()=>renderProducts());
-        renderOrders && renderOrders();
+        // Reload the whole sheet a couple seconds later so the status pill/track flips to paid
+        // (openOrderDetail only re-renders the QR box when status is still 'pending') — the delay
+        // just gives the thank-you message above a moment to actually be seen first.
+        setTimeout(()=>{
+          openOrderDetail(orderId);
+          loadProducts().then(()=>renderProducts());
+          renderOrders && renderOrders();
+        }, 2200);
       }
     }catch(e){ /* transient network hiccup — just try again next tick */ }
     if(tries > 180){ clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null; } // ~15 min
