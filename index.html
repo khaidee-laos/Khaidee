@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="lo">
+<html lang="lo" translate="no">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="google" content="notranslate">
 <title>KhaiDee ຂາຍດີ — ຊື້ຂາຍອອນລາຍ</title>
 <meta name="theme-color" content="#7A1E2B">
 <meta name="description" content="KhaiDee ຂາຍດີ — ຊື້ງ່າຍ ໄດ້ໄວ ສົ່ງທົ່ວ ສປປ ລາວ">
@@ -706,7 +707,7 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-header"><h3>🔒 ຜູ້ດູແລລະບົບ</h3><button class="closex" onclick="closeModal('modalAdminGate')">✕</button></div>
   <div class="sheet-body">
     <div id="adminGateErr"></div>
-    <div class="field"><label>ລະຫັດຜ່ານແອດມິນ</label><input type="password" id="adminPassInput" placeholder="••••••••"></div>
+    <div class="field"><label>ລະຫັດຜ່ານແອດມິນ</label><input type="password" autocomplete="off" id="adminPassInput" placeholder="••••••••"></div>
     <button class="btn btn-primary" onclick="tryAdminLogin()">ເຂົ້າສູ່ລະບົບແອດມິນ</button>
   </div>
 </div></div>
@@ -2065,7 +2066,7 @@ function showAuth(mode, onSuccess){
     body.innerHTML = `
       <div id="authErr"></div>
       <div class="field"><label>ເບີໂທ ຫຼື ອີເມວ</label><input id="loginId" placeholder="020XXXXXXXX ຫຼື email@example.com"></div>
-      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="loginPw"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" autocomplete="off" id="loginPw"></div>
       <button class="btn btn-primary" onclick="doLogin()">ເຂົ້າສູ່ລະບົບ</button>
       <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີບັນຊີ? <a href="#" onclick="event.preventDefault(); showAuth('register', arguments)">ສະໝັກເລີຍ</a></div>`;
     body.querySelector('a').onclick = (e)=>{ e.preventDefault(); showAuth('register', onSuccess); };
@@ -2077,7 +2078,7 @@ function showAuth(mode, onSuccess){
       <div class="field"><label>ຊື່ ແລະ ນາມສະກຸນ</label><input id="regName"></div>
       <div class="field"><label>ເບີໂທ (ສປປ ລາວ)</label><input id="regPhone" placeholder="020XXXXXXXX"></div>
       <div class="field"><label>ອີເມວ</label><input type="email" id="regEmail"></div>
-      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="regPw"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" autocomplete="off" id="regPw"></div>
       <button class="btn btn-primary" onclick="doRegister()">ສະໝັກສະມາຊິກ</button>
       <div class="hint" style="text-align:center; margin-top:12px;">ມີບັນຊີແລ້ວ? <a href="#" onclick="event.preventDefault();">ເຂົ້າສູ່ລະບົບ</a></div>`;
     body.querySelector('a').onclick = (e)=>{ e.preventDefault(); showAuth('login', onSuccess); };
@@ -3459,8 +3460,8 @@ function showChangePassword(){
   document.getElementById('authTitle').textContent = 'ປ່ຽນລະຫັດຜ່ານ';
   document.getElementById('authBody').innerHTML = `
     <div id="authErr"></div>
-    <div class="field"><label>ລະຫັດຜ່ານເກົ່າ</label><input type="password" id="oldPw"></div>
-    <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" id="newPw"></div>
+    <div class="field"><label>ລະຫັດຜ່ານເກົ່າ</label><input type="password" autocomplete="off" id="oldPw"></div>
+    <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" autocomplete="off" id="newPw"></div>
     <button class="btn btn-primary" onclick="doChangePassword()">ບັນທຶກ</button>`;
   openModal('modalAuth');
 }
@@ -4300,7 +4301,7 @@ function adminEditSellerProfile(id){
     <div class="field"><label>ເບີໂທ</label><input id="ssPhone" value="${s.phone||''}"></div>
     <div class="field"><label>ອີເມວ</label><input id="ssEmail" value="${s.email||''}"></div>
     <div class="field"><label>ຄຳອະທິບາຍຮ້ານ</label><textarea id="ssDesc" rows="3">${s.description||''}</textarea></div>
-    ${!id?`<div class="field"><label>ລະຫັດຜ່ານເຂົ້າສູ່ລະບົບຮ້ານ (ຢ່າງໜ້ອຍ 6 ໂຕ)</label><input type="password" id="ssPassword" placeholder="ຖ້າຫວ່າງ ຈະຕັ້ງພາຍຫຼັງ"></div>`:''}
+    ${!id?`<div class="field"><label>ລະຫັດຜ່ານເຂົ້າສູ່ລະບົບຮ້ານ (ຢ່າງໜ້ອຍ 6 ໂຕ)</label><input type="password" autocomplete="off" id="ssPassword" placeholder="ຖ້າຫວ່າງ ຈະຕັ້ງພາຍຫຼັງ"></div>`:''}
     <button class="btn btn-primary" id="ssSaveBtn">ບັນທຶກ</button>
   </div></div>`;
   document.body.appendChild(overlay);
@@ -4798,7 +4799,7 @@ async function renderAdminSettings(){
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">🤖 AI ຂຽນລາຍລະອຽດສິນຄ້າອັດຕະໂນມັດ</h4>
     <div class="hint" style="margin-top:-4px;">ໃສ່ Anthropic API key ຂອງທ່ານເພື່ອເປີດໃຊ້ປຸ່ມ "ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ" ໃນໜ້າເພີ່ມ/ແກ້ໄຂສິນຄ້າ — ລະບົບຈະຂຽນລາຍລະອຽດເປັນພາສາລາວໃຫ້ຈາກຊື່ ແລະ ໝວດໝູ່ສິນຄ້າ.<br>⚠️ <b>ຄຳເຕືອນ:</b> key ນີ້ຖືກເກັບໄວ້ໃນຕາຕະລາງການຕັ້ງຄ່າດຽວກັນກັບ whatsapp_number ເຊິ່ງລູກຄ້າທົ່ວໄປສາມາດອ່ານໄດ້ (site_settings_public) — ຫາກຕ້ອງການໃຊ້ຢ່າງປອດໄພແທ້ໆ ຄວນຍ້າຍ key ນີ້ໄປໄວ້ໃນຕາຕະລາງ/Edge Function ແຍກຕ່າງຫາກທີ່ຈຳກັດໃຫ້ອ່ານໄດ້ສະເພາະແອດມິນເທົ່ານັ້ນ ກ່ອນນຳໄປໃຊ້ຈິງ.</div>
-    <div class="field"><label>Anthropic API Key</label><input type="password" id="stAiKey" value="${STATE.settings.anthropic_api_key||''}" placeholder="sk-ant-..."></div>
+    <div class="field"><label>Anthropic API Key</label><input type="password" autocomplete="off" id="stAiKey" value="${STATE.settings.anthropic_api_key||''}" placeholder="sk-ant-..."></div>
     <button class="btn btn-primary" id="stAiKeySave">ບັນທຶກ API Key</button>
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
@@ -4819,8 +4820,8 @@ async function renderAdminSettings(){
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">ປ່ຽນລະຫັດຜ່ານແອດມິນ</h4>
-    <div class="field"><label>ລະຫັດຜ່ານປັດຈຸບັນ</label><input type="password" id="apOld"></div>
-    <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" id="apNew"></div>
+    <div class="field"><label>ລະຫັດຜ່ານປັດຈຸບັນ</label><input type="password" autocomplete="off" id="apOld"></div>
+    <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" autocomplete="off" id="apNew"></div>
     <button class="btn btn-ghost" id="apSave">ປ່ຽນລະຫັດຜ່ານແອດມິນ</button>`;
   document.getElementById('stSave').onclick = async ()=>{
     let logoUrl = document.getElementById('stLogo').value;

@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="lo">
+<html lang="lo" translate="no">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="google" content="notranslate">
 <title>KhaiDee Seller — ຮ້ານຄ້າຂອງຂ້ອຍ</title>
 <meta name="theme-color" content="#7A1E2B">
 <link rel="icon" href="icon-192.png">
@@ -320,7 +321,7 @@ function showAuthScreen(mode){
   if(mode==='login'){
     body.innerHTML = `
       <div class="field"><label>ເບີໂທ ຫຼື ອີເມວ</label><input id="sLoginId" placeholder="020XXXXXXXX ຫຼື email@example.com"></div>
-      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sLoginPw"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" autocomplete="off" id="sLoginPw"></div>
       <button class="btn btn-primary" onclick="doSellerLogin()">ເຂົ້າສູ່ລະບົບ</button>
       <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີຮ້ານຄ້າ? <a href="#" id="toRegister">ສະໝັກເປັນຜູ້ຂາຍ</a></div>`;
     document.getElementById('toRegister').onclick = (e)=>{ e.preventDefault(); showAuthScreen('register'); };
@@ -331,7 +332,7 @@ function showAuthScreen(mode){
       <div class="field"><label>ເບີໂທ</label><input id="sRegPhone" placeholder="020XXXXXXXX" oninput="onSellerPhoneInput()"></div>
       <div id="sRegWaConnect" class="wa-connect-box hidden"></div>
       <div class="field"><label>ອີເມວ</label><input type="email" id="sRegEmail" placeholder="email@example.com"></div>
-      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" id="sRegPw" placeholder="ຢ່າງໜ້ອຍ 6 ໂຕ (ໃຊ້ເຂົ້າສູ່ລະບົບຫຼັງໄດ້ຮັບອະນຸມັດ)"></div>
+      <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" autocomplete="off" id="sRegPw" placeholder="ຢ່າງໜ້ອຍ 6 ໂຕ (ໃຊ້ເຂົ້າສູ່ລະບົບຫຼັງໄດ້ຮັບອະນຸມັດ)"></div>
       <div class="field"><label>ແຂວງ</label><select id="sRegProvince" onchange="onSellerProvinceChange()">${LAOS_PROVINCES.map(p=>`<option>${p}</option>`).join('')}</select></div>
       <div class="row2">
         <div class="field"><label>ເມືອງ</label><select id="sRegDistrict">${sellerDistrictOptions(LAOS_PROVINCES[0], null)}</select></div>
@@ -1062,8 +1063,8 @@ async function renderAccount(){
     <div style="padding:0 14px 20px;"><button class="btn btn-ghost" onclick="showSellerGuide()">📖 ຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍ</button></div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
       <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">ປ່ຽນລະຫັດຜ່ານ</label>
-      <div class="field" style="margin-top:8px;"><input type="password" id="accOldPw" placeholder="ລະຫັດຜ່ານເກົ່າ"></div>
-      <div class="field"><input type="password" id="accNewPw" placeholder="ລະຫັດຜ່ານໃໝ່"></div>
+      <div class="field" style="margin-top:8px;"><input type="password" autocomplete="off" id="accOldPw" placeholder="ລະຫັດຜ່ານເກົ່າ"></div>
+      <div class="field"><input type="password" autocomplete="off" id="accNewPw" placeholder="ລະຫັດຜ່ານໃໝ່"></div>
       <button class="btn btn-ghost" onclick="changePw()">ປ່ຽນລະຫັດຜ່ານ</button>
     </div>
     <div style="padding:0 14px;"><button class="btn" style="background:#fff; border:1.5px solid var(--danger); color:var(--danger);" onclick="sellerLogout()">🚪 ອອກຈາກລະບົບ</button></div>`;
