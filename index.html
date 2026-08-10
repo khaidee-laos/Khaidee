@@ -2652,7 +2652,7 @@ function paintCustomerOrders(){
           <span style="font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</span>
           <span class="hint">ເບິ່ງລາຍລະອຽດ ›</span>
         </div>
-        ${canCancelOrder(o.status) ? `<button class="btn btn-ghost btn-sm" style="width:100%; margin-top:8px; color:var(--danger); border-color:var(--danger);" onclick="event.stopPropagation(); openCancelOrderModal(${o.id},'${o.order_number}')">ຍົກເລີກຄຳສັ່ງຊື້</button>` : ''}
+        ${renderCancelBtn(o, o.id)}
       </div>`).join('') || '<div class="empty">ບໍ່ມີຄຳສັ່ງຊື້ໃນໝວດນີ້</div>');
 }
 
@@ -2679,6 +2679,24 @@ function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
 // customer_cancel_order RPC (pending/paid/packing only; once it's shipping/delivered the RPC
 // itself rejects it and tells them to contact an admin instead).
 function canCancelOrder(status){ return status==='pending' || status==='paid' || status==='packing'; }
+// True the moment the seller has uploaded ANY packing/fulfillment proof photo (fulfillment_steps
+// on order_detail_for_customer / order_list_for_customer). Once that exists the seller has already
+// started physically handling the order, so the customer is locked out of self-cancelling even
+// though the status itself (pending/paid/packing) would otherwise still allow it.
+// NOTE: this only works where the RPC response actually includes `fulfillment_steps` — currently
+// guaranteed on order_detail_for_customer; if order_list_for_customer's payload doesn't carry that
+// field yet, add it there too so the list-card button locks in sync with the detail view.
+function sellerUploadedProof(o){ return !!(o && o.fulfillment_steps && o.fulfillment_steps.length); }
+// Small, right-aligned cancel button shared by the order-list card and the order-detail sheet.
+// Once sellerUploadedProof(o) is true, it renders disabled + faded instead of disappearing, so the
+// customer understands *why* they can no longer cancel rather than the button just vanishing.
+function renderCancelBtn(o, orderId){
+  if(!canCancelOrder(o.status)) return '';
+  const locked = sellerUploadedProof(o);
+  return `<div style="display:flex; justify-content:flex-end; margin-top:8px;">
+    <button class="btn btn-ghost btn-sm" ${locked?'disabled':''} style="width:auto; padding:5px 12px; font-size:11px; color:var(--danger); border-color:var(--danger);${locked?' opacity:.4; cursor:not-allowed;':''}" onclick="event.stopPropagation();${locked?'':` openCancelOrderModal(${orderId},'${o.order_number}')`}">${locked?'🔒':'✕'} ຍົກເລີກຄຳສັ່ງຊື້</button>
+  </div>${locked ? `<div class="hint" style="text-align:right; margin-top:2px; font-size:10px;">ຮ້ານອັບໂຫລດຫຼັກຖານແພັກສິນຄ້າແລ້ວ ຈຶ່ງບໍ່ສາມາດຍົກເລີກເອງໄດ້</div>` : ''}`;
+}
 // Groups the 6 real statuses into the 4 tabs the customer/admin actually think in terms of.
 const ORDER_TABS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
@@ -2798,7 +2816,7 @@ async function openOrderDetail(orderId){
         <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
         <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
         ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}
-        ${canCancelOrder(o.status) ? `<button class="btn btn-ghost" style="margin-top:16px; color:var(--danger); border-color:var(--danger);" onclick="openCancelOrderModal(${orderId},'${o.order_number}')">✕ ຍົກເລີກຄຳສັ່ງຊື້</button>` : ''}`;
+        ${renderCancelBtn(o, orderId)}`;
       // Still-pending QR-pay orders: re-fetch and show a live, re-scannable QR right inside the
       // detail sheet, and poll here too — same "stays visible until actually paid, then vanishes
       // and the status flips" behavior as the checkout flow, but reachable any time the customer
