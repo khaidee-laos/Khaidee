@@ -694,6 +694,13 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="orderDetailBody"></div>
 </div></div>
 
+<!-- Cancel order (pick a reason, same flow as Shopee/Lazada) -->
+<div class="overlay" id="modalCancelOrder"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>✕ ຍົກເລີກຄຳສັ່ງຊື້</h3><button class="closex" onclick="closeModal('modalCancelOrder')">✕</button></div>
+  <div class="sheet-body" id="cancelOrderBody"></div>
+</div></div>
+
 <!-- Admin password gate -->
 <div class="overlay center" id="modalAdminGate"><div class="sheet">
   <div class="sheet-header"><h3>🔒 ຜູ້ດູແລລະບົບ</h3><button class="closex" onclick="closeModal('modalAdminGate')">✕</button></div>
@@ -2645,6 +2652,7 @@ function paintCustomerOrders(){
           <span style="font-weight:700; color:var(--maroon);">${fmtMoney(o.total)}</span>
           <span class="hint">ເບິ່ງລາຍລະອຽດ ›</span>
         </div>
+        ${canCancelOrder(o.status) ? `<button class="btn btn-ghost btn-sm" style="width:100%; margin-top:8px; color:var(--danger); border-color:var(--danger);" onclick="event.stopPropagation(); openCancelOrderModal(${o.id},'${o.order_number}')">ຍົກເລີກຄຳສັ່ງຊື້</button>` : ''}
       </div>`).join('') || '<div class="empty">ບໍ່ມີຄຳສັ່ງຊື້ໃນໝວດນີ້</div>');
 }
 
@@ -2667,6 +2675,10 @@ const ORDER_STATUS_LABELS = {
   shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ'
 };
 function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
+// Customer can self-cancel while the order hasn't shipped yet — mirrors the check inside the
+// customer_cancel_order RPC (pending/paid/packing only; once it's shipping/delivered the RPC
+// itself rejects it and tells them to contact an admin instead).
+function canCancelOrder(status){ return status==='pending' || status==='paid' || status==='packing'; }
 // Groups the 6 real statuses into the 4 tabs the customer/admin actually think in terms of.
 const ORDER_TABS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
@@ -2748,7 +2760,7 @@ async function openOrderDetail(orderId){
           <span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span>
         </div>
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
-        ${o.status==='cancelled' ? '' : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
+        ${o.status==='cancelled' ? `<div class="hint" style="margin-top:8px; background:#FBE7E7; color:var(--danger); padding:10px 12px; border-radius:10px; font-weight:600;">✕ ${o.cancelled_by==='customer' ? 'ທ່ານໄດ້ຍົກເລີກຄຳສັ່ງຊື້ນີ້' : 'ຄຳສັ່ງຊື້ນີ້ຖືກຍົກເລີກ'}${o.cancel_reason ? ' — ເຫດຜົນ: '+o.cancel_reason : ''}</div>` : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
           <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
         <div id="orderDetailQrBox"></div>
         ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:8px; font-weight:600; color:var(--maroon);">📅 ຄາດວ່າຈະຮອດປະມານ ${estimateDeliveryDate(o)}</div>` : ''}
@@ -2776,7 +2788,8 @@ async function openOrderDetail(orderId){
         ${o.payment_slip_url ? `<h4 style="font-size:13px; margin:16px 0 4px;">📎 ສະລິບໂອນເງິນທີ່ອັບໂຫລດ</h4><img src="${o.payment_slip_url}" style="width:140px; border-radius:10px; cursor:pointer;" onclick="window.open('${o.payment_slip_url}','_blank')">` : ''}
         <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
         <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
-        ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}`;
+        ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}
+        ${canCancelOrder(o.status) ? `<button class="btn btn-ghost" style="margin-top:16px; color:var(--danger); border-color:var(--danger);" onclick="openCancelOrderModal(${orderId},'${o.order_number}')">✕ ຍົກເລີກຄຳສັ່ງຊື້</button>` : ''}`;
       // Still-pending QR-pay orders: re-fetch and show a live, re-scannable QR right inside the
       // detail sheet, and poll here too — same "stays visible until actually paid, then vanishes
       // and the status flips" behavior as the checkout flow, but reachable any time the customer
@@ -2785,6 +2798,77 @@ async function openOrderDetail(orderId){
         renderOrderDetailQr(orderId, o.order_number, o.total, o.bank_name_en, o.created_at);
       }
     }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດລາຍລະອຽດຄຳສັ່ງຊື້ໄດ້</div>'; }
+  });
+}
+
+/* ============================================================ CANCEL ORDER (customer-picked reason, Shopee/Lazada-style) ============================================================
+   UI-only: the actual validation/refund/restock/notification all happen server-side inside the
+   customer_cancel_order RPC (only allows pending/paid/packing, refunds wallet payments, restocks
+   items, writes cancel_reason/cancelled_by back onto the order). This just collects a reason. */
+const CANCEL_ORDER_REASONS = [
+  'ຂ້ອຍປ່ຽນໃຈ ບໍ່ຢາກສັ່ງຊື້ອີກຕໍ່ໄປ',
+  'ຕ້ອງການແກ້ໄຂຄຳສັ່ງຊື້ (ທີ່ຢູ່, ຈຳນວນ, ຫຼືສິນຄ້າຜິດ)',
+  'ສັ່ງຊື້ຊ້ຳ ຫຼື ສັ່ງຜິດພາດ',
+  'ພົບສິນຄ້າດຽວກັນໃນລາຄາຖືກກວ່າບ່ອນອື່ນ',
+  'ໃຊ້ເວລາຈັດສົ່ງດົນເກີນໄປ',
+  'ອື່ນໆ'
+];
+function openCancelOrderModal(orderId, orderNumber){
+  const wrap = document.getElementById('cancelOrderBody');
+  wrap.innerHTML = `
+    <div class="hint" style="margin-bottom:10px;">ຄຳສັ່ງຊື້ #${orderNumber} — ກະລຸນາເລືອກເຫດຜົນທີ່ທ່ານຕ້ອງການຍົກເລີກ:</div>
+    <div id="cancelReasonList">
+      ${CANCEL_ORDER_REASONS.map((r,i)=>`
+        <label style="display:flex; align-items:flex-start; gap:8px; padding:10px 4px; border-bottom:1px solid var(--line); font-size:13.5px; cursor:pointer;">
+          <input type="radio" name="cancelReason" value="${r.replace(/"/g,'&quot;')}" style="margin-top:2px;" onchange="onCancelReasonChange()">
+          <span>${r}</span>
+        </label>`).join('')}
+    </div>
+    <div class="field" id="cancelOtherField" style="display:none; margin-top:10px;">
+      <label>ກະລຸນາລະບຸເຫດຜົນ</label>
+      <textarea id="cancelOtherText" rows="3" placeholder="ບອກເຫດຜົນຂອງທ່ານ..."></textarea>
+    </div>
+    <button class="btn" style="margin-top:16px; background:var(--danger); color:#fff;" id="cancelOrderConfirmBtn" disabled onclick="submitCancelOrder(${orderId})">ຢືນຢັນການຍົກເລີກ</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeModal('modalCancelOrder')">ບໍ່ຍົກເລີກ, ກັບຄືນ</button>`;
+  openModal('modalCancelOrder');
+}
+function onCancelReasonChange(){
+  const picked = document.querySelector('input[name="cancelReason"]:checked');
+  const otherField = document.getElementById('cancelOtherField');
+  const btn = document.getElementById('cancelOrderConfirmBtn');
+  const isOther = picked && picked.value==='ອື່ນໆ';
+  otherField.style.display = isOther ? 'block' : 'none';
+  btn.disabled = !picked || (isOther && !document.getElementById('cancelOtherText').value.trim());
+  if(isOther){
+    document.getElementById('cancelOtherText').oninput = ()=>{
+      btn.disabled = !document.getElementById('cancelOtherText').value.trim();
+    };
+  }
+}
+async function submitCancelOrder(orderId){
+  onGuard('cancel-order-'+orderId, async ()=>{
+    const picked = document.querySelector('input[name="cancelReason"]:checked');
+    if(!picked) return;
+    let reason = picked.value;
+    if(reason==='ອື່ນໆ'){
+      const other = (document.getElementById('cancelOtherText').value||'').trim();
+      if(!other) return;
+      reason = other;
+    }
+    const btn = document.getElementById('cancelOrderConfirmBtn');
+    btn.disabled = true; btn.textContent = 'ກຳລັງຍົກເລີກ...';
+    try{
+      await sbRPC('customer_cancel_order', {p_customer_id: STATE.customer.id, p_order_id: orderId, p_reason: reason});
+      closeModal('modalCancelOrder');
+      closeModal('modalOrderDetail');
+      showToast('ຍົກເລີກຄຳສັ່ງຊື້ສຳເລັດແລ້ວ', 'success');
+      customerOrdersList = await sbRPC('order_list_for_customer', {p_customer_id: STATE.customer.id});
+      customerOrdersTab = 'cancelled';
+      paintCustomerOrders();
+    }catch(e){
+      showToast(e.message || 'ບໍ່ສາມາດຍົກເລີກຄຳສັ່ງຊື້ໄດ້', 'error');
+      btn.disabled = false; btn.textContent = 'ຢືນຢັນການຍົກເລີກ';
+    }
   });
 }
 let orderDetailQrPollTimer = null;
@@ -3352,6 +3436,7 @@ function paintAdminOrders(){
       ${o.tracking_url ? `<a href="${o.tracking_url}" target="_blank" style="font-size:11.5px; color:var(--maroon); font-weight:600; display:inline-block; margin-top:4px;">🔗 ລິງກ໌ຕິດຕາມພັດສະດຸ</a>` : ''}
       ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
       ${deliveryCountdownHtml(o)}
+      ${(o.status==='cancelled' && o.cancel_reason) ? `<div class="hint" style="margin-top:4px; background:#FBE7E7; color:var(--danger); padding:6px 8px; border-radius:8px;">✕ ${o.cancelled_by==='customer'?'ລູກຄ້າຍົກເລີກ':'ຍົກເລີກໂດຍແອດມິນ'} — ${o.cancel_reason}</div>` : ''}
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
         ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${orderStatusLabel(s)}</option>`).join('')}
