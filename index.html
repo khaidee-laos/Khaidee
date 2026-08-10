@@ -3553,6 +3553,7 @@ function tryAdminLogin(){
 function exitAdmin(){
   document.getElementById('adminApp').style.display='none';
   document.getElementById('customerApp').style.display='block';
+  document.querySelectorAll('nav.bottom').forEach(n=>n.style.display='flex');
 }
 function logoutAdmin(){ STATE.adminPassword=null; exitAdmin(); }
 document.querySelectorAll('#adminTabs button').forEach(b=> b.onclick = ()=> switchAdminTab(b.dataset.tab));
