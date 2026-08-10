@@ -2984,7 +2984,7 @@ function startOrderDetailQrPolling(orderId, orderNumber){
 })();
 
 /* ============================================================ WALLET ============================================================ */
-const WALLET_TXN_STATUS_LABELS = {pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'};
+const WALLET_TXN_STATUS_LABELS = {pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ', expired:'ໝົດອາຍຸ', expired_paid:'ໝົດອາຍຸ (ກຳລັງກວດສອບ)'};
 async function showWallet(){
   requireLogin(async ()=>{
     openModal('modalWallet');
@@ -3003,6 +3003,7 @@ async function showWallet(){
           <div class="hint">${new Date(t.created_at).toLocaleString('lo-LA')}</div>
           ${t.slip_url ? `<img src="${t.slip_url}" onclick="window.open('${t.slip_url}','_blank')" style="width:56px; height:56px; object-fit:cover; border-radius:8px; margin-top:6px; cursor:pointer; border:1px solid var(--line);">` : ''}
           ${t.status==='pending' && t.slip_url ? `<div class="hint" style="margin-top:4px;">⏳ ລໍຖ້າແອດມິນກວດສະລິບ</div>` : ''}
+          ${t.status==='expired_paid' ? `<div class="hint" style="margin-top:4px; color:var(--danger);">⚠️ QR ໝົດອາຍຸກ່ອນຈະຊຳລະ — ແອດມິນກຳລັງກວດສອບການໂອນເພື່ອເພີ່ມເງິນໃຫ້ທ່ານດ້ວຍມື</div>` : ''}
           <div style="margin-top:4px; font-weight:700;">${fmtMoney(t.amount)}</div>
         </div>`).join('') : '<div class="empty">ຍັງບໍ່ມີປະຫວັດ</div>'}`;
     // If a top-up QR generated earlier in this session is still within its 10-minute window,
@@ -3252,6 +3253,17 @@ function startTopupPolling(txnId){
         showToast('✅ ເຕີມເງິນສຳເລັດ!');
         topupQrState = {};
         showWallet();
+      } else if(status === 'expired' || status === 'expired_paid' || status === 'rejected'){
+        // Server-side already knows this QR is dead (either the 10-minute window lapsed with no
+        // payment, or a payment showed up too late — see phajay-webhook). Stop polling/counting
+        // and drop the persisted QR immediately instead of waiting for the client-side timer.
+        clearInterval(topupPollTimer); topupPollTimer = null;
+        if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer = null; }
+        clearPendingTopup();
+        const wrap = document.getElementById('topupFormWrap');
+        if(status === 'expired_paid'){
+          if(wrap) wrap.innerHTML = `<div class="hint" style="text-align:center; padding:20px 14px; border:1.5px dashed var(--warn); border-radius:12px; color:var(--danger); font-weight:600;">⚠️ QR ໝົດອາຍຸກ່ອນຈະຊຳລະ — ພົບການໂອນເງິນເຂົ້າມາຊ້າ ແອດມິນກຳລັງກວດສອບເພື່ອເພີ່ມເງິນໃຫ້ທ່ານດ້ວຍມື</div>`;
+        } else if(wrap) renderQrExpiredBox(wrap);
       }
     }catch(e){ /* transient network hiccup — just try again next tick */ }
     if(tries > 180){ clearInterval(topupPollTimer); topupPollTimer = null; } // stop after ~15 min (5s * 180)
@@ -3570,7 +3582,7 @@ async function renderAdminDashboard(){
 // Small color dot used on compact tiles/list items across the admin panel.
 function adminStatusColor(status){
   const ok = ['approved','paid','delivered','active'];
-  const warn = ['pending','packing','shipping'];
+  const warn = ['pending','packing','shipping','expired_paid'];
   const bad = ['rejected','cancelled','suspended'];
   if(ok.includes(status)) return 'var(--ok)';
   if(warn.includes(status)) return 'var(--warn)';
@@ -4366,10 +4378,11 @@ function adminViewTopup(id){
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ຄຳຂໍເຕີມເງິນ</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="top" style="margin-bottom:6px;"><span class="title">${t.full_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${t.status}</span></div>
+    <div class="top" style="margin-bottom:6px;"><span class="title">${t.full_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span></div>
     <div class="hint">${t.phone} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+    ${t.status==='expired_paid' ? `<div class="hint" style="margin-top:10px; background:#FBE7E7; color:var(--danger); padding:10px 12px; border-radius:10px; font-weight:600;">⚠️ QR ນີ້ໝົດອາຍຸ (ເກີນ 10 ນາທີ) ກ່ອນທີ່ຈະໄດ້ຮັບການຊຳລະ ລະບົບຈຶ່ງບໍ່ໄດ້ເພີ່ມເງິນໃຫ້ອັດຕະໂນມັດ — ກະລຸນາກວດສອບບັນຊີທະນາຄານ/PhaJay ວ່າເງິນເຂົ້າແທ້ບໍ່ກ່ອນອະນຸມັດ</div>` : ''}
     ${t.slip_url?`<img src="${t.slip_url}" style="width:100%; border-radius:12px; margin-top:12px;">`:''}
-    ${t.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+    ${(t.status==='pending'||t.status==='expired_paid')?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
     <button class="btn btn-ghost" style="margin-top:12px; color:var(--danger); width:100%;" onclick="adminDeleteTopup(${t.id})">🗑️ ລຶບລາຍການນີ້</button>
   </div></div>`;
   document.body.appendChild(overlay);
