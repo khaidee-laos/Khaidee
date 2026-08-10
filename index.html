@@ -2707,6 +2707,15 @@ const ORDER_STATUS_STEPS = [
   {key:'shipping', ico:'🚚', lbl:'ກຳລັງສົ່ງ'},
   {key:'delivered', ico:'✅', lbl:'ສຳເລັດ'}
 ];
+// COD orders skip real payment before packing (the seller packs/ships without waiting for a
+// transfer — see canArrangeShipment() in seller.html), so labelling that step "ຊຳລະແລ້ວ" (paid)
+// is misleading and reads like the order is stuck waiting on payment before it can be packed.
+// For COD orders only, swap that one step's icon/label to "collect on delivery" instead — the
+// step key/position stays the same so the done/undone highlighting logic below is untouched.
+function orderStatusStepsFor(order){
+  if(order.payment_method !== 'cod') return ORDER_STATUS_STEPS;
+  return ORDER_STATUS_STEPS.map(s => s.key==='paid' ? {key:'paid', ico:'💵', lbl:'ເກັບເງິນປາຍທາງ'} : s);
+}
 // Rule-based ETA: order date + that carrier's average delivery days (set once per carrier
 // in the admin panel). This is NOT live GPS tracking — Lao couriers don't expose that via any
 // public API today — it's the same "estimated to arrive by ..." approach Shopee/Lazada use for
@@ -2760,7 +2769,7 @@ async function openOrderDetail(orderId){
           <span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span>
         </div>
         <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
-        ${o.status==='cancelled' ? `<div class="hint" style="margin-top:8px; background:#FBE7E7; color:var(--danger); padding:10px 12px; border-radius:10px; font-weight:600;">✕ ${o.cancelled_by==='customer' ? 'ທ່ານໄດ້ຍົກເລີກຄຳສັ່ງຊື້ນີ້' : 'ຄຳສັ່ງຊື້ນີ້ຖືກຍົກເລີກ'}${o.cancel_reason ? ' — ເຫດຜົນ: '+o.cancel_reason : ''}</div>` : `<div class="status-track">${ORDER_STATUS_STEPS.map((s,i)=>`
+        ${o.status==='cancelled' ? `<div class="hint" style="margin-top:8px; background:#FBE7E7; color:var(--danger); padding:10px 12px; border-radius:10px; font-weight:600;">✕ ${o.cancelled_by==='customer' ? 'ທ່ານໄດ້ຍົກເລີກຄຳສັ່ງຊື້ນີ້' : 'ຄຳສັ່ງຊື້ນີ້ຖືກຍົກເລີກ'}${o.cancel_reason ? ' — ເຫດຜົນ: '+o.cancel_reason : ''}</div>` : `<div class="status-track">${orderStatusStepsFor(o).map((s,i)=>`
           <div class="step ${i<=curIdx?'done':''}"><div class="dot">${s.ico}</div><div class="lbl">${s.lbl}</div></div>`).join('')}</div>`}
         <div id="orderDetailQrBox"></div>
         ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:8px; font-weight:600; color:var(--maroon);">📅 ຄາດວ່າຈະຮອດປະມານ ${estimateDeliveryDate(o)}</div>` : ''}
