@@ -1307,10 +1307,14 @@ async function submitWithdraw(balance){
 async function openTopupSheet(){
   let banks = [];
   try{ banks = await sbSelect('bank_accounts', 'is_active=eq.true&order=sort_order.asc'); }catch(e){ banks = []; }
+  const qrUrl = STATE.settings.wallet_qr_url || '';
+  const walletInfo = STATE.settings.wallet_instructions || '';
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>➕ ເຕີມເງິນເຂົ້າກະເປົາ</h3><button class="closex" data-close>✕</button></div>
     <div class="sheet-body">
       <div class="hint" style="margin-bottom:10px;">ໂອນເງິນເຂົ້າບັນຊີດ້ານລຸ່ມ ແລ້ວອັບໂຫລດສະລິບ — ແອດມິນຈະກວດສອບ ແລະ ເພີ່ມເງິນເຂົ້າກະເປົາທ່ານ (ຍອດທີ່ຖອນໄດ້) ໃຫ້ໄວທີ່ສຸດ</div>
+      ${qrUrl?`<div style="text-align:center; margin-bottom:12px;"><img src="${qrUrl}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);"></div>`:''}
+      ${walletInfo?`<div class="hint" style="background:var(--gold-light); padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space:pre-wrap;">${walletInfo}</div>`:''}
       ${banks.length?`<div class="field"><label>ບັນຊີທະນາຄານ</label>
         <select id="tpBank">${banks.map(b=>`<option value="${b.id}">${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
       </div>`:''}
