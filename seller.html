@@ -28,6 +28,35 @@ img{max-width:100%; display:block;}
 button{font-family:inherit; cursor:pointer;}
 .hidden{display:none !important;}
 
+/* ---------- INSTALL APP TUTORIAL POPUP (auto-shown on first open) ---------- */
+#installTutorial{position:fixed; inset:0; z-index:130; display:none; align-items:flex-end; justify-content:center; background:rgba(43,27,20,.6); backdrop-filter:blur(1px);}
+#installTutorial.show{display:flex;}
+#installTutorial .sheet{
+  background:var(--cream); width:100%; max-width:480px; border-radius:22px 22px 0 0;
+  padding:24px 20px calc(20px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto;
+  animation:itSheetUp .35s cubic-bezier(.2,1,.3,1) both;
+}
+@keyframes itSheetUp{from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+#installTutorial .it-icon{width:64px; height:64px; border-radius:18px; background:var(--gold); margin:0 auto 12px; display:flex; align-items:center; justify-content:center; font-size:30px; overflow:hidden; box-shadow:0 6px 16px rgba(122,30,43,.2);}
+#installTutorial .it-icon img{width:100%; height:100%; object-fit:cover;}
+#installTutorial h3{margin:0; font-size:18px; text-align:center; color:var(--maroon-dark);}
+#installTutorial .it-sub{font-size:12.5px; text-align:center; color:var(--ink-soft); margin-top:4px; margin-bottom:18px;}
+#installTutorial .step{display:flex; align-items:flex-start; gap:12px; margin-top:14px;}
+#installTutorial .step .num{width:26px; height:26px; border-radius:999px; background:var(--gold-light); color:var(--maroon-dark); font-weight:800; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;}
+#installTutorial .step .txt{font-size:13.5px; line-height:1.55; padding-top:2px;}
+#installTutorial .share-ico, #installTutorial .dots-ico{display:inline-block;}
+#installTutorial .it-primary{margin-top:20px; width:100%; background:var(--maroon); color:#fff; border:none; border-radius:999px; padding:13px; font-size:14px; font-weight:800;}
+#installTutorial .it-neveragain{display:flex; align-items:center; gap:7px; justify-content:center; margin-top:16px; font-size:11.5px; color:var(--ink-soft);}
+#installTutorial .it-neveragain input{width:14px; height:14px; accent-color:var(--maroon);}
+
+/* Small persistent reminder chip for return visits after the tutorial has been dismissed once. */
+#installChip{
+  position:fixed; right:12px; bottom:88px; z-index:110; background:var(--maroon); color:#fff;
+  border:none; border-radius:999px; padding:10px 14px; font-size:12px; font-weight:800;
+  display:none; align-items:center; gap:6px; box-shadow:0 8px 20px rgba(0,0,0,.25);
+}
+#installChip.show{display:inline-flex;}
+
 /* ---- Splash ---- */
 #splashScreen{position:fixed; inset:0; background:linear-gradient(160deg,var(--maroon),var(--maroon-dark)); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:999; color:#fff;}
 #splashScreen .logo{width:96px; height:96px; border-radius:24px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:34px; margin-bottom:14px;}
@@ -173,6 +202,17 @@ nav.bottom .icon{font-size:19px;}
   <div style="font-weight:800; font-size:16px;">KhaiDee Seller</div>
   <div class="tag">ຈັດການຮ້ານຄ້າຂອງທ່ານ</div>
 </div>
+
+<!-- ---- Install-app tutorial: auto-shown right after the splash on first open, walking the
+     seller through installing this seller app on their own device. Content is filled in by
+     JS based on detected platform (Android / iOS / other). ---- -->
+<div id="installTutorial">
+  <div class="sheet" id="installTutorialSheet">
+    <!-- filled by JS -->
+  </div>
+</div>
+<!-- ---- Small floating reminder shown on later visits after the tutorial's been dismissed once. ---- -->
+<button id="installChip">📲 ຕິດຕັ້ງແອັບ</button>
 
 <!-- LOGIN / REGISTER (separate seller identity — not a customer, not the site admin) -->
 <div id="authScreen" class="hidden">
@@ -1748,6 +1788,116 @@ function bootApp(){
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ registerSw(); });
 }
+
+/* ---- INSTALL TUTORIAL POPUP -----------------------------------------------------------
+   Shows a step-by-step "how to install" popup automatically after the splash screen so
+   sellers get this app on their home screen (needed for reliable order push notifications).
+   Detects the platform (Android/Chrome, iOS/Safari, or other) and renders matching steps.
+   On Android, the primary button fires the real native install prompt when available. ---- */
+(function initInstallTutorial(){
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if(isStandalone) return; // already installed — nothing to teach
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && 'ontouchend' in document);
+  const isAndroid = /Android/.test(ua);
+  const isChromeAndroid = isAndroid && /Chrome/.test(ua);
+
+  const modal = document.getElementById('installTutorial');
+  const sheet = document.getElementById('installTutorialSheet');
+  const chip = document.getElementById('installChip');
+  if(!modal || !sheet) return;
+
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    e.preventDefault();
+    deferredPrompt = e;
+    const btn = document.getElementById('itPrimaryBtn');
+    if(btn) btn.textContent = 'ຕິດຕັ້ງດຽວນີ້';
+  });
+  window.addEventListener('appinstalled', ()=>{ hideModal(); hideChip(); });
+  function hideModal(){ modal.classList.remove('show'); }
+
+  function contentFor(platform){
+    if(platform==='ios'){
+      return `
+        <div class="it-icon">📲</div>
+        <h3>ຕິດຕັ້ງແອັບ KhaiDee Seller</h3>
+        <div class="it-sub">ຮັບການແຈ້ງເຕືອນອໍເດີໃໝ່ໄວຂຶ້ນ ເໝືອນແອັບຈິງ ບໍ່ຕ້ອງເປີດ Safari ອີກ</div>
+        <div class="step"><div class="num">1</div><div class="txt">ກົດປຸ່ມ <b>ແບ່ງປັນ (Share)</b> <span class="share-ico">⬆️</span> ທາງລຸ່ມຂອງໜ້າຈໍ Safari</div></div>
+        <div class="step"><div class="num">2</div><div class="txt">ເລື່ອນລົງ ແລະ ເລືອກ <b>"ເພີ່ມໄປໜ້າຈໍຫຼັກ"</b> (Add to Home Screen)</div></div>
+        <div class="step"><div class="num">3</div><div class="txt">ກົດ <b>"ເພີ່ມ"</b> (Add) ຢູ່ມຸມຂວາເທິງ — ໄອຄອນແອັບຈະປາກົດຢູ່ໜ້າຈໍຫຼັກທັນທີ</div></div>
+        <button class="it-primary" id="itPrimaryBtn" onclick="document.getElementById('installTutorial').classList.remove('show')">ເຂົ້າໃຈແລ້ວ</button>
+        <div class="it-neveragain"><input type="checkbox" id="itNeverAgain"><label for="itNeverAgain">ບໍ່ຕ້ອງເຕືອນອີກ</label></div>`;
+    }
+    if(platform==='android'){
+      return `
+        <div class="it-icon">📲</div>
+        <h3>ຕິດຕັ້ງແອັບ KhaiDee Seller</h3>
+        <div class="it-sub">ຮັບການແຈ້ງເຕືອນອໍເດີໃໝ່ໄວຂຶ້ນ ເໝືອນແອັບຈິງ ບໍ່ຕ້ອງເປີດເບຣົາເຊີອີກ</div>
+        <div class="step"><div class="num">1</div><div class="txt">ກົດປຸ່ມສີຄຳລຸ່ມນີ້ — ລະບົບຈະຖາມວ່າ "ຕິດຕັ້ງແອັບບໍ?"</div></div>
+        <div class="step"><div class="num">2</div><div class="txt">ຖ້າບໍ່ຂຶ້ນອັດຕະໂນມັດ: ກົດ <b>⋮ ເມນູ 3 ຈຸດ</b> <span class="dots-ico">⋮</span> ມຸມຂວາເທິງ Chrome</div></div>
+        <div class="step"><div class="num">3</div><div class="txt">ເລືອກ <b>"ຕິດຕັ້ງແອັບ"</b> ຫຼື <b>"ເພີ່ມໄປໜ້າຈໍຫຼັກ"</b></div></div>
+        <button class="it-primary" id="itPrimaryBtn">ຕິດຕັ້ງແອັບ</button>
+        <div class="it-neveragain"><input type="checkbox" id="itNeverAgain"><label for="itNeverAgain">ບໍ່ຕ້ອງເຕືອນອີກ</label></div>`;
+    }
+    return `
+      <div class="it-icon">📲</div>
+      <h3>ຕິດຕັ້ງແອັບ KhaiDee Seller</h3>
+      <div class="it-sub">ເປີດລິ້ງນີ້ໃນມືຖື (Chrome ຫຼື Safari) ເພື່ອຕິດຕັ້ງເປັນແອັບ</div>
+      <div class="step"><div class="num">1</div><div class="txt">ຖ້າໃຊ້ຄອມພິວເຕີ Chrome: ກົດໄອຄອນ <b>⊕ ຕິດຕັ້ງ</b> ຢູ່ໃນຊ່ອງທີ່ຢູ່ URL</div></div>
+      <div class="step"><div class="num">2</div><div class="txt">ຫຼືເປີດລິ້ງນີ້ອີກຄັ້ງດ້ວຍມືຖືເພື່ອຮັບຄຳແນະນຳສະເພາະສຳລັບອຸປະກອນນັ້ນ</div></div>
+      <button class="it-primary" id="itPrimaryBtn" onclick="document.getElementById('installTutorial').classList.remove('show')">ເຂົ້າໃຈແລ້ວ</button>
+      <div class="it-neveragain"><input type="checkbox" id="itNeverAgain"><label for="itNeverAgain">ບໍ່ຕ້ອງເຕືອນອີກ</label></div>`;
+  }
+
+  const platform = isIOS ? 'ios' : (isChromeAndroid || isAndroid ? 'android' : 'other');
+
+  function showModal(){
+    sheet.innerHTML = contentFor(platform);
+    modal.classList.add('show');
+    const btn = document.getElementById('itPrimaryBtn');
+    const neverAgain = document.getElementById('itNeverAgain');
+    if(platform==='android' && btn){
+      btn.onclick = async ()=>{
+        if(deferredPrompt){
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+        }
+        modal.classList.remove('show');
+      };
+    }
+    modal.onclick = (e)=>{ if(e.target===modal) closeModal(); };
+    function closeModal(){
+      modal.classList.remove('show');
+      if(neverAgain && neverAgain.checked){ localStorage.setItem('kds_install_never', '1'); hideChip(); }
+      else{ localStorage.setItem('kds_install_last_shown', String(Date.now())); showChip(); }
+    }
+    if(platform!=='android' && btn){
+      btn.addEventListener('click', ()=>{
+        if(neverAgain && neverAgain.checked){ localStorage.setItem('kds_install_never', '1'); hideChip(); }
+        else{ localStorage.setItem('kds_install_last_shown', String(Date.now())); showChip(); }
+      });
+    }
+  }
+
+  function showChip(){ if(localStorage.getItem('kds_install_never')!=='1') chip.classList.add('show'); }
+  function hideChip(){ chip.classList.remove('show'); }
+  chip.onclick = showModal;
+
+  const neverAgainFlag = localStorage.getItem('kds_install_never')==='1';
+  const lastShown = Number(localStorage.getItem('kds_install_last_shown')||0);
+  const shownRecently = lastShown && (Date.now() - lastShown < 24*60*60*1000);
+
+  if(neverAgainFlag){
+    setTimeout(showChip, 1500);
+  }else if(shownRecently){
+    setTimeout(showChip, 1500);
+  }else{
+    setTimeout(showModal, 1500);
+  }
+})();
 </script>
 </body>
 </html>
