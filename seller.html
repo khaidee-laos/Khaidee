@@ -968,6 +968,12 @@ async function openShipmentSheet(itemId){
     </div>`;
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📦 ຈັດການການສົ່ງ #${item.id}</h3><button class="closex" data-close>✕</button></div>
     <div class="sheet-body">
+      <div style="background:#F7F1E3; border:1.5px solid var(--gold); border-radius:12px; padding:12px 14px; margin-bottom:12px;">
+        <div style="font-weight:800; font-size:13px; margin-bottom:6px;">📍 ຂໍ້ມູນຈັດສົ່ງ</div>
+        <div style="font-size:13px; margin-bottom:2px;"><b>ຜູ້ຮັບ:</b> ${item.recipient_name||'-'}</div>
+        <div style="font-size:13px; margin-bottom:2px;"><b>ເບີໂທ:</b> ${item.recipient_phone||'-'} <span class="hint" style="font-size:10.5px;">(ເບີກາງ — ຕິດຕໍ່ຜ່ານແອດມິນເທົ່ານັ້ນ ຫ້າມຂໍເບີແທ້ຈາກລູກຄ້າ)</span></div>
+        <div style="font-size:13px;"><b>ທີ່ຢູ່:</b> ${[item.ship_detail, item.ship_village, item.ship_district, item.ship_province].filter(Boolean).join(', ')||'-'}</div>
+      </div>
       <div class="hint" style="margin-bottom:10px;">ຖ່າຍຮູບໃຫ້ຄົບ 3 ຂັ້ນຕອນ ແລ້ວກົດຢືນຢັນ ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນພ້ອມຫຼັກຖານ ແລະ ລິ້ງຕິດຕາມພັດສະດຸທັນທີ — ຮູບແຕ່ລະຂັ້ນຕອນຈະຂຶ້ນໃຫ້ລູກຄ້າເຫັນທັນທີທີ່ອັບໂຫລດ ບໍ່ຕ້ອງລໍຄົບ 3 ຮູບ</div>
       ${stepBox(1,'ຖ່າຍຮູບແພັກສິນຄ້າ', item.step1_photo_url)}
       ${stepBox(2,'ສົ່ງໃຫ້ຂົນສົ່ງ (ຖ່າຍຮູບ)', item.step2_photo_url)}
