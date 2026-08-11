@@ -966,8 +966,31 @@ async function openShipmentSheet(itemId){
       </div>`:''}
       <button type="button" class="btn btn-gold btn-sm" style="margin-top:8px;" onclick="uploadShipStep(${itemId},${n})">📤 ອັບໂຫລດຮູບຂັ້ນຕອນ ${n}</button>
     </div>`;
-  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📦 ຈັດການການສົ່ງ #${item.id}</h3><button class="closex" data-close>✕</button></div>
+  // Order/payment summary so the seller can see at a glance what to pack, how many, and whether
+  // they've already been paid (QR/Wallet) or still need to collect cash on delivery (COD) —
+  // mirrors the payment badge already used in the orders list, plus qty/price/total.
+  const orderTotal = (Number(item.price)||0) * (Number(item.qty)||1);
+  const paymentBadge = item.payment_method==='cod'
+    ? `<span style="display:inline-block; background:#FFF0DC; color:#A15C00; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">🏠 ເກັບເງິນປາຍທາງ (COD) — ຍັງບໍ່ໄດ້ຈ່າຍ, ຕ້ອງເກັບເງິນສົດ ${fmtMoney(orderTotal)} ຈາກລູກຄ້າຕອນສົ່ງ</span>`
+    : (item.payment_confirmed
+      ? `<span style="display:inline-block; background:#E3F5E7; color:#1B7A3D; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">✅ ຈ່າຍເງິນແລ້ວ (QR/Wallet) — ບໍ່ຕ້ອງເກັບເງິນຈາກລູກຄ້າອີກ</span>`
+      : `<span style="display:inline-block; background:#F2E9E9; color:var(--ink-soft); font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">⏳ ລໍຖ້າລູກຄ້າຊຳລະເງິນ — ຢ່າຫາກໍ່ຈັດສົ່ງ</span>`);
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📦 ຈັດການການສົ່ງ #${item.order_number||item.id}</h3><button class="closex" data-close>✕</button></div>
     <div class="sheet-body">
+      <div style="background:#EAF3EA; border:1.5px solid #8FBF99; border-radius:12px; padding:12px 14px; margin-bottom:12px;">
+        <div style="font-weight:800; font-size:13px; margin-bottom:8px;">🧾 ຂໍ້ມູນສິນຄ້າ ແລະ ການຊຳລະເງິນ</div>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px;">
+          <img src="${item.image_url||'https://placehold.co/48x48/F1DFAE/7A1E2B?text=KD'}" style="width:44px; height:44px; border-radius:8px; object-fit:cover;">
+          <div style="flex:1;">
+            <div style="font-size:13px; font-weight:600;">${item.product_name||'-'}</div>
+            <div class="hint">ຈຳນວນ x${item.qty||1} • ລາຄາ/ອັນ ${fmtMoney(item.price)}</div>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700; padding-top:8px; border-top:1px dashed #B9D4BD; margin-bottom:8px;">
+          <span>ຍອດລວມ</span><span>${fmtMoney(orderTotal)}</span>
+        </div>
+        ${paymentBadge}
+      </div>
       <div style="background:#F7F1E3; border:1.5px solid var(--gold); border-radius:12px; padding:12px 14px; margin-bottom:12px;">
         <div style="font-weight:800; font-size:13px; margin-bottom:6px;">📍 ຂໍ້ມູນຈັດສົ່ງ</div>
         <div style="font-size:13px; margin-bottom:2px;"><b>ຜູ້ຮັບ:</b> ${item.recipient_name||'-'}</div>
