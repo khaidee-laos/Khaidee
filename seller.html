@@ -1579,8 +1579,11 @@ async function togglePushNotifications(){
   if(!pushSupported()){ showToast('ອຸປະກອນ ຫຼື ບຣາວເຊີນີ້ບໍ່ຮອງຮັບການແຈ້ງເຕືອນ'); return; }
   if(btn) btn.disabled = true;
   try{
-    const reg = await registerSw();
-    if(!reg){ showToast('ຕິດຕັ້ງລະບົບແຈ້ງເຕືອນບໍ່ສຳເລັດ'); return; }
+    const swReg = await registerSw();
+    if(!swReg){ showToast('ຕິດຕັ້ງລະບົບແຈ້ງເຕືອນບໍ່ສຳເລັດ'); return; }
+    // Wait for the service worker to be fully active — subscribing against a registration
+    // that's still installing is a common cause of Android's "internal service error".
+    const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
     if(existing && Notification.permission === 'granted'){
       // Currently ON → turn it off for this device
@@ -1594,10 +1597,20 @@ async function togglePushNotifications(){
         return;
       }
       const vapidKey = await sbRPC('get_vapid_public_key', {});
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey)
-      });
+      let sub;
+      try{
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+      }catch(subErr){
+        // Retry once — this specific browser/OS push-service error is often transient.
+        await new Promise(r=>setTimeout(r, 1200));
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+      }
       const j = sub.toJSON();
       await sbRPC('seller_save_push_subscription', {
         p_seller_id: STATE.seller.id, p_endpoint: j.endpoint,
@@ -1605,7 +1618,12 @@ async function togglePushNotifications(){
       });
       showToast('🔔 ເປີດການແຈ້ງເຕືອນສຽງແລ້ວ!');
     }
-  }catch(e){ showToast('ມີບັນຫາ: ' + e.message); }
+  }catch(e){
+    const msg = /internal service error|AbortError/i.test(e.message||'')
+      ? 'ບໍ່ສາມາດເປີດການແຈ້ງເຕືອນໄດ້ຕອນນີ້ (ບັນຫາຈາກລະບົບ Push ຂອງບຣາວເຊີ/ໂທລະສັບ) — ລອງປິດ-ເປີດ WiFi ໃໝ່ ຫຼືລອງອີກຄັ້ງ'
+      : 'ມີບັນຫາ: ' + e.message;
+    showToast(msg);
+  }
   finally{ refreshPushToggleUI(); }
 }
 
