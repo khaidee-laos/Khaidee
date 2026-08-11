@@ -2079,8 +2079,37 @@ function updateCartBadge(){
   const el = document.getElementById('cartCount');
   el.textContent = count; el.classList.toggle('hidden', count===0);
 }
+function emptyCartSuggestionsHtml(){
+  // Empty cart used to be one bare line of text — fill the space with a small "you might
+  // like" shelf (featured products first, top-sellers as filler) so there's something to
+  // tap into straight from the cart tab instead of a dead end.
+  const pool = STATE.products.filter(p=>!isProductOutOfStock(p));
+  const featured = pool.filter(p=>p.is_featured);
+  const rest = [...pool].filter(p=>!p.is_featured).sort((a,b)=>(b.sold_count||0)-(a.sold_count||0));
+  const picks = [...featured, ...rest].slice(0, 6);
+  if(!picks.length) return '';
+  const cardsHtml = picks.map(p=>`
+    <div class="card" onclick="goPage('home'); openProduct(${p.id})">
+      <div class="imgwrap">
+        ${p.is_featured?'<div class="badge-featured stamp">ຂາຍດີ</div>':''}
+        ${couponFlagHtml(p.id)}
+        <img src="${(p.images&&p.images[0])||'https://placehold.co/300x300/F1DFAE/7A1E2B?text=KhaiDee'}" loading="lazy">
+      </div>
+      <div class="body">
+        <div class="name">${nameFor(p)}</div>
+        <div class="price-row"><span class="price">${fmtMoney(p.price)}</span>${p.compare_price?`<span class="compare">${fmtMoney(p.compare_price)}</span>`:''}</div>
+        <div class="meta"><span>ຂາຍແລ້ວ ${p.sold_count||0}</span><span>⭐ ${p.rating_avg||'-'}</span></div>
+      </div>
+      <button class="addbtn" onclick="event.stopPropagation(); quickAdd(${p.id}, event, '${((p.images&&p.images[0])||'').replace(/'/g,"\\'")}')">+</button>
+    </div>`).join('');
+  return `<h4 style="font-size:13px; margin:18px 0 10px;">✨ ອາດຈະຖືກໃຈທ່ານ</h4><div class="grid">${cardsHtml}</div>`;
+}
 function renderCart(){
-  if(!STATE.cart.length){ document.getElementById('cartBody').innerHTML = '<div class="empty">ກະຕ່າຂອງທ່ານຍັງວ່າງເປົ່າ 🛒</div>'; return; }
+  if(!STATE.cart.length){
+    document.getElementById('cartBody').innerHTML =
+      `<div class="empty" style="padding-bottom:12px;">ກະຕ່າຂອງທ່ານຍັງວ່າງເປົ່າ 🛒<br><button class="btn btn-primary" style="margin-top:14px; width:auto; padding:10px 26px;" onclick="goPage('home')">ໄປຊື້ເຄື່ອງເລີຍ ➜</button></div>${emptyCartSuggestionsHtml()}`;
+    return;
+  }
   const subtotal = STATE.cart.reduce((s,i)=>s+i.price*i.qty,0);
   const groups = groupCartBySeller();
   const groupsHtml = groups.map(g=>{
