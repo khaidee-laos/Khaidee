@@ -1579,23 +1579,30 @@ async function togglePushNotifications(){
   if(!pushSupported()){ showToast('ອຸປະກອນ ຫຼື ບຣາວເຊີນີ້ບໍ່ຮອງຮັບການແຈ້ງເຕືອນ'); return; }
   if(btn) btn.disabled = true;
   try{
+    // iPhone note: on iOS Safari (even installed to the Home Screen), the permission prompt
+    // MUST be requested as the very first thing here, before any other awaited work — if a
+    // service-worker registration or network call happens first, iOS silently detaches this
+    // from the tap that triggered it and every later push call fails with a generic
+    // "internal service error", even though nothing is actually wrong with the setup.
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){
+      showToast('ກະລຸນາອະນຸຍາດການແຈ້ງເຕືອນຈາກບຣາວເຊີ/ໂທລະສັບເພື່ອເປີດໃຊ້');
+      return;
+    }
+
     const swReg = await registerSw();
     if(!swReg){ showToast('ຕິດຕັ້ງລະບົບແຈ້ງເຕືອນບໍ່ສຳເລັດ'); return; }
     // Wait for the service worker to be fully active — subscribing against a registration
-    // that's still installing is a common cause of Android's "internal service error".
+    // that's still installing is a common cause of the same "internal service error".
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
-    if(existing && Notification.permission === 'granted'){
+
+    if(existing){
       // Currently ON → turn it off for this device
       await sbRPC('seller_remove_push_subscription', {p_seller_id: STATE.seller.id, p_endpoint: existing.endpoint}).catch(()=>{});
       await existing.unsubscribe();
       showToast('ປິດການແຈ້ງເຕືອນສຽງແລ້ວ');
     }else{
-      const perm = await Notification.requestPermission();
-      if(perm !== 'granted'){
-        showToast('ກະລຸນາອະນຸຍາດການແຈ້ງເຕືອນຈາກບຣາວເຊີ/ໂທລະສັບເພື່ອເປີດໃຊ້');
-        return;
-      }
       const vapidKey = await sbRPC('get_vapid_public_key', {});
       let sub;
       try{
