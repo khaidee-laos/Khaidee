@@ -434,6 +434,17 @@ nav.bottom .icon{font-size:19px;}
 .status-shipping, .status-packing{background:#E1EAF7; color:#2E5FA3;}
 .status-delivered{background:#E2F1E5; color:var(--ok);}
 .status-cancelled, .status-rejected{background:#FBE7E7; color:var(--danger);}
+.status-pending_verification{background:#FCEFD9; color:var(--warn);}
+/* ---------- Payment status/breakdown card (order detail) — Shopee/Lazada-style clarity on
+   total vs. already-paid vs. still-owed, since "ຍອດລວມ" alone didn't say whether that money had
+   actually moved yet (bank transfer awaiting admin check, COD not collected, QR unpaid, etc). ---------- */
+.pay-status{border-radius:12px; padding:12px 14px; margin:10px 0; border:1.5px solid var(--line);}
+.pay-status.pay-ok{background:#E2F1E5; border-color:#9FD3AC;}
+.pay-status.pay-pending{background:#FCEFD9; border-color:#F0CB84;}
+.pay-status.pay-cancelled{background:#FBE7E7; border-color:#F0AFAF;}
+.pay-status .ps-top{font-weight:800; font-size:13.5px;}
+.pay-status .ps-sub{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+.pay-status .ps-row{display:flex; justify-content:space-between; font-size:12.5px; margin-top:6px; padding-top:6px; border-top:1px dashed rgba(0,0,0,.12);}
 .chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
 .chiprow button{font-size:10.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
 .chiprow button.active{background:var(--maroon); color:#fff; border-color:var(--maroon); font-weight:700;}
@@ -2002,9 +2013,10 @@ function buyNow(id, qty, variant){
     buyNowItems = [buildCartLine(p, qty, variant)];
     buyNowMode = true;
     const savedAddrs = getSavedAddresses();
-    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
+    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null, couponAuto:false};
     renderCheckout();
     openModal('modalCheckout');
+    autoApplyProductCoupon().then(()=>{ if(checkoutState.coupon) renderCheckout(); });
   });
 }
 /* ============================================================ PER-SELLER SHIPPING CALCULATOR ============================================================
@@ -2188,10 +2200,44 @@ function startCheckout(){
     // working off current numbers, not whatever was loaded when the app first opened.
     loadProducts().then(()=>{ if(!validateCartStockOrWarn()) renderCart(); });
     const savedAddrs = getSavedAddresses();
-    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null};
+    checkoutState = {address: savedAddrs[0] || null, carrier:STATE.carriers[0]||null, coupon:null, discount:0, freeShipping:false, couponSellerId:null, bankAccountId:null, couponAuto:false};
     renderCheckout();
     openModal('modalCheckout');
+    autoApplyProductCoupon().then(()=>{ if(checkoutState.coupon) renderCheckout(); });
   });
+}
+// If any item in the cart has a coupon attached to it by its seller (STATE.productCoupons —
+// see loadProductCoupons), fill it in and validate it automatically so the customer never has to
+// type/copy the code by hand — it's exactly the coupon that product's badge/banner advertised.
+// Silent on failure (e.g. already redeemed by this customer, sold out) since the customer didn't
+// ask for anything yet; they can still type a different code manually.
+async function autoApplyProductCoupon(){
+  if(checkoutState.coupon) return; // don't clobber a coupon already chosen (e.g. re-opening checkout)
+  const cart = activeCart();
+  let match = null;
+  for(const item of cart){
+    const pc = STATE.productCoupons[item.product_id];
+    if(pc && pc.code){ match = pc; break; }
+  }
+  if(!match) return;
+  const subtotal = cart.reduce((s,i)=>s+i.price*i.qty,0);
+  try{
+    const res = await sbRPC('coupon_validate', {
+      p_code: match.code, p_subtotal: subtotal,
+      p_customer_id: STATE.customer ? STATE.customer.id : null,
+      p_cart_product_ids: cart.map(i=>i.product_id)
+    });
+    checkoutState.coupon = match.code;
+    checkoutState.freeShipping = !!res.free_shipping;
+    checkoutState.discount = Number(res.discount||0);
+    checkoutState.couponSellerId = res.seller_id || null;
+    checkoutState.couponAuto = true;
+  }catch(e){ /* not eligible right now — leave the field empty, no error shown */ }
+}
+function removeCoupon(){
+  checkoutState.coupon = null; checkoutState.discount = 0; checkoutState.freeShipping = false;
+  checkoutState.couponSellerId = null; checkoutState.couponAuto = false;
+  renderCheckout();
 }
 function renderCheckout(){
   const groups = groupCartBySeller();
@@ -2224,10 +2270,16 @@ function renderCheckout(){
     </div>
     <div class="field">
       <label>🎟️ ລະຫັດຄູປອງ (ຖ້າມີ)</label>
+      ${checkoutState.coupon ? `
+      <div class="optcard selected" style="cursor:default;">
+        <div class="ico">🎟️</div>
+        <div class="t">${checkoutState.coupon}${checkoutState.couponAuto?' <span class="hint">— ນຳໃຊ້ອັດຕະໂນມັດຈາກສິນຄ້າໃນກະຕ່າ</span>':''}</div>
+        <button class="btn-sm btn-ghost" style="width:auto; padding:4px 10px;" onclick="removeCoupon()">✕ ລຶບ</button>
+      </div>` : `
       <div style="display:flex; gap:8px;">
         <input id="couponCode" placeholder="ໃສ່ລະຫັດ" style="flex:1; padding:11px 12px; border:1.5px solid var(--line); border-radius:8px;">
         <button class="btn btn-ghost btn-sm" onclick="applyCoupon()">ໃຊ້</button>
-      </div>
+      </div>`}
       <div id="couponMsg"></div>
     </div>
     <div class="field">
@@ -2247,20 +2299,39 @@ function renderCheckout(){
   }
 }
 function selectCarrier(id){ checkoutState.carrier = STATE.carriers.find(c=>c.id===id); renderCheckout(); }
+// Human-readable Lao messages for the specific reasons coupon_validate()/order_create() can
+// reject a coupon — see the migration comments on coupon_validate for what each code means.
+const COUPON_ERROR_MESSAGES = {
+  invalid_coupon: 'ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ',
+  coupon_requires_product: 'ຄູປອງນີ້ໃຊ້ໄດ້ສະເພາະເມື່ອມີສິນຄ້າທີ່ຕິດຄູປອງຢູ່ໃນກະຕ່າເທົ່ານັ້ນ',
+  coupon_sold_out: 'ຄູປອງນີ້ຖືກໃຊ້ຄົບຈຳນວນສິດແລ້ວ',
+  coupon_already_used: 'ທ່ານໄດ້ໃຊ້ຄູປອງນີ້ໄປແລ້ວ (ໃຊ້ໄດ້ 1 ສິດ/ຄົນ/ສິນຄ້າ)',
+  min_order_not_met: 'ຍອດຊື້ຍັງບໍ່ເຖິງຂັ້ນຕ່ຳສຳລັບຄູປອງນີ້'
+};
+function couponErrorMessage(e){
+  const key = Object.keys(COUPON_ERROR_MESSAGES).find(k => (e.message||'').includes(k));
+  return key ? COUPON_ERROR_MESSAGES[key] : 'ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ';
+}
 async function applyCoupon(){
   onGuard('coupon', async ()=>{
     const code = document.getElementById('couponCode').value.trim();
     if(!code) return;
-    const subtotal = activeCart().reduce((s,i)=>s+i.price*i.qty,0);
+    const cart = activeCart();
+    const subtotal = cart.reduce((s,i)=>s+i.price*i.qty,0);
     try{
-      const res = await sbRPC('coupon_validate', {p_code:code, p_subtotal:subtotal});
+      const res = await sbRPC('coupon_validate', {
+        p_code:code, p_subtotal:subtotal,
+        p_customer_id: STATE.customer ? STATE.customer.id : null,
+        p_cart_product_ids: cart.map(i=>i.product_id)
+      });
       checkoutState.coupon = code;
       checkoutState.freeShipping = !!res.free_shipping;
       checkoutState.discount = Number(res.discount||0);
       checkoutState.couponSellerId = res.seller_id || null; // seller-issued coupon → only discounts/frees shipping for that seller's items
+      checkoutState.couponAuto = false; // customer typed this one themselves
       playSuccessSound();
       renderCheckout();
-    }catch(e){ playErrorSound(); document.getElementById('couponMsg').innerHTML = `<div class="err">ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ</div>`; }
+    }catch(e){ playErrorSound(); document.getElementById('couponMsg').innerHTML = `<div class="err">${couponErrorMessage(e)}</div>`; }
   });
 }
 /* ---- Step 1 → Step 2 dispatcher ----
@@ -2529,6 +2600,9 @@ async function submitOrder(payment){
       if(/insufficient_stock/.test(e.message)){
         showToast('❌ ຂໍອະໄພ ສິນຄ້າບາງລາຍການໝົດ ຫຼືມີບໍ່ພຽງພໍ ໃນຂະນະທີ່ທ່ານກຳລັງສັ່ງຊື້ (ອາດມີລູກຄ້າຄົນອື່ນສັ່ງໄປກ່ອນ) — ກະລຸນາກວດຈຳນວນໃນກະຕ່າອີກຄັ້ງ');
         loadProducts().then(()=>{ renderProducts(); if(document.getElementById('modalProduct').classList.contains('show') && detailProductId) paintProductDetail(detailProductId); renderCart(); });
+      }else if(/coupon_already_used|coupon_sold_out|coupon_requires_product/.test(e.message)){
+        showToast('❌ ' + couponErrorMessage(e) + ' — ກະລຸນາລຶບຄູປອງແລ້ວລອງໃໝ່');
+        removeCoupon();
       }else{
         showToast('ເກີດຂໍ້ຜິດພາດ: ' + e.message);
       }
@@ -2768,9 +2842,39 @@ function paintCustomerOrders(){
 // Used everywhere a raw status is shown to a customer or admin so nothing appears in English anymore.
 const ORDER_STATUS_LABELS = {
   pending:'ລໍຖ້າຢືນຢັນ', paid:'ຊຳລະເງິນແລ້ວ', packing:'ກຳລັງແພັກເຄື່ອງ',
-  shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ'
+  shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ',
+  pending_verification:'ລໍຖ້າກວດສອບການໂອນ'
 };
 function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
+// Shopee/Lazada-style payment breakdown: what's already actually been paid vs. what's still owed,
+// since "ຍອດລວມ" alone doesn't say whether that money has moved yet (bank transfer awaiting
+// admin check, COD collected on delivery, QR unpaid/paid, wallet debited instantly, etc).
+function paymentBreakdownHtml(o){
+  const total = Number(o.total||0);
+  const pm = o.payment_method;
+  const settledStatuses = ['paid','packing','shipping','delivered'];
+  const isSettled = settledStatuses.includes(o.status);
+  let icon, label, sub, paidAmt, dueAmt, cls;
+  if(o.status==='cancelled'){
+    icon='✕'; label='ຍົກເລີກຄຳສັ່ງຊື້'; sub=''; paidAmt=0; dueAmt=0; cls='cancelled';
+  }else if(pm==='cod'){
+    if(o.status==='delivered'){ icon='✅'; label='ຊຳລະຄົບຖ້ວນແລ້ວ'; sub='ຮັບເງິນສົດປາຍທາງ'; paidAmt=total; dueAmt=0; cls='ok'; }
+    else{ icon='💵'; label='ຊຳລະຕອນຮັບເຄື່ອງ'; sub='ເກັບເງິນປາຍທາງ (COD) — ຍັງບໍ່ໄດ້ຊຳລະ'; paidAmt=0; dueAmt=total; cls='pending'; }
+  }else if(pm==='transfer'){
+    if(o.status==='pending_verification'){ icon='⏳'; label='ລໍຖ້າແອດມິນກວດສອບການໂອນ'; sub='ໄດ້ຮັບສະລິບໂອນເງິນແລ້ວ — ຈະຢືນຢັນໄວໆນີ້'; paidAmt=0; dueAmt=total; cls='pending'; }
+    else{ icon='✅'; label='ຢືນຢັນການໂອນເງິນແລ້ວ'; sub='ຊຳລະຄົບຖ້ວນ'; paidAmt=total; dueAmt=0; cls='ok'; }
+  }else{ // qr or wallet — both settle instantly once status leaves 'pending'
+    if(isSettled){ icon='✅'; label='ຊຳລະເງິນຄົບຖ້ວນແລ້ວ'; sub = pm==='wallet' ? 'ຫັກຈາກກະເປົາເງິນ KhaiDee' : 'ຊຳລະຜ່ານ QR ອັດຕະໂນມັດ'; paidAmt=total; dueAmt=0; cls='ok'; }
+    else{ icon='⏳'; label='ລໍຖ້າຊຳລະເງິນ'; sub='ຍັງບໍ່ໄດ້ສະແກນ QR ຈ່າຍເງິນ'; paidAmt=0; dueAmt=total; cls='pending'; }
+  }
+  return `<div class="pay-status pay-${cls}">
+    <div class="ps-top">${icon} ${label}</div>
+    ${sub?`<div class="ps-sub">${sub}</div>`:''}
+    <div class="ps-row"><span>ຍອດລວມທັງໝົດ</span><span>${fmtMoney(total)}</span></div>
+    <div class="ps-row"><span>ຍອດທີ່ຊຳລະແລ້ວ</span><span style="color:var(--ok); font-weight:800;">${fmtMoney(paidAmt)}</span></div>
+    ${dueAmt>0?`<div class="ps-row"><span>ຍອດຄ້າງຊຳລະ</span><span style="color:var(--danger); font-weight:800;">${fmtMoney(dueAmt)}</span></div>`:''}
+  </div>`;
+}
 // Customer can self-cancel while the order hasn't shipped yet — mirrors the check inside the
 // customer_cancel_order RPC (pending/paid/packing only; once it's shipping/delivered the RPC
 // itself rejects it and tells them to contact an admin instead).
@@ -2929,6 +3033,7 @@ async function openOrderDetail(orderId){
         <div class="sumrow"><span>ຄ່າຂົນສົ່ງ</span><span>${fmtMoney(o.shipping_fee)}</span></div>
         ${o.discount>0?`<div class="sumrow"><span>ສ່ວນຫຼຸດ</span><span>-${fmtMoney(o.discount)}</span></div>`:''}
         <div class="sumrow total"><span>ຍອດລວມ</span><span>${fmtMoney(o.total)}</span></div>
+        ${paymentBreakdownHtml(o)}
         ${o.payment_slip_url ? `<h4 style="font-size:13px; margin:16px 0 4px;">📎 ສະລິບໂອນເງິນທີ່ອັບໂຫລດ</h4><img src="${o.payment_slip_url}" style="width:140px; border-radius:10px; cursor:pointer;" onclick="window.open('${o.payment_slip_url}','_blank')">` : ''}
         <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
         <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
