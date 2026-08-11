@@ -748,6 +748,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="customers">👥 ລູກຄ້າ</button>
     <button data-tab="sellers">🏪 ຜູ້ຂາຍ</button>
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
+    <button data-tab="seller_topups">➕ ເຕີມເງິນຜູ້ຂາຍ</button>
     <button data-tab="payouts">💸 ຖອນເງິນຜູ້ຂາຍ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
     <button data-tab="banks">🏦 ທະນາຄານ</button>
@@ -2792,6 +2793,26 @@ function renderCancelBtn(o, orderId){
     <button class="btn btn-ghost btn-sm" ${locked?'disabled':''} style="width:auto; padding:5px 12px; font-size:11px; color:var(--danger); border-color:var(--danger);${locked?' opacity:.4; cursor:not-allowed;':''}" onclick="event.stopPropagation();${locked?'':` openCancelOrderModal(${orderId},'${o.order_number}')`}">${locked?'🔒':'✕'} ຍົກເລີກຄຳສັ່ງຊື້</button>
   </div>${locked ? `<div class="hint" style="text-align:right; margin-top:2px; font-size:10px;">ຮ້ານອັບໂຫລດຫຼັກຖານແພັກສິນຄ້າແລ້ວ ຈຶ່ງບໍ່ສາມາດຍົກເລີກເອງໄດ້</div>` : ''}`;
 }
+// Shown only while status==='shipping'. Lets the customer close out the order themselves the
+// moment the parcel actually arrives, which immediately captures the seller's pre-locked
+// commission deposit and (for wallet/QR-paid orders) releases their sale proceeds — instead of
+// silently waiting on the hourly auto-confirm cron job to do it once the grace period lapses.
+function renderConfirmReceivedBtn(o, orderId){
+  if(o.status!=='shipping') return '';
+  return `<div style="margin-top:10px;">
+    <button class="btn btn-gold" style="width:100%;" onclick="event.stopPropagation(); confirmReceivedOrder(${orderId},'${o.order_number}')">✅ ໄດ້ຮັບເຄື່ອງແລ້ວ</button>
+    <div class="hint" style="text-align:center; margin-top:4px; font-size:10.5px;">ກົດຢືນຢັນທັນທີທີ່ໄດ້ຮັບເຄື່ອງ — ຫາກບໍ່ກົດ ລະບົບຈະຖືວ່າໄດ້ຮັບອັດຕະໂນມັດຫຼັງຄາດວ່າຈະຮອດ${(()=>{try{const g=(STATE.settings&&STATE.settings.seller_auto_confirm_grace_days)||1; return ' + '+g+' ມື້';}catch(e){return '';}})()}</div>
+  </div>`;
+}
+async function confirmReceivedOrder(orderId, orderNumber){
+  if(!confirm(`ຢືນຢັນວ່າໄດ້ຮັບອໍເດີ #${orderNumber} ຄົບຖ້ວນແລ້ວບໍ?`)) return;
+  try{
+    await sbRPC('customer_confirm_received', {p_customer_id: STATE.customer.id, p_order_id: orderId});
+    showToast('✅ ຢືນຢັນຮັບເຄື່ອງແລ້ວ ຂອບໃຈທີ່ຊື້ສິນຄ້າກັບ KhaiDee');
+    openOrderDetail(orderId);
+    if(typeof loadOrders==='function') loadOrders();
+  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
+}
 // Groups the 6 real statuses into the 4 tabs the customer/admin actually think in terms of.
 const ORDER_TABS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
@@ -2912,6 +2933,7 @@ async function openOrderDetail(orderId){
         <h4 style="font-size:13px; margin:16px 0 4px;">📍 ທີ່ຢູ່ຈັດສົ່ງ</h4>
         <div class="hint">${a.recipient_name||''} ${a.phone?'• '+a.phone:''}<br>${[a.village,a.district,a.province].filter(Boolean).join(', ')}</div>
         ${o.carrier_name?`<div class="hint" style="margin-top:6px;">🚚 ${o.carrier_name}</div>`:''}
+        ${renderConfirmReceivedBtn(o, orderId)}
         ${renderCancelBtn(o, orderId)}`;
       // Still-pending QR-pay orders: re-fetch and show a live, re-scannable QR right inside the
       // detail sheet, and poll here too — same "stays visible until actually paid, then vanishes
@@ -3676,7 +3698,7 @@ document.querySelectorAll('#adminTabs button').forEach(b=> b.onclick = ()=> swit
 function switchAdminTab(tab){
   document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
-    categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups,
+    categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups, seller_topups:renderAdminSellerTopups,
     payouts:renderAdminPayouts, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
     ads:renderAdminAds, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
@@ -4634,6 +4656,46 @@ async function adminDeleteTopup(id){
     }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
   });
 }
+// Seller wallet top-ups (fund the 5% commission-lock deposit needed to publish listings) —
+// same review flow as customer topups above, just crediting sellers.wallet_balance instead.
+async function renderAdminSellerTopups(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const list = await sbRPC('admin_list_seller_topups', {p_password: STATE.adminPassword});
+  STATE.adminSellerTopupsCache = list;
+  body.innerHTML = !list.length ? '<div class="empty">ບໍ່ມີຄຳຂໍເຕີມເງິນຈາກຜູ້ຂາຍ</div>' : `<div class="tile-grid">${list.map(t=>`
+    <div class="tile" onclick="adminViewSellerTopup(${t.id})">
+      <div class="tile-dot" style="background:${adminStatusColor(t.status)}"></div>
+      <div class="tile-img">${t.slip_url ? `<img src="${t.slip_url}">` : '➕'}</div>
+      <div class="tile-title">${t.store_name}</div>
+      <div class="tile-sub">${fmtMoney(t.amount)}</div>
+    </div>`).join('')}</div>`;
+}
+function adminViewSellerTopup(id){
+  const t = (STATE.adminSellerTopupsCache||[]).find(x=>x.id===id);
+  if(!t) return;
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ຄຳຂໍເຕີມເງິນຜູ້ຂາຍ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="top" style="margin-bottom:6px;"><span class="title">${t.store_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span></div>
+    <div class="hint">${t.bank_name||''} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+    ${t.slip_url?`<img src="${t.slip_url}" style="width:100%; border-radius:12px; margin-top:12px;">`:''}
+    ${t.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveSellerTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveSellerTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+}
+async function adminApproveSellerTopup(id, approve){
+  onGuard('seller-topup-approve-'+id, async ()=>{
+    try{
+      await sbRPC('admin_approve_seller_topup', {p_password:STATE.adminPassword, p_id:id, p_approve:approve});
+      playSuccessSound();
+      document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
+      renderAdminSellerTopups();
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
+  });
+}
+
 /* ============================================================ SELLER PAYOUTS (withdraw requests) ============================================================
    Needs on the Supabase side:
    - admin_list_seller_withdrawals(p_password) -> [{id, seller_id, store_name, amount, qr_url, status, slip_url, admin_note, requested_at}]
