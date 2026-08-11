@@ -214,6 +214,7 @@ nav.bottom .icon{font-size:19px;}
   <!-- PAGE: ORDERS -->
   <div id="pageOrders" class="apppage hidden">
     <div class="page-topbar">📦 ອໍເດີທີ່ມີສິນຄ້າຂອງຂ້ອຍ</div>
+    <div class="chiprow" id="orderFilterRow" style="padding:0 14px 10px; margin-top:0;"></div>
     <div id="ordersBody" style="padding-bottom:10px;"><div class="loader">ກຳລັງໂຫລດ...</div></div>
   </div>
 
@@ -854,13 +855,32 @@ function canArrangeShipment(i){
   return i.payment_confirmed === true;
 }
 let ORDERS_CACHE = [];
-async function renderOrders(){
-  const wrap = document.getElementById('ordersBody');
-  wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
-  try{
-    ORDERS_CACHE = await sbRPC('seller_order_items_list', {p_seller_id: STATE.seller.id});
-    wrap.innerHTML = !ORDERS_CACHE.length ? '<div class="empty">ຍັງບໍ່ມີອໍເດີສຳລັບສິນຄ້າຂອງທ່ານ</div>' :
-      ORDERS_CACHE.map(i=>`
+// Groups the 5 raw statuses (pending/confirmed/shipping/delivered/cancelled) into 4 seller-facing
+// buckets so it's obvious at a glance what's brand-new, what's actively being worked on, what's
+// finished, and what fell through — instead of one long undifferentiated list.
+const ORDER_GROUPS = [
+  {key:'new',       label:'🆕 ອໍເດີໃໝ່',     emptyText:'ບໍ່ມີອໍເດີໃໝ່',        statuses:['pending']},
+  {key:'active',    label:'⏳ ກຳລັງດຳເນີນການ', emptyText:'ບໍ່ມີອໍເດີກຳລັງດຳເນີນການ', statuses:['confirmed','shipping']},
+  {key:'delivered', label:'✅ ສົ່ງສຳເລັດ',     emptyText:'ຍັງບໍ່ມີອໍເດີສົ່ງສຳເລັດ',  statuses:['delivered']},
+  {key:'cancelled', label:'✕ ຍົກເລີກ',        emptyText:'ບໍ່ມີອໍເດີທີ່ຍົກເລີກ',    statuses:['cancelled']},
+];
+let ORDER_FILTER = 'all'; // 'all' or one of ORDER_GROUPS[].key
+function groupOfStatus(status){
+  return (ORDER_GROUPS.find(g=>g.statuses.includes(status))||{}).key;
+}
+function renderOrderFilterRow(){
+  const row = document.getElementById('orderFilterRow');
+  if(!row) return;
+  const countFor = key => key==='all' ? ORDERS_CACHE.length : ORDERS_CACHE.filter(i=>groupOfStatus(i.seller_status)===key).length;
+  const chips = [{key:'all', label:'📋 ທັງໝົດ'}, ...ORDER_GROUPS];
+  row.innerHTML = chips.map(c=>`<button class="${ORDER_FILTER===c.key?'active':''}" onclick="setOrderFilter('${c.key}')">${c.label} (${countFor(c.key)})</button>`).join('');
+}
+function setOrderFilter(key){
+  ORDER_FILTER = key;
+  renderOrdersFromCache();
+}
+function orderItemCard(i){
+  return `
         <div class="admin-list-item">
           <div class="top"><span class="title">#${i.order_number}</span><span class="status-pill status-${i.seller_status}">${STATUS_LABEL[i.seller_status]||i.seller_status}</span></div>
           <div class="hint">${new Date(i.order_created_at).toLocaleString('lo-LA')}</div>
@@ -882,7 +902,36 @@ async function renderOrders(){
             ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markDelivered(${i.order_item_id})">✅ ລູກຄ້າໄດ້ຮັບແລ້ວ</button>` : ''}
             ${(i.seller_status==='pending') ? `<button onclick="setItemStatus(${i.order_item_id},'cancelled')" style="color:var(--danger);">✕ ຍົກເລີກ</button>` : ''}
           </div>
-        </div>`).join('');
+        </div>`;
+}
+// Renders from the already-fetched ORDERS_CACHE (no network call) — used when just switching
+// filter tabs, so tapping between categories feels instant.
+function renderOrdersFromCache(){
+  const wrap = document.getElementById('ordersBody');
+  renderOrderFilterRow();
+  if(!ORDERS_CACHE.length){ wrap.innerHTML = '<div class="empty">ຍັງບໍ່ມີອໍເດີສຳລັບສິນຄ້າຂອງທ່ານ</div>'; return; }
+  if(ORDER_FILTER==='all'){
+    // Grouped view: a header per bucket (with count) so new/in-progress/done/cancelled are
+    // visually separated instead of interleaved by date.
+    const html = ORDER_GROUPS.map(g=>{
+      const items = ORDERS_CACHE.filter(i=>groupOfStatus(i.seller_status)===g.key);
+      if(!items.length) return '';
+      return `<div style="padding:14px 14px 4px; font-size:13px; font-weight:800; color:var(--maroon-dark);">${g.label} <span style="color:var(--ink-soft); font-weight:600;">(${items.length})</span></div>`
+        + items.map(orderItemCard).join('');
+    }).join('');
+    wrap.innerHTML = html || '<div class="empty">ຍັງບໍ່ມີອໍເດີສຳລັບສິນຄ້າຂອງທ່ານ</div>';
+  }else{
+    const g = ORDER_GROUPS.find(g=>g.key===ORDER_FILTER);
+    const items = ORDERS_CACHE.filter(i=>groupOfStatus(i.seller_status)===ORDER_FILTER);
+    wrap.innerHTML = items.length ? items.map(orderItemCard).join('') : `<div class="empty">${g?g.emptyText:'ບໍ່ມີອໍເດີ'}</div>`;
+  }
+}
+async function renderOrders(){
+  const wrap = document.getElementById('ordersBody');
+  wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  try{
+    ORDERS_CACHE = await sbRPC('seller_order_items_list', {p_seller_id: STATE.seller.id});
+    renderOrdersFromCache();
   }catch(e){ wrap.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດອໍເດີໄດ້ — ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ SQL ຝັ່ງຜູ້ຂາຍ</div>'; }
 }
 async function setItemStatus(itemId, status){
