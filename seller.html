@@ -863,11 +863,18 @@ async function renderOrders(){
         <div class="admin-list-item">
           <div class="top"><span class="title">#${i.order_number}</span><span class="status-pill status-${i.seller_status}">${STATUS_LABEL[i.seller_status]||i.seller_status}</span></div>
           <div class="hint">${new Date(i.order_created_at).toLocaleString('lo-LA')}</div>
+          <div style="margin-top:6px;">
+            ${i.payment_method==='cod'
+              ? `<span style="display:inline-block; background:#FFF0DC; color:#A15C00; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">🏠 ເກັບເງິນປາຍທາງ (COD) — ຮັບເງິນສົດຈາກລູກຄ້າເອງ</span>`
+              : (i.payment_confirmed
+                ? `<span style="display:inline-block; background:#E3F5E7; color:#1B7A3D; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">✅ ຈ່າຍເງິນແລ້ວ (QR/Wallet) — ຍອດຈະເຂົ້າ Wallet ຫລັງລູກຄ້າຢືນຢັນຮັບເຄື່ອງ</span>`
+                : `<span style="display:inline-block; background:#F2E9E9; color:var(--ink-soft); font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">⏳ ລໍຖ້າລູກຄ້າຊຳລະເງິນ</span>`)}
+          </div>
           <div style="display:flex; gap:10px; align-items:center; margin-top:6px;">
             <img src="${i.image_url||'https://placehold.co/48x48/F1DFAE/7A1E2B?text=KD'}" style="width:44px; height:44px; border-radius:8px; object-fit:cover;">
             <div style="flex:1;"><div style="font-size:13px; font-weight:600;">${i.product_name}</div><div class="hint">x${i.qty} • ${fmtMoney(i.price)}</div></div>
           </div>
-          <div class="hint" style="margin-top:6px;">📍 ${i.recipient_name||'-'} • ${i.recipient_phone||'-'}</div>
+          <div class="hint" style="margin-top:6px;">📍 ${i.recipient_name||'-'} • ☎️ ${i.recipient_phone||'-'} <span style="opacity:.75;">(ເບີກາງ — ຕິດຕໍ່ຜ່ານແອດມິນເທົ່ານັ້ນ)</span></div>
           ${(!canArrangeShipment(i) && (i.seller_status==='pending'||i.seller_status==='confirmed')) ? `<div class="hint" style="margin-top:4px; color:var(--warn); font-weight:600;">⏳ ລໍຖ້າຢືນຢັນການຊຳລະເງິນກ່ອນ ຈຶ່ງຈະຈັດການການສົ່ງໄດ້</div>` : ''}
           <div class="chiprow">
             ${(i.seller_status==='pending'||i.seller_status==='confirmed') ? (canArrangeShipment(i) ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">📦 ຈັດການການສົ່ງ</button>` : '') : ''}
@@ -1191,11 +1198,17 @@ async function renderWallet(){
         </div>
         <div class="hint" style="margin-top:6px; font-size:10.5px;">ເມື່ອທ່ານເຕີມເງິນຄັ້ງທຳອິດ ລະບົບຈະກັນເງິນສ່ວນນຶ່ງໄວ້ເປັນ "ເງິນມັດຈຳພື້ນຖານ" ${fmtMoney(summary.base_deposit_target)} ໂດຍອັດຕະໂນມັດ (ຖ້າເຕີມບໍ່ຄົບ ຈະຄ່ອຍໆເຕັມຈາກຄ່າຄອມທຸກຄັ້ງທີ່ຂາຍໄດ້) — ຖອນອອກບໍ່ໄດ້ ຕາບໃດທີ່ທ່ານຍັງມີສິນຄ້າວາງຂາຍ ຫຼື ມີອໍເດີຄ້າງຢູ່. ຈະຄືນເຂົ້າຍອດຖອນໄດ້ອັດຕະໂນມັດ ກໍຕໍ່ເມື່ອທ່ານເອົາສິນຄ້າອອກໝົດ ແລະ ບໍ່ມີອໍເດີຄ້າງເທົ່ານັ້ນ</div>
       </div>
-      <div style="background:#FBF6EA; border:1px solid var(--line); border-radius:14px; margin:0 14px 14px; padding:14px 16px;">
+      <div style="background:#FBF6EA; border:1px solid var(--line); border-radius:14px; margin:0 14px 10px; padding:14px 16px;">
         <div style="font-size:11px; color:var(--ink-soft); font-weight:600;">🔒 ເງິນທີ່ກັນໄວ້ຕໍ່ສິນຄ້າ (ຄ່າຄອມ 5%)</div>
-        <div style="font-size:18px; font-weight:800; color:var(--maroon);">${fmtMoney(Math.max(0, summary.wallet_reserved - summary.base_deposit_locked))}</div>
+        <div style="font-size:18px; font-weight:800; color:var(--maroon);">${fmtMoney(Math.max(0, summary.wallet_reserved - summary.base_deposit_locked - (summary.frozen_commission_credit||0)))}</div>
         <div class="hint" style="margin-top:6px; font-size:10.5px;">ກັນໄວ້ 5% ຂອງມູນຄ່າສິນຄ້າ (ລາຄາ×ສະຕັອກ) ທີ່ກຳລັງລົງຂາຍຢູ່ທັງໝົດ ຖອນອອກບໍ່ໄດ້ ຈົນກວ່າຈະຖອດສິນຄ້ານັ້ນອອກ ຫຼື ຂາຍໄດ້ແລ້ວລູກຄ້າຢືນຢັນຮັບເຄື່ອງ</div>
       </div>
+      ${(summary.frozen_commission_credit||0) > 0 ? `
+      <div style="background:#FFF4E5; border:1.5px solid #E8A33D; border-radius:14px; margin:0 14px 14px; padding:14px 16px;">
+        <div style="font-size:11px; color:var(--ink-soft); font-weight:600;">🧊 ເຄຣດິດແຊ່ແຂງ (ໃຊ້ລົງສິນຄ້າຄັ້ງຕໍ່ໄປໄດ້ເລີຍ ບໍ່ຕ້ອງເຕີມເງິນເພີ່ມ)</div>
+        <div style="font-size:18px; font-weight:800; color:var(--maroon);">${fmtMoney(summary.frozen_commission_credit)}</div>
+        <div class="hint" style="margin-top:6px; font-size:10.5px;">ເກີດຈາກການຖອດ/ລຸດສິນຄ້າ ໃນຂະນະທີ່ເງິນມັດຈຳພື້ນຖານຍັງບໍ່ຄົບ ${fmtMoney(summary.base_deposit_target)} — ເງິນສ່ວນນີ້ຍັງຖອນເປັນເງິນສົດບໍ່ໄດ້ ແຕ່ຈະຖືກໃຊ້ອັດຕະໂນມັດເມື່ອທ່ານລົງສິນຄ້າໃໝ່ ຫຼື ເພີ່ມສະຕັອກ/ລາຄາອີກຄັ້ງ. ຖ້າຕ້ອງການຖອນເປັນເງິນສົດຈິງໆ ໃຫ້ຕິດຕໍ່ແອດມິນ (ຈະຫັກຄ່າທຳນຽມ)</div>
+      </div>` : ''}
       <div class="chiprow" style="margin:0 14px 10px;">
         <button class="${WALLET_TAB==='history'?'active':''}" onclick="WALLET_TAB='history'; renderWallet();">ປະຫວັດທຸລະກຳ</button>
         <button class="${WALLET_TAB==='withdrawals'?'active':''}" onclick="WALLET_TAB='withdrawals'; renderWallet();">ຄຳຂໍຖອນເງິນ</button>
@@ -1203,7 +1216,7 @@ async function renderWallet(){
       ${WALLET_TAB==='history' ?
         (!history.length ? '<div class="empty">ຍັງບໍ່ມີທຸລະກຳ</div>' :
           history.map(h=>`<div class="admin-list-item">
-            <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນຄ່າຄອມ',commission_release:'🔓 ຄືນເງິນຄ່າຄອມ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນມັດຈຳພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນມັດຈຳພື້ນຖານ'})[h.type]||'⚙️ ປັບຍອດ'}</span>
+            <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນຄ່າຄອມ',commission_release:'🔓 ຄືນເງິນຄ່າຄອມ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນມັດຈຳພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນມັດຈຳພື້ນຖານ',commission_freeze:'🧊 ພັກເປັນເຄຣດິດແຊ່ແຂງ',admin_fee:'💼 ຄ່າທຳນຽມແອດມິນ'})[h.type]||'⚙️ ປັບຍອດ'}</span>
             <span style="font-weight:700; color:${h.amount>=0?'var(--ok)':'var(--danger)'};">${h.amount>=0?'+':''}${fmtMoney(h.amount)}</span></div>
             <div class="hint">${h.note||''}</div>
             <div class="hint">${new Date(h.created_at).toLocaleString('lo-LA')} • <span class="status-pill status-${h.status}">${h.status}</span></div>
