@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#7A1E2B">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="seller-manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="KhaiDee Seller">
 <style>
@@ -1081,6 +1082,12 @@ async function renderAccount(){
     </div>
 
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
+      <div style="font-weight:800; font-size:14px; margin-bottom:4px;">🔔 ແຈ້ງເຕືອນສຽງອໍເດີໃໝ່</div>
+      <div class="hint" style="margin-bottom:10px;">ເປີດໄວ້ເພື່ອຮັບສຽງ + ການສັ່ນທັນທີທີ່ມີອໍເດີໃໝ່ເຂົ້າມາ — ເຮັດວຽກເຖິງແມ່ນປິດແອັບ ຫຼື ລັອກໜ້າຈໍໄວ້ (ອຸປະກອນ Android ໃຊ້ Chrome ໄດ້ເລີຍ, ສ່ວນ iPhone ຕ້ອງກົດ "ແບ່ງປັນ → ເພີ່ມໄປໜ້າຈໍຫຼັກ" ກ່ອນຈຶ່ງຈະໄດ້ຮັບຕອນປິດແອັບ)</div>
+      <button class="btn btn-gold" id="pushToggleBtn" onclick="togglePushNotifications()">🔔 ເປີດການແຈ້ງເຕືອນສຽງ</button>
+      <div class="hint" id="pushStatusHint" style="margin-top:8px;"></div>
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
       <div class="field"><label>ໂລໂກ້ຮ້ານ</label><input type="file" id="accLogoFile" accept="image/*"></div>
       <div class="field"><label>ຮູບປົກຮ້ານ</label><input type="file" id="accCoverFile" accept="image/*"></div>
       <button class="btn btn-gold" id="accMediaSaveBtn" onclick="saveAccountMedia()">ບັນທຶກໂລໂກ້/ຮູບປົກ</button>
@@ -1123,6 +1130,7 @@ async function renderAccount(){
     </div>
     <div style="padding:0 14px;"><button class="btn" style="background:#fff; border:1.5px solid var(--danger); color:var(--danger);" onclick="sellerLogout()">🚪 ອອກຈາກລະບົບ</button></div>`;
   refreshNameChangeStatus();
+  refreshPushToggleUI();
 }
 async function refreshNameChangeStatus(){
   const box = document.getElementById('accNameReqStatus');
@@ -1522,6 +1530,85 @@ async function deleteCoupon(id){
   catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 
+/* ============================================================ PUSH NOTIFICATIONS (sound + vibration for new orders — works even when
+   the app/tab is closed or the phone is locked, via Web Push + a service worker) ============================================================ */
+// Converts the VAPID public key (base64url, from the backend) into the Uint8Array format
+// the browser's PushManager API expects.
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function pushSupported(){
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+async function registerSw(){
+  if(!('serviceWorker' in navigator)) return null;
+  try{ return await navigator.serviceWorker.register('sw.js'); }
+  catch(e){ console.warn('sw register failed', e); return null; }
+}
+// Reflects current subscription state (per this device) on the account page toggle.
+async function refreshPushToggleUI(){
+  const btn = document.getElementById('pushToggleBtn');
+  const hint = document.getElementById('pushStatusHint');
+  if(!btn) return;
+  if(!pushSupported()){
+    btn.textContent = '🔕 ອຸປະກອນນີ້ບໍ່ຮອງຮັບການແຈ້ງເຕືອນ';
+    btn.disabled = true;
+    if(hint) hint.textContent = 'ລອງເປີດຜ່ານ Chrome (Android) ຫຼືເພີ່ມແອັບໄປໜ້າຈໍຫຼັກກ່ອນ (iPhone, iOS 16.4+)';
+    return;
+  }
+  let isOn = false;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    isOn = !!sub && Notification.permission === 'granted';
+  }catch(e){ /* ignore */ }
+  btn.textContent = isOn ? '🔕 ປິດການແຈ້ງເຕືອນສຽງ' : '🔔 ເປີດການແຈ້ງເຕືອນສຽງ';
+  btn.className = isOn ? 'btn btn-ghost' : 'btn btn-gold';
+  btn.disabled = false;
+  if(hint) hint.textContent = isOn
+    ? '✅ ເປີດຢູ່ — ອຸປະກອນນີ້ຈະມີສຽງ+ສັ່ນທັນທີທີ່ມີອໍເດີໃໝ່ ເຖິງແມ່ນປິດແອັບໄວ້'
+    : 'ຍັງບໍ່ໄດ້ເປີດ — ຈະບໍ່ໄດ້ຍິນສຽງແຈ້ງເຕືອນຕອນປິດແອັບຖ້າຍັງບໍ່ກົດເປີດ';
+}
+async function togglePushNotifications(){
+  const btn = document.getElementById('pushToggleBtn');
+  if(!pushSupported()){ showToast('ອຸປະກອນ ຫຼື ບຣາວເຊີນີ້ບໍ່ຮອງຮັບການແຈ້ງເຕືອນ'); return; }
+  if(btn) btn.disabled = true;
+  try{
+    const reg = await registerSw();
+    if(!reg){ showToast('ຕິດຕັ້ງລະບົບແຈ້ງເຕືອນບໍ່ສຳເລັດ'); return; }
+    const existing = await reg.pushManager.getSubscription();
+    if(existing && Notification.permission === 'granted'){
+      // Currently ON → turn it off for this device
+      await sbRPC('seller_remove_push_subscription', {p_seller_id: STATE.seller.id, p_endpoint: existing.endpoint}).catch(()=>{});
+      await existing.unsubscribe();
+      showToast('ປິດການແຈ້ງເຕືອນສຽງແລ້ວ');
+    }else{
+      const perm = await Notification.requestPermission();
+      if(perm !== 'granted'){
+        showToast('ກະລຸນາອະນຸຍາດການແຈ້ງເຕືອນຈາກບຣາວເຊີ/ໂທລະສັບເພື່ອເປີດໃຊ້');
+        return;
+      }
+      const vapidKey = await sbRPC('get_vapid_public_key', {});
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey)
+      });
+      const j = sub.toJSON();
+      await sbRPC('seller_save_push_subscription', {
+        p_seller_id: STATE.seller.id, p_endpoint: j.endpoint,
+        p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_user_agent: navigator.userAgent
+      });
+      showToast('🔔 ເປີດການແຈ້ງເຕືອນສຽງແລ້ວ!');
+    }
+  }catch(e){ showToast('ມີບັນຫາ: ' + e.message); }
+  finally{ refreshPushToggleUI(); }
+}
+
 /* ============================================================ SELLER GUIDE (shown before applying to sell) ============================================================ */
 function showSellerGuide(){
   const overlay = document.createElement('div'); overlay.className='overlay show center';
@@ -1579,6 +1666,10 @@ function bootApp(){
     else{ document.getElementById('authScreen').classList.remove('hidden'); showAuthScreen('login'); }
   }, 900);
 })();
+/* ---- PWA: register service worker (needed for push notifications + "Add to Home Screen") ---- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ registerSw(); });
+}
 </script>
 </body>
 </html>

@@ -1,0 +1,14 @@
+{
+  "name": "KhaiDee Seller",
+  "short_name": "KhaiDee Seller",
+  "start_url": "seller.html",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#7A1E2B",
+  "theme_color": "#7A1E2B",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
