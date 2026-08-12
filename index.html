@@ -2,7 +2,7 @@
 <html lang="lo" translate="no">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="google" content="notranslate">
 <title>KhaiDee ຂາຍດີ — ຊື້ຂາຍອອນລາຍ</title>
 <meta name="theme-color" content="#2C5AA0">
@@ -22,7 +22,8 @@
   --shadow:0 6px 20px rgba(44,90,160,.10);
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-body{margin:0; padding:0;}
+html{height:100%; overscroll-behavior-y:none;}
+body{margin:0; padding:0; overscroll-behavior-y:none;}
 body{
   font-family:'Noto Sans Lao','Noto Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
   color:var(--ink);
@@ -128,7 +129,7 @@ button{font-family:inherit; cursor:pointer;}
 /* ---------- PAGE CONTAINERS / TOP BAR (non-home pages) ---------- */
 .page-topbar{
   position:sticky; top:0; z-index:35; background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));
-  color:#fff; padding:16px 16px 14px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;
+  color:#fff; padding:calc(16px + env(safe-area-inset-top,0px)) 16px 14px; font-size:17px; font-weight:800; display:flex; align-items:center; gap:8px;
 }
 .stamp{
   display:inline-flex; align-items:center; gap:4px; font-weight:800; font-size:10px;
@@ -160,7 +161,7 @@ button{font-family:inherit; cursor:pointer;}
 /* ---------- HEADER ---------- */
 header.top{
   position:sticky; top:0; z-index:40; background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));
-  padding:12px 14px 10px; color:#fff;
+  padding:calc(12px + env(safe-area-inset-top,0px)) 14px 10px; color:#fff;
 }
 .brandrow{display:flex; align-items:center; gap:10px;}
 .brand-logo{width:38px; height:38px; border-radius:10px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:18px; overflow:hidden;}
@@ -375,9 +376,9 @@ nav.bottom .icon{font-size:19px;}
 
 /* ---------- ADMIN ---------- */
 #adminApp{display:none; min-height:100vh; background:var(--cream);}
-.admin-header{background:var(--maroon-dark); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:30;}
+.admin-header{background:var(--maroon-dark); color:#fff; padding:calc(14px + env(safe-area-inset-top,0px)) 16px 14px; display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:30;}
 .admin-header h2{margin:0; font-size:15px; flex:1;}
-.admin-tabs{display:flex; gap:0; overflow-x:auto; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:52px; z-index:29;}
+.admin-tabs{display:flex; gap:0; overflow-x:auto; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:calc(52px + env(safe-area-inset-top,0px)); z-index:29;}
 .admin-tabs button{flex-shrink:0; padding:11px 14px; background:none; border:none; font-size:12.5px; color:var(--ink-soft); font-weight:600; border-bottom:2.5px solid transparent;}
 .admin-tabs button.active{color:var(--maroon); border-color:var(--maroon);}
 .admin-body{padding:14px;}
