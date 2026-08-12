@@ -169,6 +169,18 @@ nav.bottom .icon{font-size:19px;}
 #authScreen .card{width:100%; max-width:360px; background:#fff; border-radius:18px; padding:22px 20px; box-shadow:var(--shadow);}
 #authScreen h2{margin:0 0 4px; font-size:17px; text-align:center;}
 #authScreen .sub{text-align:center; font-size:12px; color:var(--ink-soft); margin-bottom:18px;}
+#pinLockScreen{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; background:var(--cream);}
+#pinLockScreen .logo{width:70px; height:70px; border-radius:18px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:26px; margin-bottom:12px; overflow:hidden;}
+#pinLockScreen .logo img{width:100%; height:100%; object-fit:cover;}
+#pinLockScreen .card{width:100%; max-width:360px; background:#fff; border-radius:18px; padding:22px 20px; box-shadow:var(--shadow);}
+#pinLockScreen h2{margin:0 0 4px; font-size:17px;}
+#pinLockScreen .sub{font-size:12px; color:var(--ink-soft);}
+.pin-dot{width:14px; height:14px; border-radius:50%; border:1.5px solid var(--maroon); background:transparent; transition:background .15s;}
+.pin-dot.filled{background:var(--maroon);}
+.pin-key{font-size:20px; font-weight:700; padding:16px 0; border-radius:14px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer;}
+.pin-key:active{background:var(--cream);}
+#pinBackspace{font-size:17px;}
+@keyframes pinShake{ 0%,100%{transform:translateX(0);} 20%{transform:translateX(-8px);} 40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(6px);} }
 
 /* ---- Custom in-app toast (replaces the browser's native showToast() popup so success/error
    messages always look like part of the app, not a Safari/Chrome system dialog) ---- */
@@ -223,6 +235,48 @@ nav.bottom .icon{font-size:19px;}
     <div id="authScreenErr"></div>
     <div id="authScreenBody"></div>
     <div class="hint" style="text-align:center; margin-top:14px;">🔒 ບັນຊີຜູ້ຂາຍຈະສາມາດເປີດຂາຍໄດ້ກໍຕໍ່ເມື່ອແອດມິນກວດສອບ ແລະ ອະນຸມັດຄຳຂໍສະໝັກຂອງທ່ານແລ້ວເທົ່ານັ້ນ</div>
+  </div>
+</div>
+
+<!-- PIN LOCK — shown at every app open once a PIN has been set, instead of the full
+     phone+password form. Verified server-side (seller_pin_verify) so it works even if the
+     seller opens the app on a different device logged into the same account. -->
+<div id="pinLockScreen" class="hidden">
+  <div class="logo" id="pinLockLogo">KD</div>
+  <div class="card" style="text-align:center;">
+    <h2 id="pinLockStoreName">ຮ້ານຄ້າ</h2>
+    <div class="sub">ໃສ່ລະຫັດ PIN 4 ຫຼັກ ເພື່ອເຂົ້າແອັບ</div>
+    <div id="pinDots" style="display:flex; justify-content:center; gap:14px; margin:20px 0 8px;">
+      <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+    </div>
+    <div id="pinLockErr" style="min-height:20px; color:#c0392b; font-size:12.5px; font-weight:600;"></div>
+    <div id="pinKeypad" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:240px; margin:14px auto 0;">
+      <button type="button" class="pin-key" data-k="1">1</button>
+      <button type="button" class="pin-key" data-k="2">2</button>
+      <button type="button" class="pin-key" data-k="3">3</button>
+      <button type="button" class="pin-key" data-k="4">4</button>
+      <button type="button" class="pin-key" data-k="5">5</button>
+      <button type="button" class="pin-key" data-k="6">6</button>
+      <button type="button" class="pin-key" data-k="7">7</button>
+      <button type="button" class="pin-key" data-k="8">8</button>
+      <button type="button" class="pin-key" data-k="9">9</button>
+      <button type="button" class="pin-key" style="visibility:hidden;"></button>
+      <button type="button" class="pin-key" data-k="0">0</button>
+      <button type="button" class="pin-key" id="pinBackspace">⌫</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:18px;" onclick="pinLockForgot()">ລືມ PIN? ເຂົ້າສູ່ລະບົບດ້ວຍລະຫັດຜ່ານແທນ</button>
+  </div>
+</div>
+
+<!-- One-time gentle prompt shown right after a fresh phone+password login, if the seller
+     hasn't set up a PIN yet — entirely optional/skippable. -->
+<div id="pinSetupPrompt" class="overlay center">
+  <div class="sheet" style="max-width:360px; margin:auto; border-radius:18px; text-align:center; padding:22px 20px;">
+    <div style="font-size:34px;">🔒</div>
+    <h3 style="margin:8px 0 4px;">ຕັ້ງລະຫັດ PIN 4 ຫຼັກ?</h3>
+    <div class="hint" style="margin-bottom:16px;">ຄັ້ງຕໍ່ໄປທີ່ເປີດແອັບ ຈະສາມາດໃສ່ພຽງ PIN ແທນການພິມເບີໂທ/ລະຫັດຜ່ານທຸກຄັ້ງ</div>
+    <button class="btn btn-primary" style="width:100%; margin-bottom:8px;" onclick="hidePinSetupPrompt(); openPinSetupSheet(true);">🔒 ຕັ້ງ PIN ດຽວນີ້</button>
+    <button class="btn btn-ghost" style="width:100%;" onclick="hidePinSetupPrompt();">ຂ້າມໄປກ່ອນ</button>
   </div>
 </div>
 
@@ -457,6 +511,7 @@ async function doSellerLogin(){
     const s = await sbRPC('seller_login', {p_identifier:id, p_password:pw});
     STATE.seller = s; saveSeller();
     bootApp();
+    maybeShowPinSetupPrompt();
   }catch(e){ document.getElementById('authScreenErr').innerHTML = `<div class="err">${e.message}</div>`; }
 }
 async function doSellerRegister(){
@@ -1212,6 +1267,13 @@ async function renderAccount(){
     <div style="padding:0 14px 20px;"><button class="btn btn-gold" onclick="openCouponsPage()">🎟️ ຈັດການຄູປອງຮ້ານ</button></div>
     <div style="padding:0 14px 20px;"><button class="btn btn-ghost" onclick="showSellerGuide()">📖 ຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍ</button></div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
+      <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">🔒 ລະຫັດ PIN ລ໋ອກໜ້າຈໍ</label>
+      <div class="hint" style="margin:6px 0 10px;">ໃສ່ PIN 4 ຫຼັກແທນການພິມເບີໂທ/ລະຫັດຜ່ານທຸກຄັ້ງທີ່ເປີດແອັບ</div>
+      <div id="accPinStatus" style="font-size:13px; font-weight:600; margin-bottom:10px;">${s.has_pin?'✅ ຕັ້ງ PIN ແລ້ວ':'⚪ ຍັງບໍ່ໄດ້ຕັ້ງ PIN'}</div>
+      <button class="btn btn-ghost" onclick="openPinSetupSheet(false)">${s.has_pin?'🔄 ປ່ຽນ PIN':'🔒 ຕັ້ງ PIN'}</button>
+      ${s.has_pin?'<button class="btn btn-ghost" style="margin-top:8px; color:var(--danger); border-color:var(--danger);" onclick="openPinClearSheet()">🗑️ ປິດການໃຊ້ PIN</button>':''}
+    </div>
+    <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
       <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">ປ່ຽນລະຫັດຜ່ານ</label>
       <div class="field" style="margin-top:8px;"><input type="password" autocomplete="off" id="accOldPw" placeholder="ລະຫັດຜ່ານເກົ່າ"></div>
       <div class="field"><input type="password" autocomplete="off" id="accNewPw" placeholder="ລະຫັດຜ່ານໃໝ່"></div>
@@ -1761,9 +1823,127 @@ function showSellerGuide(){
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
 }
 
+/* ============================================================ PIN LOCK ============================================================ */
+let pinLockBuffer = '';
+function renderPinDots(){
+  document.querySelectorAll('#pinDots .pin-dot').forEach((d,i)=> d.classList.toggle('filled', i < pinLockBuffer.length));
+}
+function pinLockError(msg){
+  document.getElementById('pinLockErr').textContent = msg;
+  const dots = document.getElementById('pinDots');
+  dots.style.animation = 'none'; void dots.offsetWidth; dots.style.animation = 'pinShake .3s';
+}
+async function pinKeyPress(k){
+  if(pinLockBuffer.length>=4) return;
+  pinLockBuffer += k;
+  renderPinDots();
+  document.getElementById('pinLockErr').textContent = '';
+  if(pinLockBuffer.length===4){
+    try{
+      await sbRPC('seller_pin_verify', {p_seller_id: STATE.seller.id, p_pin: pinLockBuffer});
+      document.getElementById('pinLockScreen').classList.add('hidden');
+      pinLockBuffer = '';
+      bootApp();
+    }catch(e){
+      const m = /^pin_locked:(\d+)$/.exec(e.message||'');
+      pinLockError(m ? `ໃສ່ຜິດຫຼາຍເທື່ອ ກະລຸນາລໍ ${Math.ceil(Number(m[1])/60)} ນາທີ` : 'ລະຫັດ PIN ບໍ່ຖືກຕ້ອງ');
+      pinLockBuffer = '';
+      renderPinDots();
+    }
+  }
+}
+function initPinKeypad(){
+  document.querySelectorAll('.pin-key[data-k]').forEach(btn=>{
+    btn.onclick = ()=> pinKeyPress(btn.dataset.k);
+  });
+  document.getElementById('pinBackspace').onclick = ()=>{
+    pinLockBuffer = pinLockBuffer.slice(0,-1);
+    renderPinDots();
+    document.getElementById('pinLockErr').textContent = '';
+  };
+}
+function showPinLockScreen(){
+  pinLockBuffer = '';
+  renderPinDots();
+  document.getElementById('pinLockErr').textContent = '';
+  document.getElementById('pinLockStoreName').textContent = STATE.seller.store_name || 'ຮ້ານຄ້າ';
+  document.getElementById('pinLockLogo').innerHTML = STATE.seller.logo_url ? `<img src="${STATE.seller.logo_url}">` : 'KD';
+  document.getElementById('pinLockScreen').classList.remove('hidden');
+}
+function pinLockForgot(){ sellerLogout(); }
+function hidePinSetupPrompt(){ document.getElementById('pinSetupPrompt').classList.remove('show'); }
+function maybeShowPinSetupPrompt(){
+  if(!STATE.seller.has_pin && !localStorage.getItem('kds_pin_setup_skipped')){
+    document.getElementById('pinSetupPrompt').classList.add('show');
+  }
+}
+function openPinSetupSheet(isFirstTime){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🔒 ${STATE.seller.has_pin?'ປ່ຽນ PIN':'ຕັ້ງ PIN'}</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <div class="hint" style="margin-bottom:10px;">ໃສ່ລະຫັດຜ່ານບັນຊີເພື່ອຢືນຢັນ ແລ້ວຕັ້ງ PIN 4 ຫຼັກໃໝ່</div>
+      <div id="pinSetupErr"></div>
+      <div class="field"><label>ລະຫັດຜ່ານບັນຊີ</label><input type="password" autocomplete="off" id="pinSetupPw" placeholder="ລະຫັດຜ່ານ"></div>
+      <div class="field"><label>PIN 4 ຫຼັກໃໝ່</label><input type="text" inputmode="numeric" maxlength="4" pattern="[0-9]*" id="pinSetupNew" placeholder="●●●●"></div>
+      <div class="field"><label>ຢືນຢັນ PIN ອີກຄັ້ງ</label><input type="text" inputmode="numeric" maxlength="4" pattern="[0-9]*" id="pinSetupConfirm" placeholder="●●●●"></div>
+      <button class="btn btn-primary" id="pinSetupSubmitBtn" onclick="submitPinSetup()">✔️ ບັນທຶກ PIN</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>{
+    overlay.remove();
+    if(isFirstTime) localStorage.setItem('kds_pin_setup_skipped','1');
+  };
+  window._closePinSetupSheet = ()=> overlay.remove();
+}
+async function submitPinSetup(){
+  const pw = document.getElementById('pinSetupPw').value;
+  const pin = document.getElementById('pinSetupNew').value.trim();
+  const confirm = document.getElementById('pinSetupConfirm').value.trim();
+  const errBox = document.getElementById('pinSetupErr');
+  errBox.innerHTML = '';
+  if(!/^[0-9]{4}$/.test(pin)){ errBox.innerHTML = `<div class="err">PIN ຕ້ອງເປັນຕົວເລກ 4 ຫຼັກ</div>`; return; }
+  if(pin!==confirm){ errBox.innerHTML = `<div class="err">PIN ທັງສອງຊ່ອງບໍ່ຕົງກັນ</div>`; return; }
+  const btn = document.getElementById('pinSetupSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+  try{
+    await sbRPC('seller_pin_set', {p_seller_id: STATE.seller.id, p_password: pw, p_pin: pin});
+    STATE.seller.has_pin = true; saveSeller();
+    localStorage.removeItem('kds_pin_setup_skipped');
+    if(window._closePinSetupSheet) window._closePinSetupSheet();
+    showToast('ຕັ້ງ PIN ສຳເລັດແລ້ວ');
+    if(document.getElementById('accPinStatus')) renderAccount();
+  }catch(e){ errBox.innerHTML = `<div class="err">${e.message}</div>`; btn.disabled=false; btn.textContent='✔️ ບັນທຶກ PIN'; }
+}
+function openPinClearSheet(){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🗑️ ປິດການໃຊ້ PIN</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">
+      <div class="hint" style="margin-bottom:10px;">ໃສ່ລະຫັດຜ່ານບັນຊີເພື່ອຢືນຢັນການປິດ PIN — ຄັ້ງຕໍ່ໄປຈະຕ້ອງເຂົ້າສູ່ລະບົບດ້ວຍເບີໂທ/ລະຫັດຜ່ານຄືນ</div>
+      <div id="pinClearErr"></div>
+      <div class="field"><label>ລະຫັດຜ່ານບັນຊີ</label><input type="password" autocomplete="off" id="pinClearPw" placeholder="ລະຫັດຜ່ານ"></div>
+      <button class="btn" style="background:#fff; border:1.5px solid var(--danger); color:var(--danger);" id="pinClearSubmitBtn" onclick="submitPinClear()">🗑️ ປິດການໃຊ້ PIN</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  window._closePinClearSheet = ()=> overlay.remove();
+}
+async function submitPinClear(){
+  const pw = document.getElementById('pinClearPw').value;
+  const errBox = document.getElementById('pinClearErr');
+  errBox.innerHTML = '';
+  const btn = document.getElementById('pinClearSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງດຳເນີນການ...';
+  try{
+    await sbRPC('seller_pin_clear', {p_seller_id: STATE.seller.id, p_password: pw});
+    STATE.seller.has_pin = false; saveSeller();
+    if(window._closePinClearSheet) window._closePinClearSheet();
+    showToast('ປິດການໃຊ້ PIN ແລ້ວ');
+    if(document.getElementById('accPinStatus')) renderAccount();
+  }catch(e){ errBox.innerHTML = `<div class="err">${e.message}</div>`; btn.disabled=false; btn.textContent='🗑️ ປິດການໃຊ້ PIN'; }
+}
+
 /* ============================================================ BOOT ============================================================ */
 function bootApp(){
   document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('pinLockScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('storeNameText').textContent = STATE.seller.store_name || 'ຮ້ານຄ້າ';
   document.getElementById('storeVerifiedBadge').innerHTML = STATE.seller.is_verified ? '<span class="verified-store-badge">✅ ຢືນຢັນແລ້ວ</span>' : '';
@@ -1773,9 +1953,11 @@ function bootApp(){
 }
 (function init(){
   loadSettings();
+  initPinKeypad();
   setTimeout(()=>{
     document.getElementById('splashScreen').classList.add('hidden');
-    if(STATE.seller){ bootApp(); }
+    if(STATE.seller && STATE.seller.has_pin){ showPinLockScreen(); }
+    else if(STATE.seller){ bootApp(); }
     else{ document.getElementById('authScreen').classList.remove('hidden'); showAuthScreen('login'); }
   }, 900);
 })();
