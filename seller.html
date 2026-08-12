@@ -58,10 +58,43 @@ button{font-family:inherit; cursor:pointer;}
 #installChip.show{display:inline-flex;}
 
 /* ---- Splash ---- */
-#splashScreen{position:fixed; inset:0; background:linear-gradient(160deg,var(--maroon),var(--maroon-dark)); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:999; color:#fff;}
-#splashScreen .logo{width:96px; height:96px; border-radius:24px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--maroon); font-size:34px; margin-bottom:14px;}
-#splashScreen .tag{font-size:12px; opacity:.85; margin-top:6px; letter-spacing:.5px;}
-#splashScreen .badge{position:absolute; top:14px; right:14px; font-size:10px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); padding:4px 10px; border-radius:999px;}
+/* Ported from the main site's animated splash: soft drifting blobs, twinkling sparkles,
+   a pop-in logo badge, and staggered text rise — reskinned with the SELLER corner badge. */
+#splashScreen{
+  position:fixed; inset:0; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  overflow:hidden; color:#fff;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(212,169,76,.30), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(212,169,76,.22), transparent 45%),
+    linear-gradient(150deg, #6FA8D8 0%, #3567AC 55%, #163974 100%);
+  transition:opacity .5s ease, visibility .5s ease;
+}
+#splashScreen.fade-out{opacity:0; visibility:hidden; pointer-events:none;}
+#splashScreen .splash-blob{position:absolute; border-radius:50%; filter:blur(2px); pointer-events:none; background:radial-gradient(circle, rgba(212,169,76,.55), rgba(212,169,76,0) 70%);}
+#splashScreen .splash-blob.b1{width:190px; height:190px; top:-60px; left:-50px; animation:splashBlobFloat 6s ease-in-out infinite;}
+#splashScreen .splash-blob.b2{width:150px; height:150px; bottom:-40px; right:-40px; background:radial-gradient(circle, rgba(255,255,255,.35), rgba(255,255,255,0) 70%); animation:splashBlobFloat 7s ease-in-out infinite .5s;}
+#splashScreen .splash-blob.b3{width:120px; height:120px; top:8%; right:-30px; background:radial-gradient(circle, rgba(255,255,255,.25), rgba(255,255,255,0) 70%); animation:splashBlobFloat 5.5s ease-in-out infinite 1s;}
+#splashScreen .splash-blob.b4{width:140px; height:140px; bottom:6%; left:-40px; animation:splashBlobFloat 6.5s ease-in-out infinite 1.4s;}
+@keyframes splashBlobFloat{0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(14px,-14px) scale(1.08);}}
+#splashScreen .splash-deco{position:absolute; font-size:20px; opacity:0; animation:splashDecoTwinkle 2.6s ease-in-out infinite;}
+#splashScreen .splash-deco.d1{top:9%; left:12%; font-size:22px; animation-delay:.2s;}
+#splashScreen .splash-deco.d2{top:14%; right:14%; font-size:18px; animation-delay:1s;}
+#splashScreen .splash-deco.d3{bottom:12%; left:16%; font-size:18px; animation-delay:1.6s;}
+#splashScreen .splash-deco.d4{bottom:16%; right:12%; font-size:24px; animation-delay:.6s;}
+@keyframes splashDecoTwinkle{0%,100%{opacity:0; transform:translateY(0) scale(.7) rotate(0deg);} 15%{opacity:.9; transform:translateY(-4px) scale(1) rotate(-6deg);} 85%{opacity:.9;} 100%{opacity:0; transform:translateY(-10px) scale(.8) rotate(6deg);}}
+#splashScreen .badge{position:absolute; top:14px; right:14px; z-index:2; font-size:10px; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.4); padding:4px 10px; border-radius:999px;}
+#splashScreen .logo{position:relative; z-index:2; width:132px; height:132px; border-radius:30px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-size:44px; font-weight:900; color:var(--maroon); box-shadow:0 14px 34px rgba(10,30,70,.45); overflow:hidden; animation:splashPop .7s cubic-bezier(.2,1.4,.4,1) both;}
+#splashScreen .logo img{width:100%; height:100%; object-fit:cover;}
+@keyframes splashPop{0%{transform:scale(.4) rotate(-8deg); opacity:0;} 100%{transform:scale(1) rotate(0); opacity:1;}}
+#splashScreen .splash-name-en{position:relative; z-index:2; margin-top:22px; font-size:28px; font-weight:900; color:#fff; letter-spacing:.5px; animation:splashRise .6s ease .15s both;}
+#splashScreen .splash-name-lo{position:relative; z-index:2; margin-top:2px; font-size:19px; font-weight:700; color:var(--gold); animation:splashRise .6s ease .25s both;}
+#splashScreen .tag{position:relative; z-index:2; margin-top:10px; font-size:12px; color:rgba(255,255,255,.8); letter-spacing:.5px; animation:splashRise .6s ease .35s both;}
+@keyframes splashRise{from{transform:translateY(10px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+#splashScreen .splash-dots{position:relative; z-index:2; margin-top:26px; display:flex; gap:6px; animation:splashRise .6s ease .45s both;}
+#splashScreen .splash-dots span{width:6px; height:6px; border-radius:99px; background:var(--gold); opacity:.4; animation:splashBlink 1.1s ease infinite;}
+#splashScreen .splash-dots span:nth-child(2){animation-delay:.15s;}
+#splashScreen .splash-dots span:nth-child(3){animation-delay:.3s;}
+@keyframes splashBlink{0%,100%{opacity:.3; transform:scale(1);} 50%{opacity:1; transform:scale(1.3);}}
 
 /* ---- Header ---- */
 header.top{background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); padding:14px 16px 12px; color:#fff; position:sticky; top:0; z-index:40;}
@@ -209,10 +242,20 @@ nav.bottom .icon{font-size:19px;}
 
 <!-- SPLASH -->
 <div id="splashScreen">
+  <div class="splash-blob b1"></div>
+  <div class="splash-blob b2"></div>
+  <div class="splash-blob b3"></div>
+  <div class="splash-blob b4"></div>
+  <div class="splash-deco d1">✨</div>
+  <div class="splash-deco d2">🏪</div>
+  <div class="splash-deco d3">📦</div>
+  <div class="splash-deco d4">✨</div>
   <span class="badge">SELLER</span>
-  <div class="logo">KD</div>
-  <div style="font-weight:800; font-size:16px;">KhaiDee Seller</div>
+  <div class="logo" id="splashLogo">KD</div>
+  <div class="splash-name-en">KhaiDee</div>
+  <div class="splash-name-lo">ຮ້ານຄ້າຜູ້ຂາຍ</div>
   <div class="tag">ຈັດການຮ້ານຄ້າຂອງທ່ານ</div>
+  <div class="splash-dots"><span></span><span></span><span></span></div>
 </div>
 
 <!-- ---- Install-app tutorial: auto-shown right after the splash on first open, walking the
@@ -228,7 +271,7 @@ nav.bottom .icon{font-size:19px;}
 
 <!-- LOGIN / REGISTER (separate seller identity — not a customer, not the site admin) -->
 <div id="authScreen" class="hidden">
-  <div class="logo">KD</div>
+  <div class="logo" id="authScreenLogo">KD</div>
   <div class="card">
     <h2 id="authScreenTitle">ເຂົ້າສູ່ລະບົບຮ້ານຄ້າ</h2>
     <div class="sub" id="authScreenSub">KhaiDee Seller — ສຳລັບຜູ້ຂາຍເທົ່ານັ້ນ</div>
@@ -1936,15 +1979,28 @@ function bootApp(){
   logoBox.innerHTML = STATE.seller.logo_url ? `<img src="${STATE.seller.logo_url}">` : 'KD';
   goPage('dashboard');
 }
-(function init(){
-  loadSettings();
+(async function init(){
+  const splashStart = Date.now();
   initPinKeypad();
+  try{
+    await loadSettings();
+    // Platform logo (uploaded by admin on the main site, same site_settings_public.logo_url
+    // used for the customer site's splash/header) — apply it here too so Seller matches.
+    if(STATE.settings.logo_url){
+      const img = `<img src="${STATE.settings.logo_url}">`;
+      const splashLogoEl = document.getElementById('splashLogo'); if(splashLogoEl) splashLogoEl.innerHTML = img;
+      const authLogoEl = document.getElementById('authScreenLogo'); if(authLogoEl) authLogoEl.innerHTML = img;
+    }
+  }catch(e){ console.warn('loadSettings failed', e); }
+  // keep the splash on screen for at least ~900ms even if settings loaded faster than that
+  const elapsed = Date.now() - splashStart;
   setTimeout(()=>{
-    document.getElementById('splashScreen').classList.add('hidden');
+    const splash = document.getElementById('splashScreen');
+    if(splash){ splash.classList.add('fade-out'); setTimeout(()=>splash.remove(), 550); }
     if(STATE.seller && STATE.seller.has_pin){ showPinLockScreen(); }
     else if(STATE.seller){ bootApp(); }
     else{ document.getElementById('authScreen').classList.remove('hidden'); showAuthScreen('login'); }
-  }, 900);
+  }, Math.max(0, 900 - elapsed));
 })();
 /* ---- PWA: register service worker (needed for push notifications + "Add to Home Screen") ---- */
 if('serviceWorker' in navigator){
