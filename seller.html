@@ -386,7 +386,7 @@ const WHATSAPP_FALLBACK = '8562054966168';
 
 /* ============================================================ STATE — separate seller session, stored under its own key
    so it never collides with the customer session on the main site. ============================================================ */
-let STATE = { seller: JSON.parse(localStorage.getItem('kd_seller')||'null'), categories: [], products: [], settings: {}, waConnected: false };
+let STATE = { seller: JSON.parse(localStorage.getItem('kd_seller')||'null'), categories: [], products: [], settings: {} };
 function saveSeller(){ localStorage.setItem('kd_seller', JSON.stringify(STATE.seller)); }
 async function loadSettings(){
   try{ const rows = await sbSelect('site_settings_public', 'select=*'); rows.forEach(r=> STATE.settings[r.key] = r.value); }catch(e){ /* ok if not set up yet */ }
@@ -422,11 +422,9 @@ function showAuthScreen(mode){
       <div class="hint" style="text-align:center; margin-top:12px;">ຍັງບໍ່ມີຮ້ານຄ້າ? <a href="#" id="toRegister">ສະໝັກເປັນຜູ້ຂາຍ</a></div>`;
     document.getElementById('toRegister').onclick = (e)=>{ e.preventDefault(); showAuthScreen('register'); };
   }else if(mode==='register'){
-    STATE.waConnected = false;
     body.innerHTML = `
       <div class="field"><label>ຊື່ຮ້ານຄ້າ</label><input id="sRegStore" placeholder="ຮ້ານ..."></div>
-      <div class="field"><label>ເບີໂທ</label><input id="sRegPhone" placeholder="020XXXXXXXX" oninput="onSellerPhoneInput()"></div>
-      <div id="sRegWaConnect" class="wa-connect-box hidden"></div>
+      <div class="field"><label>ເບີໂທ</label><input id="sRegPhone" placeholder="020XXXXXXXX"></div>
       <div class="field"><label>ອີເມວ</label><input type="email" id="sRegEmail" placeholder="email@example.com"></div>
       <div class="field"><label>ລະຫັດຜ່ານ</label><input type="password" autocomplete="off" id="sRegPw" placeholder="ຢ່າງໜ້ອຍ 6 ໂຕ (ໃຊ້ເຂົ້າສູ່ລະບົບຫຼັງໄດ້ຮັບອະນຸມັດ)"></div>
       <div class="field"><label>ແຂວງ</label><select id="sRegProvince" onchange="onSellerProvinceChange()">${LAOS_PROVINCES.map(p=>`<option>${p}</option>`).join('')}</select></div>
@@ -439,7 +437,7 @@ function showAuthScreen(mode){
       <div class="field"><label>ຮູບ QR Code ຮັບເງິນ (ສຳລັບຖອນເງິນ)</label><input type="file" id="sRegQr" accept="image/*" onchange="onSellerQrChange()"></div>
       <div id="sRegQrPreview"></div>
       <div class="hint" style="margin:-6px 0 12px;">💡 ໃສ່ໄວ້ນຳຕັ້ງແຕ່ຕອນສະໝັກ ຈະຊ່ວຍໃຫ້ຖອນເງິນຄັ້ງຕໍ່ໄປໄວຂຶ້ນ ບໍ່ຕ້ອງຄົ້ນຫາຮູບໃໝ່ທຸກຄັ້ງ (ຫຼືຈະໃສ່ພາຍຫຼັງຢູ່ໜ້າ "ບັນຊີ" ກໍໄດ້)</div>
-      <div class="hint" style="margin:10px 0 12px;">📌 ຂໍ້ມູນທັງໝົດຈະຖືກສົ່ງໃຫ້ແອດມິນຫລັງບ້ານກວດສອບ ແລະ ຢືນຢັນຕົວຕົນກ່ອນ — ໄດ້ຮັບອະນຸມັດແລ້ວທ່ານຈຶ່ງຈະໃຊ້ອີເມວ/ລະຫັດຜ່ານຂ້າງເທິງເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້</div>
+      <div class="hint" style="margin:10px 0 12px;">📌 ເມື່ອກົດ "ສົ່ງຄຳຂໍສະໝັກ" ຂໍ້ມູນຂອງທ່ານຈະຖືກສົ່ງເຂົ້າລະບົບ ແລະ ຈະເປີດ WhatsApp ໃຫ້ອັດຕະໂນມັດເພື່ອແຈ້ງແອດມິນກວດສອບ ແລະ ຢືນຢັນຕົວຕົນ — ໄດ້ຮັບອະນຸມັດແລ້ວທ່ານຈຶ່ງຈະໃຊ້ອີເມວ/ລະຫັດຜ່ານຂ້າງເທິງເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້</div>
       <button type="button" class="btn btn-ghost" style="margin-bottom:10px;" onclick="showSellerGuide()">📖 ອ່ານຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍກ່ອນ</button>
       <label style="display:flex; align-items:flex-start; gap:8px; margin:4px 0 14px; font-size:12.5px; line-height:1.6; cursor:pointer;">
         <input type="checkbox" id="sRegAcceptTerms" style="margin-top:3px; width:16px; height:16px; flex-shrink:0;">
@@ -465,27 +463,14 @@ function onSellerProvinceChange(){
   const p = document.getElementById('sRegProvince').value;
   document.getElementById('sRegDistrict').innerHTML = sellerDistrictOptions(p, null);
 }
-function onSellerPhoneInput(){
-  const box = document.getElementById('sRegWaConnect');
-  const digits = document.getElementById('sRegPhone').value.replace(/[^0-9]/g,'');
-  if(digits.length < 8){ box.classList.add('hidden'); box.innerHTML=''; STATE.waConnected=false; return; }
-  box.classList.remove('hidden');
-  box.innerHTML = STATE.waConnected
-    ? `<span class="status-pill status-approved">✅ ເຊື່ອມຕໍ່ WhatsApp ແລ້ວ</span>`
-    : `<button type="button" class="btn btn-gold btn-sm" onclick="connectSellerWhatsApp()">💬 ເຊື່ອມຕໍ່ ແລະ ຢືນຢັນເບີຜ່ານ WhatsApp</button>`;
-}
 // Opens a WhatsApp chat to the shop's official number with the applicant's info pre-filled,
-// so an admin can manually confirm the phone number belongs to the applicant before approving.
-function connectSellerWhatsApp(){
-  const store = document.getElementById('sRegStore').value.trim() || '-';
-  const phone = document.getElementById('sRegPhone').value.trim();
-  const accepted = document.getElementById('sRegAcceptTerms') && document.getElementById('sRegAcceptTerms').checked;
+// so an admin can see the new application and verify identity before approving.
+// Called automatically from doSellerRegister() right after the application is
+// successfully submitted to Supabase — no separate "connect WhatsApp" step needed.
+function notifyAdminSellerRegister(store, phone){
   const num = (STATE.settings.whatsapp_number || WHATSAPP_FALLBACK).replace(/[^0-9]/g,'');
-  const msg = encodeURIComponent(`📝 ຄຳຂໍສະໝັກຜູ້ຂາຍໃໝ່ KhaiDee\nຊື່ຮ້ານ: ${store}\nເບີໂທ: ${phone}\nກະລຸນາຊ່ວຍຢືນຢັນຕົວຕົນ ແລະ ກວດສອບຂໍ້ມູນຂອງຂ້ອຍ 🙏` +
-    (accepted ? `\n\n✅ ຂ້ອຍໄດ້ອ່ານ ແລະ ຍອມຮັບເງື່ອນໄຂທັງໝົດຂອງການເປັນຜູ້ຂາຍ KhaiDee ແລ້ວ (ລະບົບເງິນມັດຈຳ 5%, ເງິນມັດຈຳພື້ນຖານ 100,000 ກີບ, ຄ່າທຳນຽມ, ແລະ ຂໍ້ຫ້າມຮັບອໍເດີ້ຈາກເວັບແລ້ວໄປປິດການຂາຍເອງນອກລະບົບ)` : `\n\n⚠️ ຍັງບໍ່ໄດ້ຕິກຍອມຮັບເງື່ອນໄຂ`));
+  const msg = encodeURIComponent(`📝 ຄຳຂໍສະໝັກຜູ້ຂາຍໃໝ່ KhaiDee\nຊື່ຮ້ານ: ${store}\nເບີໂທ: ${phone}\nກະລຸນາກວດສອບ ແລະ ຢືນຢັນຕົວຕົນ ເພື່ອອະນຸມັດຄຳຂໍສະໝັກ 🙏`);
   window.open(`https://wa.me/${num}?text=${msg}`, '_blank');
-  STATE.waConnected = true;
-  onSellerPhoneInput();
 }
 let sellerIdCardFile = null;
 function onSellerIdCardChange(){
@@ -525,7 +510,6 @@ async function doSellerRegister(){
   const errBox = document.getElementById('authScreenErr');
   if(!store||!phone||!email||pw.length<6||!village){ errBox.innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
   if(!document.getElementById('sRegAcceptTerms').checked){ errBox.innerHTML = `<div class="err">ກະລຸນາຕິກຍອມຮັບເງື່ອນໄຂການເປັນຜູ້ຂາຍກ່ອນສົ່ງຄຳຂໍສະໝັກ</div>`; return; }
-  if(!STATE.waConnected){ errBox.innerHTML = `<div class="err">ກະລຸນາກົດເຊື່ອມຕໍ່ ແລະ ຢືນຢັນເບີໂທຜ່ານ WhatsApp ກ່ອນ</div>`; return; }
   if(!sellerIdCardFile){ errBox.innerHTML = `<div class="err">ກະລຸນາອັບໂຫລດຮູບຖ່າຍບັດປະຈຳຕົວ</div>`; return; }
   const btn = document.getElementById('sRegSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...';
   try{
@@ -542,6 +526,7 @@ async function doSellerRegister(){
       p_withdraw_qr_url: qrUrl, p_terms_accepted: document.getElementById('sRegAcceptTerms').checked
     });
     sellerIdCardFile = null; sellerQrFile = null;
+    notifyAdminSellerRegister(store, phone); // opens WhatsApp to alert admin right after a successful submit
     showAuthScreen('pending');
   }catch(e){ errBox.innerHTML = `<div class="err">${e.message}</div>`; btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍສະໝັກ'; }
 }
