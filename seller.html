@@ -11,6 +11,8 @@
 <link rel="manifest" href="seller-manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="KhaiDee Seller">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+Lao:wght@400;700&family=Poppins:wght@400;600;700&family=Quicksand:wght@500;700&display=swap">
 <style>
 :root{
   --maroon:#2C5AA0; --maroon-dark:#163974; --gold:#D4A94C; --gold-light:#F1DFAE;
@@ -431,8 +433,37 @@ const WHATSAPP_FALLBACK = '8562054966168';
    so it never collides with the customer session on the main site. ============================================================ */
 let STATE = { seller: JSON.parse(localStorage.getItem('kd_seller')||'null'), categories: [], products: [], settings: {} };
 function saveSeller(){ localStorage.setItem('kd_seller', JSON.stringify(STATE.seller)); }
+/* ---- Mirrors the theme-applier in index.html / admin.html: reads this app's own
+   "seller_theme_*" keys (set from admin.html ► ການຕັ້ງຄ່າ ► ຮູບແບບ/ສີ) with graceful fallback
+   to the shared legacy keys, then to the seller app's own default blue palette. ---- */
+function applyThemeSettings(prefix, fallback){
+  const s = STATE.settings, root = document.documentElement.style;
+  const pick = (suffix, fb) => s[prefix+'_theme_'+suffix] || (suffix==='primary'||suffix==='accent' ? s['theme_'+suffix] : null) || fb;
+  const primary = pick('primary', fallback.primary);
+  const primaryDark = pick('primary_dark', fallback.primaryDark);
+  const accent = pick('accent', fallback.accent);
+  const accentLight = pick('accent_light', fallback.accentLight);
+  const bg = pick('bg', fallback.bg);
+  const ink = pick('ink', fallback.ink);
+  if(primary) root.setProperty('--maroon', primary);
+  if(primaryDark) root.setProperty('--maroon-dark', primaryDark);
+  if(accent) root.setProperty('--gold', accent);
+  if(accentLight) root.setProperty('--gold-light', accentLight);
+  if(bg) root.setProperty('--cream', bg);
+  if(ink) root.setProperty('--ink', ink);
+  if(s.theme_font_family){ document.body.style.fontFamily = `'${s.theme_font_family}','Noto Sans Lao','Noto Sans',system-ui,-apple-system,'Segoe UI',sans-serif`; }
+  if(s.theme_radius_scale){
+    const sc = Number(s.theme_radius_scale) || 1;
+    root.setProperty('--r-lg', (18*sc).toFixed(1)+'px');
+    root.setProperty('--r-md', (12*sc).toFixed(1)+'px');
+    root.setProperty('--r-sm', (8*sc).toFixed(1)+'px');
+  }
+}
 async function loadSettings(){
-  try{ const rows = await sbSelect('site_settings_public', 'select=*'); rows.forEach(r=> STATE.settings[r.key] = r.value); }catch(e){ /* ok if not set up yet */ }
+  try{
+    const rows = await sbSelect('site_settings_public', 'select=*'); rows.forEach(r=> STATE.settings[r.key] = r.value);
+    applyThemeSettings('seller', {primary:'#2C5AA0', primaryDark:'#163974', accent:'#D4A94C', accentLight:'#F1DFAE', bg:'#FBF6EC', ink:'#2B1B14'});
+  }catch(e){ /* ok if not set up yet */ }
 }
 
 /* ---- Laos provinces / districts (same list used on the customer site's address form) ---- */
