@@ -526,6 +526,29 @@ async function loadSellersPublic(){
   catch(e){ STATE.sellers = []; console.warn('loadSellersPublic failed', e); }
 }
 function sellerById(id){ return (STATE.sellers||[]).find(s=>s.id===id); }
+
+/* ---- "ຮ້ານ KhaiDee ໂດຍກົງ" quick filter (admin request): show a compact tap-to-expand view of
+   every order that contains at least one item from the seller whose phone is 02054966168
+   ("KhaiDee ຮ້ານຂາຍດີໂດຍຕົງ💯%"). Matched by product_id -> product.seller_id since order_items
+   itself doesn't store seller_id directly. ---- */
+const OFFICIAL_STORE_SELLER_PHONE = '02054966168';
+let OFFICIAL_STORE_SELLER_ID = null; // resolved lazily via admin_list_sellers (has phone; sellers_list_public doesn't)
+async function resolveOfficialStoreSellerId(){
+  if(OFFICIAL_STORE_SELLER_ID) return OFFICIAL_STORE_SELLER_ID;
+  try{
+    const list = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword});
+    const s = (list||[]).find(x=>x.phone===OFFICIAL_STORE_SELLER_PHONE);
+    OFFICIAL_STORE_SELLER_ID = s ? s.id : false; // false = "looked up, not found" (avoid re-lookup every paint)
+  }catch(e){ console.warn('resolveOfficialStoreSellerId failed', e); OFFICIAL_STORE_SELLER_ID = false; }
+  return OFFICIAL_STORE_SELLER_ID;
+}
+function orderHasSeller(o, sellerId){
+  if(!sellerId) return false;
+  return (o.items||[]).some(it=>{
+    const p = (STATE.products||[]).find(pr=>pr.id===it.product_id);
+    return p && p.seller_id === sellerId;
+  });
+}
 function sellerVerifiedBadge(seller, extraClass){
   if(!seller || !seller.is_verified) return '';
   return `<span class="verified-store-badge${extraClass?' '+extraClass:''}">✅ ຮ້ານຢືນຢັນ</span>`;
@@ -807,21 +830,27 @@ function adminStatusColor(status){
 }
 let adminOrdersList = [];
 let adminOrdersTab = 'pending';
+let adminOfficialStoreFilter = false; // toggled by the "🏪 ຮ້ານ KhaiDee ໂດຍກົງ" chip
 function adminSetOrdersTab(tab){ adminOrdersTab = tab; paintAdminOrders(); }
 async function renderAdminOrders(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
-  adminOrdersList = await sbRPC('admin_list_orders', {p_password: STATE.adminPassword});
+  const [orders] = await Promise.all([
+    sbRPC('admin_list_orders', {p_password: STATE.adminPassword}),
+    (!STATE.products || !STATE.products.length) ? loadProducts() : Promise.resolve(),
+    resolveOfficialStoreSellerId()
+  ]);
+  adminOrdersList = orders;
   paintAdminOrders();
 }
-function paintAdminOrders(){
-  const body = document.getElementById('adminBody');
-  const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
-  const filtered = adminOrdersList.filter(o=>orderTabOf(o.status)===adminOrdersTab);
-  body.innerHTML = renderOrderTabs(adminOrdersTab, adminOrdersList, 'adminSetOrdersTab') +
-    (filtered.map(o=>`
-    <div class="admin-list-item">
-      <button class="del-x" title="ລຶບອໍເດີ" onclick="adminDeleteOrder(${o.id})">✕</button>
+function adminToggleOfficialStoreFilter(){
+  adminOfficialStoreFilter = !adminOfficialStoreFilter;
+  paintAdminOrders();
+}
+// Returns the inner detail markup for one order — shared by the normal full-card list AND the
+// compact-box "🏪 ຮ້ານ KhaiDee ໂດຍກົງ" view's tap-to-open detail modal, so the two stay in sync.
+function renderOrderDetailInner(o, statuses){
+  return `
       <div class="top"><span class="title">#${o.order_number}</span><span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span></div>
       <div class="hint">${o.customer_name||'-'} • ${o.customer_phone||'-'}</div>
       <div class="hint">${new Date(o.created_at).toLocaleString('lo-LA')}</div>
@@ -843,7 +872,51 @@ function paintAdminOrders(){
       <div style="font-weight:700; color:var(--maroon); margin-top:4px;">${fmtMoney(o.total)}</div>
       <select class="status-select" style="margin-top:8px;" onchange="adminSetOrderStatus(${o.id}, this.value)">
         ${statuses.map(s=>`<option value="${s}" ${s===o.status?'selected':''}>${orderStatusLabel(s)}</option>`).join('')}
-      </select>
+      </select>`;
+}
+// Opens the full order detail (same content as the normal card) in a popup — used when tapping
+// one of the compact "🏪 ຮ້ານ KhaiDee ໂດຍກົງ" boxes.
+function openAdminOrderDetail(id){
+  const o = adminOrdersList.find(x=>x.id===id);
+  if(!o) return;
+  const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ລາຍລະອຽດອໍເດີ #${o.order_number}</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body"><div class="admin-list-item" style="margin:0; box-shadow:none; padding:0;">
+    <button class="del-x" title="ລຶບອໍເດີ" onclick="adminDeleteOrder(${o.id}); this.closest('.overlay').remove();">✕</button>
+    ${renderOrderDetailInner(o, statuses)}
+  </div></div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+}
+function paintAdminOrders(){
+  const body = document.getElementById('adminBody');
+  const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
+  const officialCount = OFFICIAL_STORE_SELLER_ID ? adminOrdersList.filter(o=>orderHasSeller(o, OFFICIAL_STORE_SELLER_ID)).length : 0;
+  const officialChip = OFFICIAL_STORE_SELLER_ID ? `
+    <button onclick="adminToggleOfficialStoreFilter()" style="display:flex; align-items:center; gap:6px; width:100%; margin-bottom:12px; border:1.5px solid ${adminOfficialStoreFilter?'var(--maroon)':'var(--line)'}; background:${adminOfficialStoreFilter?'var(--gold-light)':'#fff'}; border-radius:12px; padding:10px 12px; font-weight:700; font-size:12.5px; color:var(--ink);">
+      🏪 ຮ້ານ KhaiDee ໂດຍກົງ (${officialCount}) <span style="margin-left:auto; font-size:11px; color:var(--ink-soft);">${adminOfficialStoreFilter?'ກຳລັງກັ່ນຕອງ — ກົດເພື່ອປິດ ✕':'ກົດເພື່ອກັ່ນຕອງ'}</span>
+    </button>` : '';
+  let filtered = adminOrdersList.filter(o=>orderTabOf(o.status)===adminOrdersTab);
+  if(adminOfficialStoreFilter) filtered = filtered.filter(o=>orderHasSeller(o, OFFICIAL_STORE_SELLER_ID));
+
+  if(adminOfficialStoreFilter){
+    // Compact tap-to-open boxes, per the admin's request for this filtered view specifically.
+    body.innerHTML = officialChip + renderOrderTabs(adminOrdersTab, adminOrdersList, 'adminSetOrdersTab') +
+      (filtered.length ? `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">${filtered.map(o=>`
+        <div class="tile" style="cursor:pointer;" onclick="openAdminOrderDetail(${o.id})">
+          <div style="font-size:11px; color:var(--ink-soft); font-weight:700;">#${o.order_number}</div>
+          <div class="status-pill status-${o.status}" style="margin-top:5px; font-size:9.5px;">${orderStatusLabel(o.status)}</div>
+          <div style="font-weight:700; color:var(--maroon); margin-top:5px; font-size:12px;">${fmtMoney(o.total)}</div>
+        </div>`).join('')}</div>` : '<div class="empty">ບໍ່ມີອໍເດີຈາກຮ້ານນີ້ໃນໝວດນີ້</div>');
+    return;
+  }
+
+  body.innerHTML = officialChip + renderOrderTabs(adminOrdersTab, adminOrdersList, 'adminSetOrdersTab') +
+    (filtered.map(o=>`
+    <div class="admin-list-item">
+      <button class="del-x" title="ລຶບອໍເດີ" onclick="adminDeleteOrder(${o.id})">✕</button>
+      ${renderOrderDetailInner(o, statuses)}
     </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີໃນໝວດນີ້</div>');
 }
 // Setting status to 'delivered' is the trigger point for releasing money to the seller: the
