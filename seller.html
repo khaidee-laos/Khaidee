@@ -192,6 +192,8 @@ nav.bottom .icon{font-size:19px;}
 .status-pending{background:var(--gold-light); color:var(--maroon-dark);}
 .status-approved{background:#E9F5EC; color:var(--ok);}
 .status-rejected{background:#FBEAEA; color:var(--danger);}
+.status-return_requested{background:#F3E3F8; color:#7A2E9E;}
+.status-returned{background:#EDEDED; color:#5C5C5C;}
 .wa-connect-box{display:flex; align-items:center; gap:8px; margin:-4px 0 12px;}
 .wa-connect-box .hint{margin:0;}
 #sRegIdPreview img{width:100%; max-width:220px; border-radius:10px; border:1.5px solid var(--line); margin-top:6px;}
@@ -1324,6 +1326,7 @@ async function renderAccount(){
       <button class="btn btn-ghost" onclick="saveShipRate()">ບັນທຶກອັດຕາຄ່າສົ່ງ</button>
     </div>
     <div style="padding:0 14px 20px;"><button class="btn btn-gold" onclick="openCouponsPage()">🎟️ ຈັດການຄູປອງຮ້ານ</button></div>
+    <div style="padding:0 14px 20px;"><button class="btn btn-ghost" onclick="openSellerReturns()">🔄 ການສົ່ງຄືນສິນຄ້າ/ເງິນຄືນ</button></div>
     <div style="padding:0 14px 20px;"><button class="btn btn-ghost" onclick="showSellerGuide()">📖 ຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍ</button></div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px; padding:14px;">
       <label style="font-size:12px; color:var(--ink-soft); font-weight:600;">🔒 ລະຫັດ PIN ລ໋ອກໜ້າຈໍ</label>
@@ -1457,7 +1460,7 @@ async function renderWallet(){
       ${WALLET_TAB==='history' ?
         (!history.length ? '<div class="empty">ຍັງບໍ່ມີທຸລະກຳ</div>' :
           history.map(h=>`<div class="admin-list-item">
-            <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນປະກັນ',commission_release:'🔓 ຄືນເງິນປະກັນ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນປະກັນພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນປະກັນພື້ນຖານ',admin_fee:'💼 ຄ່າທຳນຽມແອດມິນ'})[h.type]||'⚙️ ປັບຍອດ'}</span>
+            <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນປະກັນ',commission_release:'🔓 ຄືນເງິນປະກັນ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນປະກັນພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນປະກັນພື້ນຖານ',admin_fee:'💼 ຄ່າທຳນຽມແອດມິນ',return_deduction:'↩️ ຫັກຄືນ (ລູກຄ້າຂໍຄືນເງິນ)'})[h.type]||'⚙️ ປັບຍອດ'}</span>
             <span style="font-weight:700; color:${h.amount>=0?'var(--ok)':'var(--danger)'};">${h.amount>=0?'+':''}${fmtMoney(h.amount)}</span></div>
             <div class="hint">${h.note||''}</div>
             <div class="hint">${new Date(h.created_at).toLocaleString('lo-LA')} • <span class="status-pill status-${h.status}">${h.status}</span></div>
@@ -1843,6 +1846,30 @@ async function togglePushNotifications(){
 }
 
 /* ============================================================ SELLER GUIDE (shown before applying to sell) ============================================================ */
+/* ---- Returns / refunds — read-only for sellers. Approving/rejecting only happens from
+   admin.html per KhaiDee policy (all refund money-movement flows through the admin, same
+   principle as payouts). This just lets the seller see what's been requested/resolved on their
+   own orders. Needs seller_list_returns(p_seller_id uuid) -> same shape as order_returns rows
+   joined with order_number/customer name, filtered to this seller's orders only. ---- */
+async function openSellerReturns(){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🔄 ການສົ່ງຄືນສິນຄ້າ/ເງິນຄືນ</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body" id="sellerReturnsBody"><div class="loader">ກຳລັງໂຫລດ...</div></div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  const body = overlay.querySelector('#sellerReturnsBody');
+  try{
+    const list = await sbRPC('seller_list_returns', {p_seller_id: STATE.seller.id});
+    body.innerHTML = !list.length ? '<div class="empty">ຍັງບໍ່ມີການຂໍຄືນສິນຄ້າ</div>' : list.map(r=>`
+      <div class="admin-list-item">
+        <div class="top"><span class="title">#${r.order_number}</span><span class="status-pill status-${r.status}">${({pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'})[r.status]||r.status}</span></div>
+        <div class="hint">${r.customer_name||''} • ${new Date(r.requested_at).toLocaleString('lo-LA')}</div>
+        <div class="hint" style="margin-top:4px;">ເຫດຜົນ: ${r.reason}${r.reason_detail?' — '+r.reason_detail:''}</div>
+        ${r.status==='approved' ? `<div style="margin-top:4px; font-weight:700; color:var(--danger);">ຫັກຈາກຍອດຮ້ານ: -${fmtMoney(r.refund_amount)}</div>` : ''}
+        ${r.admin_note ? `<div class="hint" style="margin-top:2px;">📝 ${r.admin_note}</div>` : ''}
+      </div>`).join('');
+  }catch(e){ body.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນໄດ້ (ຄຸນສົມບັດນີ້ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງ)</div>'; }
+}
 function showSellerGuide(){
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📖 ຄຳແນະນຳກ່ອນສະໝັກເປັນຜູ້ຂາຍ</h3><button class="closex" data-close>✕</button></div>

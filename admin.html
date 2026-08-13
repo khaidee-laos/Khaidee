@@ -285,6 +285,8 @@ nav.bottom .icon{font-size:19px;}
 .status-select{font-size:11px; font-weight:700; padding:6px 8px; border-radius:8px; border:1.5px solid var(--line); background:#fff; color:var(--maroon); font-family:inherit;}
 .status-packing{background:#E1EAF7; color:#2E5FA3;}
 .status-pending_verification{background:#FCEFD9; color:var(--warn);}
+.status-return_requested{background:#F3E3F8; color:#7A2E9E;}
+.status-returned{background:#EDEDED; color:#5C5C5C;}
 .verified-store-badge{display:inline-flex; align-items:center; gap:3px; font-size:9.5px; font-weight:800; color:#fff; background:linear-gradient(135deg,var(--gold),#B9862E); padding:2.5px 7px; border-radius:6px; letter-spacing:.2px; white-space:nowrap; box-shadow:0 1px 3px rgba(0,0,0,.15);}
 
 /* ---------- THEME / BRANDING TAB ---------- */
@@ -377,6 +379,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="banks">🏦 ທະນາຄານ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
     <button data-tab="ads">🖼️ ໂຄສະນາ</button>
+    <button data-tab="returns">🔄 ການສົ່ງຄືນ</button>
     <button data-tab="theme">🎨 ຮູບແບບ/ສີ</button>
     <button data-tab="settings">⚙️ ຕັ້ງຄ່າ</button>
   </div>
@@ -532,7 +535,7 @@ function sellerVerifiedBadge(seller, extraClass){
 const ORDER_STATUS_LABELS = {
   pending:'ລໍຖ້າຢືນຢັນ', paid:'ຊຳລະເງິນແລ້ວ', packing:'ກຳລັງແພັກເຄື່ອງ',
   shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ',
-  pending_verification:'ລໍຖ້າກວດສອບການໂອນ'
+  pending_verification:'ລໍຖ້າກວດສອບການໂອນ', return_requested:'ກຳລັງກວດສອບການຂໍຄືນ', returned:'ຄືນສິນຄ້າ/ເງິນສຳເລັດ'
 };
 function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
 const ORDER_TABS = [
@@ -625,7 +628,7 @@ function switchAdminTab(tab){
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups, seller_topups:renderAdminSellerTopups,
     payouts:renderAdminPayouts, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
-    ads:renderAdminAds, theme:renderAdminTheme, settings:renderAdminSettings};
+    ads:renderAdminAds, returns:renderAdminReturns, theme:renderAdminTheme, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
 }
 document.getElementById('adminPassInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryAdminLogin(); });
@@ -667,6 +670,7 @@ async function renderAdminDashboard(){
       <button class="qa-btn" onclick="switchAdminTab('coupons')"><span class="ico">🎟️</span>ຄູປອງ</button>
       <button class="qa-btn" onclick="switchAdminTab('ads')"><span class="ico">🖼️</span>ໂຄສະນາ</button>
       <button class="qa-btn" onclick="switchAdminTab('sellers')"><span class="ico">🏪</span>ຜູ້ຂາຍ</button>
+      <button class="qa-btn" onclick="switchAdminTab('returns')"><span class="ico">🔄</span>ການສົ່ງຄືນ</button>
       <button class="qa-btn" onclick="switchAdminTab('theme')"><span class="ico">🎨</span>ຮູບແບບ</button>
     </div>
     <div class="stat-grid">
@@ -2137,6 +2141,77 @@ async function renderAdminSettings(){
       showToast('ປ່ຽນລະຫັດຜ່ານແອດມິນສຳເລັດ');
     }catch(e){ showToast('ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ'); }
   };
+}
+
+/* ============================================================ RETURNS / REFUNDS ============================================================
+   Needs on the Supabase side (see the SQL migration handed to the user separately — this admin
+   app only calls these, it can't create them itself):
+   - admin_list_returns(p_password) -> [{id, order_id, order_number, customer_name, customer_phone,
+       seller_id, store_name, reason, reason_detail, photo_urls, refund_amount, status
+       ('pending'|'approved'|'rejected'), admin_note, requested_at, resolved_at}]
+   - admin_resolve_return(p_password, p_return_id, p_approve, p_refund_amount, p_restock, p_admin_note)
+       On approve: order_returns.status='approved', orders.status='returned', credits
+       customers.wallet_balance += p_refund_amount (logs a customer wallet_transactions row,
+       type='refund'), and — only if this order's seller had already been paid out for it — debits
+       the same amount from sellers.wallet_balance (logs seller_wallet_transactions, type=
+       'return_deduction'). If p_restock is true, also adds each returned line item's qty back onto
+       products.stock. On reject: order_returns.status='rejected', orders.status reverts to
+       'delivered', admin_note stored, nothing financial happens. Same "admin is the only one who
+       can pull the trigger on money movement" principle as topups/payouts. */
+async function renderAdminReturns(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  let list = [];
+  try{ list = await sbRPC('admin_list_returns', {p_password: STATE.adminPassword}); }
+  catch(e){ body.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນໄດ້ — ຄຸນສົມບັດນີ້ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງໃນຖານຂໍ້ມູນ (ເບິ່ງ SQL migration)</div>'; return; }
+  STATE.adminReturnsCache = list;
+  const pendingCount = list.filter(r=>r.status==='pending').length;
+  body.innerHTML = `
+    ${pendingCount ? `<div class="hint" style="margin-bottom:12px; background:var(--gold-light); padding:10px 12px; border-radius:10px; font-weight:700; color:var(--maroon-dark);">🔔 ມີ ${pendingCount} ຄຳຂໍລໍຖ້າກວດສອບ</div>` : ''}
+    ${!list.length ? '<div class="empty">ຍັງບໍ່ມີການຂໍຄືນສິນຄ້າ</div>' : list.map(r=>`
+      <div class="admin-list-item" style="cursor:pointer;" onclick="adminViewReturn(${r.id})">
+        <div class="top"><span class="title">#${r.order_number} • ${r.store_name||'-'}</span><span class="status-pill status-${r.status}">${({pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'})[r.status]||r.status}</span></div>
+        <div class="hint">${r.customer_name||''} ${r.customer_phone?'• '+r.customer_phone:''} • ${new Date(r.requested_at).toLocaleString('lo-LA')}</div>
+        <div class="hint" style="margin-top:4px;">ເຫດຜົນ: ${r.reason}</div>
+        <div style="margin-top:4px; font-weight:700;">${fmtMoney(r.refund_amount)}</div>
+      </div>`).join('')}`;
+}
+function adminViewReturn(id){
+  const r = (STATE.adminReturnsCache||[]).find(x=>x.id===id);
+  if(!r) return;
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🔄 ຄຳຂໍຄືນສິນຄ້າ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="top" style="margin-bottom:6px;"><span class="title">#${r.order_number} • ${r.store_name||'-'}</span><span class="status-pill status-${r.status}">${({pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'})[r.status]||r.status}</span></div>
+    <div class="hint">${r.customer_name||''} ${r.customer_phone?'• '+r.customer_phone:''}</div>
+    <div class="hint">${new Date(r.requested_at).toLocaleString('lo-LA')}</div>
+    <div class="hint" style="margin-top:10px; font-weight:700; color:var(--ink);">ເຫດຜົນ: ${r.reason}</div>
+    ${r.reason_detail?`<div class="hint" style="margin-top:2px;">${r.reason_detail}</div>`:''}
+    ${(r.photo_urls||[]).length ? `<div style="display:flex; gap:6px; margin-top:10px; flex-wrap:wrap;">${r.photo_urls.map(u=>`<img src="${u}" onclick="window.open('${u}','_blank')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--line);">`).join('')}</div>` : '<div class="hint" style="margin-top:6px;">ບໍ່ມີຮູບຫຼັກຖານ</div>'}
+    ${r.status==='pending' ? `
+    <div class="field" style="margin-top:16px;"><label>ຈຳນວນເງິນທີ່ຈະຄືນ</label><input type="number" id="retAmount" value="${r.refund_amount}"></div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; margin:8px 0;"><input type="checkbox" id="retRestock" style="width:auto;"> ➕ ຄືນສະຕັອກສິນຄ້າ (ຖ້າສິນຄ້າຍັງຂາຍໄດ້)</label>
+    <div class="field"><label>ໝາຍເຫດ (ບໍ່ບັງຄັບ)</label><textarea id="retNote" rows="2" placeholder="ໝາຍເຫດ..."></textarea></div>
+    <div class="chiprow" style="margin-top:8px;"><button onclick="adminResolveReturn(${r.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ ແລະ ຄືນເງິນ</button><button onclick="adminResolveReturn(${r.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`
+    : `${r.admin_note?`<div class="hint" style="margin-top:12px;">📝 ໝາຍເຫດແອດມິນ: ${r.admin_note}</div>`:''}
+       ${r.status==='approved'?`<div class="hint" style="margin-top:4px; font-weight:700; color:var(--ok);">ຄືນເງິນ: ${fmtMoney(r.refund_amount)}</div>`:''}`}
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+}
+async function adminResolveReturn(id, approve){
+  onGuard('return-resolve-'+id, async ()=>{
+    const amount = approve ? Number(document.getElementById('retAmount')?.value || 0) : 0;
+    if(approve && (!amount || amount<=0)){ showToast('ກະລຸນາໃສ່ຈຳນວນເງິນຄືນທີ່ຖືກຕ້ອງ'); return; }
+    const restock = !!document.getElementById('retRestock')?.checked;
+    const note = document.getElementById('retNote')?.value || '';
+    try{
+      await sbRPC('admin_resolve_return', {p_password:STATE.adminPassword, p_return_id:id, p_approve:approve, p_refund_amount:amount, p_restock:restock, p_admin_note:note});
+      playSuccessSound();
+      document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
+      renderAdminReturns();
+    }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); }
+  });
 }
 
 /* ============================================================ THEME / BRANDING TAB ============================================================
