@@ -3242,20 +3242,16 @@ const RETURN_REASONS = [
 async function loadReturnBox(o, orderId){
   const box = document.getElementById('orderDetailReturnBox');
   if(!box) return;
-  if(!['arrived','delivered','return_requested','returned'].includes(o.status)) return;
+  // No "start a new return" button here anymore: the accept/reject choice already happens at the
+  // 'arrived' step (openConfirmReceiptModal) *before* the order is ever marked delivered. Once
+  // delivered, the customer already chose "✅ ຮັບເຄື່ອງ — ສິນຄ້າຖືກຕ້ອງ", so offering a return button
+  // again here would contradict that. This function now only shows the status of a return that was
+  // already filed via the reject path (pending/approved/rejected card below).
+  if(!['arrived','return_requested','returned'].includes(o.status)) return;
   let ret = null;
   try{ ret = await sbRPC('customer_get_return_for_order', {p_customer_id: STATE.customer.id, p_order_id: orderId}); }
   catch(e){ return; } // RPC not deployed yet — just don't show the return UI rather than erroring
-  if(!ret){
-    if(o.status==='delivered'){
-      // COD customers pay cash at the door, so the ask reads as "return the item" (the refund of
-      // the cash they handed over is the same underlying flow, just phrased for what they did).
-      // Customers who already paid by QR/wallet/transfer see the money explicitly named.
-      const label = o.payment_method==='cod' ? '🔄 ຂໍຄືນສິນຄ້າ' : '🔄 ຂໍຄືນສິນຄ້າ ແລະ ຂໍເງິນຄືນ';
-      box.innerHTML = `<button class="btn btn-ghost" style="margin-top:12px; color:var(--maroon); border-color:var(--maroon);" onclick="openReturnRequestModal(${orderId},'${o.order_number}',${o.total})">${label}</button>`;
-    }
-    return;
-  }
+  if(!ret) return;
   const statusText = {pending:'⏳ ກຳລັງກວດສອບຄຳຂໍຄືນເງິນຂອງທ່ານ', approved:'✅ ອະນຸມັດແລ້ວ — ຄືນເງິນເຂົ້າກະເປົາທ່ານແລ້ວ', rejected:'❌ ຄຳຂໍນີ້ບໍ່ໄດ້ຮັບການອະນຸມັດ'}[ret.status] || ret.status;
   const boxColor = {pending:'#FCEFD9', approved:'#E2F1E5', rejected:'#FBE7E7'}[ret.status] || '#f2f2f2';
   box.innerHTML = `
