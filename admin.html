@@ -376,6 +376,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
     <button data-tab="seller_topups">➕ ເຕີມເງິນຜູ້ຂາຍ</button>
     <button data-tab="payouts">💸 ຖອນເງິນຜູ້ຂາຍ</button>
+    <button data-tab="finance">📒 ປະຫວັດການເງິນ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
     <button data-tab="banks">🏦 ທະນາຄານ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
@@ -654,7 +655,7 @@ function switchAdminTab(tab){
   document.querySelectorAll('#adminTabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups, seller_topups:renderAdminSellerTopups,
-    payouts:renderAdminPayouts, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
+    payouts:renderAdminPayouts, finance:renderAdminFinance, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
     ads:renderAdminAds, returns:renderAdminReturns, theme:renderAdminTheme, settings:renderAdminSettings};
   (renderers[tab]||function(){})();
 }
@@ -1812,6 +1813,68 @@ async function adminApprovePayout(id, approve, btn){
       renderAdminPayouts();
     }catch(e){ playErrorSound(); showToast('ຜິດພາດ: ' + e.message); if(btn){ btn.disabled=false; btn.textContent='✅ ຈ່າຍແລ້ວ / ອະນຸມັດ'; } }
   });
+}
+/* ============================================================ FINANCE HISTORY (unified money-movement ledger) ============================================================
+   Backed by Supabase RPCs admin_finance_summary / admin_list_finance_transactions, which UNION
+   together 5 money movements that were already being logged in separate tables:
+   - seller_cod:          COD cash a seller collected in person, doesn't pass through the system
+                           (seller_wallet_transactions.type='cod_cash_collected')
+   - customer_transfer:   customer paid by scanning a bank/QR transfer (orders.payment_method='transfer')
+   - customer_topup:      money added into a customer's wallet (wallet_transactions.type='topup')
+   - seller_topup:        money a seller topped into their own wallet (seller_wallet_transactions.type='topup')
+   - seller_withdraw:     money admin paid out to a seller on a withdrawal request (seller_withdrawals)
+   This tab is read-only history — approvals for pending topups/withdrawals still happen on their
+   own dedicated tabs (topups / seller_topups / payouts). */
+const FINANCE_CAT_META = {
+  seller_cod:        {ico:'💵', lbl:'COD ຮ້ານຄ້າເກັບເອງ (ບໍ່ຖອນຜ່ານລະບົບ)'},
+  customer_transfer: {ico:'📷', lbl:'ລູກຄ້າສະແກນ QR / ໂອນຈ່າຍ'},
+  customer_topup:    {ico:'👛', lbl:'ລູກຄ້າເຕີມເງິນເຂົ້າກະເປົາ'},
+  seller_topup:      {ico:'➕', lbl:'ຮ້ານຄ້າເຕີມເງິນເຂົ້າກະເປົາ'},
+  seller_withdraw:   {ico:'💸', lbl:'ຮ້ານຄ້າຖອນເງິນ (ແອດມິນຈ່າຍໃຫ້ແລ້ວ)'}
+};
+const FINANCE_CATEGORIES = [
+  {key:null, ico:'📒', lbl:'ທັງໝົດ'},
+  {key:'seller_cod', ico:'💵', lbl:'COD ຮ້ານຄ້າ'},
+  {key:'customer_transfer', ico:'📷', lbl:'ລູກຄ້າສະແກນ'},
+  {key:'customer_topup', ico:'👛', lbl:'ລູກຄ້າເຕີມເງິນ'},
+  {key:'seller_topup', ico:'➕', lbl:'ຮ້ານຄ້າເຕີມເງິນ'},
+  {key:'seller_withdraw', ico:'💸', lbl:'ຮ້ານຄ້າຖອນເງິນ'}
+];
+async function renderAdminFinance(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  if(STATE.financeCategory === undefined) STATE.financeCategory = null;
+  const [summary, list] = await Promise.all([
+    sbRPC('admin_finance_summary', {p_password: STATE.adminPassword}).catch(()=>({})),
+    sbRPC('admin_list_finance_transactions', {p_password: STATE.adminPassword, p_category: STATE.financeCategory, p_limit: 200, p_offset: 0}).catch(()=>[])
+  ]);
+  STATE.adminFinanceCache = list;
+  const catBtns = FINANCE_CATEGORIES.map(c=>`
+    <button onclick="adminFinanceFilter(${c.key ? `'${c.key}'` : 'null'})" style="flex:1; min-width:92px; border:1.5px solid ${STATE.financeCategory===c.key?'var(--maroon)':'var(--line)'}; background:${STATE.financeCategory===c.key?'var(--gold-light)':'#fff'}; border-radius:12px; padding:8px 4px; font-weight:${STATE.financeCategory===c.key?'800':'600'}; font-size:11px; color:var(--ink); display:flex; flex-direction:column; align-items:center; gap:2px; white-space:nowrap;">
+      <span style="font-size:16px;">${c.ico}</span><span>${c.lbl}</span>
+    </button>`).join('');
+  body.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="n">${fmtMoney(summary.seller_cod||0)}</div><div class="l">💵 COD ຮ້ານຄ້າເກັບເອງ</div></div>
+      <div class="stat-card"><div class="n">${fmtMoney(summary.customer_transfer||0)}</div><div class="l">📷 ລູກຄ້າສະແກນໂອນ</div></div>
+      <div class="stat-card"><div class="n">${fmtMoney(summary.customer_topup||0)}</div><div class="l">👛 ລູກຄ້າເຕີມເງິນ</div></div>
+      <div class="stat-card"><div class="n">${fmtMoney(summary.seller_topup||0)}</div><div class="l">➕ ຮ້ານຄ້າເຕີມເງິນ</div></div>
+      <div class="stat-card"><div class="n">${fmtMoney(summary.seller_withdraw||0)}</div><div class="l">💸 ຮ້ານຄ້າຖອນເງິນ</div></div>
+    </div>
+    <div class="order-tabs" style="display:flex; gap:6px; margin:14px 0 12px; overflow-x:auto;">${catBtns}</div>
+    ${!list.length ? '<div class="empty">ບໍ່ມີລາຍການໃນໝວດນີ້</div>' : list.map(financeRowHtml).join('')}
+  `;
+}
+function adminFinanceFilter(cat){ STATE.financeCategory = cat; renderAdminFinance(); }
+function financeRowHtml(t){
+  const meta = FINANCE_CAT_META[t.category] || {ico:'💰', lbl:t.category};
+  return `<div class="admin-list-item">
+    <div class="top"><span class="title">${meta.ico} ${t.actor_name||'-'}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||orderStatusLabel(t.status)}</span></div>
+    <div class="hint">${meta.lbl}${t.ref_number?' • '+t.ref_number:''}</div>
+    ${t.note?`<div class="hint">${t.note}</div>`:''}
+    <div class="hint" style="font-weight:800; color:var(--maroon); font-size:14px;">${fmtMoney(t.amount)}</div>
+    <div class="hint">${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+  </div>`;
 }
 async function renderAdminCarriers(){
   const body = document.getElementById('adminBody');
