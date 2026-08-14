@@ -1442,11 +1442,19 @@ async function renderWallet(){
       sbRPC('seller_withdrawal_list', {p_seller_id: STATE.seller.id})
     ]);
     wrap.innerHTML = `
-      <div style="background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); border-radius:16px; margin:14px; padding:20px; color:#fff; text-align:center;">
-        <div style="font-size:11px; opacity:.85;">ຍອດເງິນທີ່ຖອນໄດ້</div>
-        <div style="font-size:26px; font-weight:800; margin:6px 0;">${fmtMoney(summary.wallet_balance)}</div>
-        ${summary.pending_withdraw>0?`<div style="font-size:11px; opacity:.85;">⏳ ກຳລັງລໍຖ້າອະນຸມັດການຖອນ: ${fmtMoney(summary.pending_withdraw)}</div>`:''}
-        <button class="btn btn-gold" style="margin-top:12px; width:auto; padding:10px 24px; display:inline-block;" onclick="openWithdrawSheet(${summary.wallet_balance})">💸 ຖອນເງິນ</button>
+      <div style="display:flex; gap:10px; margin:14px;">
+        <div style="flex:1; background:linear-gradient(135deg,#5B7FD9,#2E4A9E); border-radius:16px; padding:18px 14px; color:#fff; text-align:center;">
+          <div style="font-size:10.5px; opacity:.9;">💙 ຖອນໄດ້</div>
+          <div style="font-size:20px; font-weight:800; margin:6px 0;">${fmtMoney(summary.wallet_balance)}</div>
+          <div style="font-size:9.5px; opacity:.85; line-height:1.4;">ຈາກອໍເດີທີ່ລູກຄ້າຈ່າຍຜ່ານເວັບ (QR/Wallet)</div>
+          ${summary.pending_withdraw>0?`<div style="font-size:10px; opacity:.9; margin-top:4px;">⏳ ລໍອະນຸມັດ: ${fmtMoney(summary.pending_withdraw)}</div>`:''}
+          <button class="btn btn-gold" style="margin-top:10px; width:auto; padding:7px 16px; display:inline-block; font-size:12px;" onclick="openWithdrawSheet(${summary.wallet_balance})">💸 ຖອນເງິນ</button>
+        </div>
+        <div style="flex:1; background:linear-gradient(135deg,#D9645B,#8E2E2E); border-radius:16px; padding:18px 14px; color:#fff; text-align:center;">
+          <div style="font-size:10.5px; opacity:.9;">❤️ ຖອນບໍ່ໄດ້</div>
+          <div style="font-size:20px; font-weight:800; margin:6px 0;">${fmtMoney(summary.cod_cash_collected)}</div>
+          <div style="font-size:9.5px; opacity:.9; line-height:1.4;">ເງິນສົດເກັບປາຍທາງ (COD) — ຢູ່ໃນມືທ່ານແລ້ວ ບໍ່ຜ່ານລະບົບ ຈຶ່ງຖອນຜ່ານແອັບບໍ່ໄດ້</div>
+        </div>
       </div>
       <div style="background:#F7F1E3; border:1.5px solid var(--gold); border-radius:14px; margin:0 14px 10px; padding:14px 16px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -1470,7 +1478,7 @@ async function renderWallet(){
       ${WALLET_TAB==='history' ?
         (!history.length ? '<div class="empty">ຍັງບໍ່ມີທຸລະກຳ</div>' :
           history.map(h=>`<div class="admin-list-item">
-            <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນປະກັນ',commission_release:'🔓 ຄືນເງິນປະກັນ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນປະກັນພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນປະກັນພື້ນຖານ',admin_fee:'💼 ຄ່າທຳນຽມແອດມິນ',return_deduction:'↩️ ຫັກຄືນ (ລູກຄ້າຂໍຄືນເງິນ)'})[h.type]||'⚙️ ປັບຍອດ'}</span>
+            <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',cod_cash_collected:'💵 ເກັບເງິນສົດປາຍທາງ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນປະກັນ',commission_release:'🔓 ຄືນເງິນປະກັນ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນປະກັນພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນປະກັນພື້ນຖານ',admin_fee:'💼 ຄ່າທຳນຽມແອດມິນ',return_deduction:'↩️ ຫັກຄືນ (ລູກຄ້າຂໍຄືນເງິນ)'})[h.type]||'⚙️ ປັບຍອດ'}</span>
             <span style="font-weight:700; color:${h.amount>=0?'var(--ok)':'var(--danger)'};">${h.amount>=0?'+':''}${fmtMoney(h.amount)}</span></div>
             <div class="hint">${h.note||''}</div>
             <div class="hint">${new Date(h.created_at).toLocaleString('lo-LA')} • <span class="status-pill status-${h.status}">${h.status}</span></div>

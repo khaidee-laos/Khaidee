@@ -1550,7 +1550,7 @@ function renderAdminSellerList(){
       </div>
       <div class="hint">${s.phone||'-'} • ${s.email||'-'} • 👥 ${s.follower_count||0} ຜູ້ຕິດຕາມ</div>
       <div class="hint">📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')}</div>
-      <div class="hint">💰 Wallet: <b>${fmtMoney(s.wallet_balance||0)}</b> (ຫັກຄ່າທຳນຽມ 5% ອັດຕະໂນມັດແລ້ວ)</div>
+      <div class="hint">💰 Wallet (ຖອນໄດ້): <b>${fmtMoney(s.wallet_balance||0)}</b> (ຫັກຄ່າທຳນຽມ 5% ອັດຕະໂນມັດແລ້ວ) • 💵 ເງິນສົດ COD ທີ່ເກັບໄປແລ້ວ (ຖອນຜ່ານລະບົບບໍ່ໄດ້): <b>${fmtMoney(s.cod_cash_collected||0)}</b></div>
       <div class="hint">ສະໝັກເມື່ອ: ${s.created_at ? new Date(s.created_at).toLocaleString('lo-LA') : '-'}</div>
       ${s.reject_reason ? `<div class="hint" style="color:var(--danger);">ເຫດຜົນປະຕິເສດ: ${s.reject_reason}</div>` : ''}
       ${s.id_card_url ? `<img src="${s.id_card_url}" onclick="window.open('${s.id_card_url}','_blank')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); margin-top:8px; cursor:pointer;">` : ''}
