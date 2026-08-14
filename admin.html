@@ -562,6 +562,9 @@ const ORDER_STATUS_LABELS = {
   pending_verification:'ລໍຖ້າກວດສອບການໂອນ', return_requested:'ກຳລັງກວດສອບການຂໍຄືນ', returned:'ຄືນສິນຄ້າ/ເງິນສຳເລັດ'
 };
 function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
+const WALLET_TXN_STATUS_LABELS = {
+  pending:'ລໍຖ້າກວດສອບ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'
+};
 const ORDER_TABS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
   {key:'shipping', ico:'🚚', lbl:'ກຳລັງຂົນສົ່ງ', match:['shipping','arrived']},
