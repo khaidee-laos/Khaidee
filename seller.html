@@ -1054,9 +1054,17 @@ function orderItemCard(i){
           </div>
           <div class="hint" style="margin-top:6px;">📍 ${i.recipient_name||'-'} • ☎️ ${i.recipient_phone||'-'} <span style="opacity:.75;">(ເບີກາງ — ຕິດຕໍ່ຜ່ານແອດມິນເທົ່ານັ້ນ)</span></div>
           ${(!canArrangeShipment(i) && (i.seller_status==='pending'||i.seller_status==='confirmed')) ? `<div class="hint" style="margin-top:4px; color:var(--warn); font-weight:600;">⏳ ລໍຖ້າຢືນຢັນການຊຳລະເງິນກ່ອນ ຈຶ່ງຈະຈັດການການສົ່ງໄດ້</div>` : ''}
+          ${i.receipt_photo_url ? `
+          <div style="margin-top:8px;">
+            <div class="hint" style="font-weight:700; color:var(--ok);">📷 ຫຼັກຖານຮັບເຄື່ອງ ຈາກລູກຄ້າ:</div>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+              <img src="${i.receipt_photo_url}" onclick="window.open('${i.receipt_photo_url}','_blank')" style="width:56px; height:56px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--line);">
+              ${i.receipt_video_url ? `<video src="${i.receipt_video_url}" controls style="width:100px; height:56px; border-radius:8px;"></video>` : ''}
+            </div>
+          </div>` : ''}
           <div class="chiprow">
             ${(i.seller_status==='pending'||i.seller_status==='confirmed') ? (canArrangeShipment(i) ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">📦 ຈັດການການສົ່ງ</button>` : '') : ''}
-            ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markArrived(${i.order_item_id})">📍 ຮອດຜູ້ຮັບແລ້ວ</button>` : ''}
+            ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markArrived(${i.order_item_id})">📍 ຮອດແລ້ວ (ໄວກວ່າກຳນົດ)</button>` : ''}
             ${i.seller_status==='arrived' ? `<span class="hint" style="align-self:center;">📍 ຮອດແລ້ວ — ລໍລູກຄ້າຖ່າຍຮູບ/ວິດີໂອ ແລະ ກົດຢືນຢັນຮັບເຄື່ອງ</span>` : ''}
             ${(i.seller_status==='pending') ? `<button onclick="setItemStatus(${i.order_item_id},'cancelled')" style="color:var(--danger);">✕ ຍົກເລີກ</button>` : ''}
           </div>
@@ -1102,7 +1110,7 @@ async function setItemStatus(itemId, status){
 // (photo + optional video) in their app. Actual delivery (and payout release) only happens once
 // the customer confirms, or the auto-confirm safety-net fires after the grace period.
 async function markArrived(itemId){
-  if(!confirm('ຢືນຢັນວ່າພັດສະດຸນີ້ຮອດຜູ້ຮັບແລ້ວບໍ? ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນໃຫ້ຖ່າຍຮູບ/ວິດີໂອ ແລະ ກົດຢືນຢັນຮັບເຄື່ອງໃນແອັບ')) return;
+  if(!confirm('ຢືນຢັນວ່າພັດສະດຸນີ້ຮອດຜູ້ຮັບແລ້ວ (ໄວກວ່າກຳນົດຄາດວ່າຈະຮອດ)? ປົກກະຕິລະບົບຈະໝາຍ "ຮອດແລ້ວ" ອັດຕະໂນມັດເອງຕາມວັນທີຄາດວ່າຈະຮອດ — ໃຊ້ປຸ່ມນີ້ສະເພາະຖ້າຮູ້ວ່າຮອດໄວກວ່ານັ້ນ. ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນໃຫ້ຖ່າຍຮູບ/ວິດີໂອ ແລະ ກົດຢືນຢັນຮັບເຄື່ອງໃນແອັບ')) return;
   try{
     await sbRPC('seller_order_item_mark_arrived', {p_seller_id: STATE.seller.id, p_order_item_id: itemId});
     renderOrders();
