@@ -2940,23 +2940,36 @@ function renderCancelBtn(o, orderId){
 function renderConfirmReceivedBtn(o, orderId){
   if(o.status!=='arrived') return '';
   return `<div style="margin-top:10px;">
-    <button class="btn btn-gold" style="width:100%;" onclick="event.stopPropagation(); openConfirmReceiptModal(${orderId},'${o.order_number}')">✅ ໄດ້ຮັບເຄື່ອງແລ້ວ — ຖ່າຍຮູບຢືນຢັນ</button>
+    <button class="btn btn-gold" style="width:100%;" onclick="event.stopPropagation(); openConfirmReceiptModal(${orderId},'${o.order_number}',${o.total})">✅ ໄດ້ຮັບເຄື່ອງແລ້ວ — ຖ່າຍຮູບຢືນຢັນ</button>
     <div class="hint" style="text-align:center; margin-top:4px; font-size:10.5px;">ຖ່າຍຮູບ (ຫຼືວິດີໂອ) ສິນຄ້າແລ້ວກົດຢືນຢັນ — ຫາກບໍ່ກົດ ລະບົບຈະຖືວ່າໄດ້ຮັບອັດຕະໂນມັດຫຼັງຄາດວ່າຈະຮອດ${(()=>{try{const g=(STATE.settings&&STATE.settings.seller_auto_confirm_grace_days)||1; return ' + '+g+' ມື້';}catch(e){return '';}})()}</div>
   </div>`;
 }
 let _receiptPhotoFile = null;
 let _receiptVideoFile = null;
-function openConfirmReceiptModal(orderId, orderNumber){
+// First screen: accept (photo proof) vs reject (unboxing video proof -> return/refund request).
+// This is the entry point once an order is 'arrived' — the customer decides before anything is
+// finalized as delivered.
+function openConfirmReceiptModal(orderId, orderNumber, total){
+  const wrap = document.getElementById('confirmReceiptBody');
+  wrap.innerHTML = `
+    <div class="hint" style="margin-bottom:14px;">ຄຳສັ່ງຊື້ #${orderNumber} — ສິນຄ້າຮອດແລ້ວ. ສິນຄ້າຖືກຕ້ອງ ຫຼື ບໍ່?</div>
+    <button class="btn btn-gold" style="width:100%;" onclick="openConfirmReceiptAcceptStep(${orderId},'${orderNumber}')">✅ ຮັບເຄື່ອງ — ສິນຄ້າຖືກຕ້ອງ</button>
+    <div class="hint" style="text-align:center; margin:6px 0;">ຫຼື</div>
+    <button class="btn btn-ghost" style="width:100%; color:var(--maroon); border-color:var(--maroon);" onclick="closeModal('modalConfirmReceipt'); openReturnRequestModal(${orderId},'${orderNumber}',${total},true);">❌ ສິນຄ້າບໍ່ຖືກຕ້ອງ/ເສຍຫາຍ — ຂໍຄືນ</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeModal('modalConfirmReceipt')">ຍົກເລີກ</button>`;
+  openModal('modalConfirmReceipt');
+}
+function openConfirmReceiptAcceptStep(orderId, orderNumber){
   _receiptPhotoFile = null; _receiptVideoFile = null;
   const wrap = document.getElementById('confirmReceiptBody');
   wrap.innerHTML = `
-    <div class="hint" style="margin-bottom:10px;">ຄຳສັ່ງຊື້ #${orderNumber} — ຖ່າຍຮູບສິນຄ້າທີ່ໄດ້ຮັບ (ບັງຄັບ) ແລະ ວິດີໂອເປີດກ່ອງ (ບໍ່ບັງຄັບ) ເພື່ອເປັນຫຼັກຖານກ່ອນຢືນຢັນ</div>
+    <div class="hint" style="margin-bottom:10px;">ຄຳສັ່ງຊື້ #${orderNumber} — ຖ່າຍຮູບສິນຄ້າທີ່ໄດ້ຮັບ (ບັງຄັບ) ເພື່ອເປັນຫຼັກຖານກ່ອນຢືນຢັນ</div>
     <div class="field"><label>📷 ຮູບສິນຄ້າ (ບັງຄັບ)</label><input type="file" id="receiptPhotoFile" accept="image/*" capture="environment"></div>
     <div id="receiptPhotoPreview"></div>
     <div class="field"><label>🎥 ວິດີໂອ (ບໍ່ບັງຄັບ)</label><input type="file" id="receiptVideoFile" accept="video/*" capture="environment"></div>
     <div id="receiptUploadProgress" class="hint"></div>
     <button class="btn" style="margin-top:16px; background:var(--maroon); color:#fff;" id="receiptConfirmBtn" disabled onclick="submitConfirmReceipt(${orderId},'${orderNumber}')">✅ ຢືນຢັນຮັບເຄື່ອງ</button>
-    <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeModal('modalConfirmReceipt')">ຍົກເລີກ</button>`;
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="openConfirmReceiptModal(${orderId},'${orderNumber}')">« ກັບຄືນ</button>`;
   document.getElementById('receiptPhotoFile').onchange = (e)=>{
     _receiptPhotoFile = (e.target.files||[])[0] || null;
     document.getElementById('receiptConfirmBtn').disabled = !_receiptPhotoFile;
@@ -2964,7 +2977,6 @@ function openConfirmReceiptModal(orderId, orderNumber){
     prev.innerHTML = _receiptPhotoFile ? `<img src="${URL.createObjectURL(_receiptPhotoFile)}" style="width:90px; height:90px; object-fit:cover; border-radius:10px; margin:4px 0 8px;">` : '';
   };
   document.getElementById('receiptVideoFile').onchange = (e)=>{ _receiptVideoFile = (e.target.files||[])[0] || null; };
-  openModal('modalConfirmReceipt');
 }
 async function submitConfirmReceipt(orderId, orderNumber){
   onGuard('confirm-receipt-'+orderId, async ()=>{
@@ -3230,7 +3242,7 @@ const RETURN_REASONS = [
 async function loadReturnBox(o, orderId){
   const box = document.getElementById('orderDetailReturnBox');
   if(!box) return;
-  if(!['delivered','return_requested','returned'].includes(o.status)) return;
+  if(!['arrived','delivered','return_requested','returned'].includes(o.status)) return;
   let ret = null;
   try{ ret = await sbRPC('customer_get_return_for_order', {p_customer_id: STATE.customer.id, p_order_id: orderId}); }
   catch(e){ return; } // RPC not deployed yet — just don't show the return UI rather than erroring
@@ -3253,11 +3265,13 @@ async function loadReturnBox(o, orderId){
       ${ret.status==='approved' ? `<div class="hint" style="margin-top:2px; font-weight:700; color:var(--ok);">ຈຳນວນເງິນຄືນ: ${fmtMoney(ret.refund_amount)}</div>` : ''}
       ${ret.admin_note ? `<div class="hint" style="margin-top:4px;">📝 ໝາຍເຫດຈາກແອດມິນ: ${ret.admin_note}</div>` : ''}
       ${(ret.photo_urls||[]).length ? `<div style="display:flex; gap:6px; margin-top:8px;">${ret.photo_urls.map(u=>`<img src="${u}" onclick="window.open('${u}','_blank')" style="width:48px; height:48px; object-fit:cover; border-radius:8px; cursor:pointer;">`).join('')}</div>` : ''}
+      ${ret.video_url ? `<video src="${ret.video_url}" controls style="width:120px; height:68px; border-radius:8px; margin-top:8px;"></video>` : ''}
     </div>`;
 }
 let _returnPhotoFiles = [];
-function openReturnRequestModal(orderId, orderNumber, total){
-  _returnPhotoFiles = [];
+let _returnVideoFile = null;
+function openReturnRequestModal(orderId, orderNumber, total, fromArrived){
+  _returnPhotoFiles = []; _returnVideoFile = null;
   const wrap = document.getElementById('returnRequestBody');
   wrap.innerHTML = `
     <div class="hint" style="margin-bottom:10px;">ຄຳສັ່ງຊື້ #${orderNumber} — ກະລຸນາເລືອກເຫດຜົນທີ່ທ່ານຕ້ອງການຄືນສິນຄ້າ/ເງິນຄືນ:</div>
@@ -3269,21 +3283,26 @@ function openReturnRequestModal(orderId, orderNumber, total){
         </label>`).join('')}
     </div>
     <div class="field" style="margin-top:10px;"><label>ລາຍລະອຽດເພີ່ມເຕີມ (ບໍ່ບັງຄັບ)</label><textarea id="returnDetailText" rows="3" placeholder="ອະທິບາຍເພີ່ມເຕີມ..."></textarea></div>
+    <div class="field"><label>🎥 ວິດີໂອຕອນແກະກ່ອງ${fromArrived ? ' (ບັງຄັບ)' : ' (ບໍ່ບັງຄັບ)'}</label><input type="file" id="returnVideoFile" accept="video/*" capture="environment"></div>
+    <div class="hint" style="margin:-6px 0 8px;">ຖ່າຍວິດີໂອຕອນແກະພັດສະດຸ ເພື່ອສະແດງວ່າສິນຄ້າບໍ່ຕົງປົກ/ເສຍຫາຍແນວໃດ</div>
     <div class="field"><label>📎 ຮູບຫຼັກຖານ (ບໍ່ບັງຄັບ, ສູງສຸດ 3 ຮູບ)</label><input type="file" id="returnPhotoFiles" accept="image/*" multiple></div>
     <div class="hint">ຈຳນວນເງິນທີ່ຈະຂໍຄືນ: <b>${fmtMoney(total)}</b> (ແອດມິນອາດປັບຈຳນວນຫຼັງກວດສອບ)</div>
-    <button class="btn" style="margin-top:16px; background:var(--maroon); color:#fff;" id="returnConfirmBtn" disabled onclick="submitReturnRequest(${orderId})">📤 ສົ່ງຄຳຂໍຄືນສິນຄ້າ</button>
+    <button class="btn" style="margin-top:16px; background:var(--maroon); color:#fff;" id="returnConfirmBtn" disabled onclick="submitReturnRequest(${orderId},${!!fromArrived})">📤 ສົ່ງຄຳຂໍຄືນສິນຄ້າ</button>
     <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeModal('modalReturnRequest')">ຍົກເລີກ</button>`;
   document.getElementById('returnPhotoFiles').onchange = (e)=>{ _returnPhotoFiles = Array.from(e.target.files||[]).slice(0,3); };
+  document.getElementById('returnVideoFile').onchange = (e)=>{ _returnVideoFile = (e.target.files||[])[0] || null; onReturnReasonChange(fromArrived); };
   openModal('modalReturnRequest');
 }
-function onReturnReasonChange(){
+function onReturnReasonChange(fromArrived){
   const picked = document.querySelector('input[name="returnReason"]:checked');
-  document.getElementById('returnConfirmBtn').disabled = !picked;
+  const videoOk = !fromArrived || !!_returnVideoFile;
+  document.getElementById('returnConfirmBtn').disabled = !picked || !videoOk;
 }
-async function submitReturnRequest(orderId){
+async function submitReturnRequest(orderId, fromArrived){
   onGuard('return-request-'+orderId, async ()=>{
     const picked = document.querySelector('input[name="returnReason"]:checked');
     if(!picked) return;
+    if(fromArrived && !_returnVideoFile){ showToast('ກະລຸນາຖ່າຍວິດີໂອຕອນແກະກ່ອງກ່ອນ'); return; }
     const reason = picked.value;
     const detail = (document.getElementById('returnDetailText').value||'').trim();
     const btn = document.getElementById('returnConfirmBtn');
@@ -3294,7 +3313,11 @@ async function submitReturnRequest(orderId){
         const url = await sbUpload('khaidee-products', `return_${orderId}_${Date.now()}_${file.name}`, file);
         photoUrls.push(url);
       }
-      await sbRPC('customer_request_return', {p_customer_id: STATE.customer.id, p_order_id: orderId, p_reason: reason, p_reason_detail: detail||null, p_photo_urls: photoUrls});
+      let videoUrl = null;
+      if(_returnVideoFile){
+        videoUrl = await sbUpload('khaidee-products', `return_${orderId}_video_${Date.now()}_${_returnVideoFile.name}`, _returnVideoFile);
+      }
+      await sbRPC('customer_request_return', {p_customer_id: STATE.customer.id, p_order_id: orderId, p_reason: reason, p_reason_detail: detail||null, p_photo_urls: photoUrls, p_video_url: videoUrl});
       closeModal('modalReturnRequest');
       showToast('ສົ່ງຄຳຂໍຄືນສິນຄ້າແລ້ວ — ລໍຖ້າແອດມິນກວດສອບ', 'success');
       openOrderDetail(orderId);
