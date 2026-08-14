@@ -152,6 +152,7 @@ header.top{background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); 
 .status-delivered{background:#E9F5EC; color:var(--ok);}
 .status-cancelled{background:#FBEAEA; color:var(--danger);}
 .status-shipping{background:#FFF3E0; color:var(--warn);}
+.status-arrived{background:#FDEBD3; color:#B9691A;}
 .chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
 .chiprow button{font-size:10.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
 .chiprow button.active{background:var(--maroon); color:#fff; border-color:var(--maroon); font-weight:700;}
@@ -557,13 +558,13 @@ function sellerVerifiedBadge(seller, extraClass){
 /* ============================================================ ORDER STATUS HELPERS (mirrors index.html/seller.html so labels/tabs match everywhere) ============================================================ */
 const ORDER_STATUS_LABELS = {
   pending:'ລໍຖ້າຢືນຢັນ', paid:'ຊຳລະເງິນແລ້ວ', packing:'ກຳລັງແພັກເຄື່ອງ',
-  shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ',
+  shipping:'ກຳລັງຂົນສົ່ງ', arrived:'ຮອດຈຸດໝາຍ (ລໍລູກຄ້າຢືນຢັນ)', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ',
   pending_verification:'ລໍຖ້າກວດສອບການໂອນ', return_requested:'ກຳລັງກວດສອບການຂໍຄືນ', returned:'ຄືນສິນຄ້າ/ເງິນສຳເລັດ'
 };
 function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
 const ORDER_TABS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
-  {key:'shipping', ico:'🚚', lbl:'ກຳລັງຂົນສົ່ງ', match:['shipping']},
+  {key:'shipping', ico:'🚚', lbl:'ກຳລັງຂົນສົ່ງ', match:['shipping','arrived']},
   {key:'delivered', ico:'✅', lbl:'ສຳເລັດ', match:['delivered']},
   {key:'cancelled', ico:'✕', lbl:'ຍົກເລີກ', match:['cancelled']}
 ];
@@ -866,6 +867,7 @@ function renderOrderDetailInner(o, statuses){
       ${o.payment_slip_url ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📎 ສະລິບໂອນເງິນ:</div><img src="${o.payment_slip_url}" onclick="window.open('${o.payment_slip_url}','_blank')" style="width:100px; height:100px; object-fit:cover; border-radius:8px; margin-top:4px; cursor:pointer; border:1px solid var(--line);">` : ''}
       ${(o.fulfillment_steps && o.fulfillment_steps.length) ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📦 ຮູບຂັ້ນຕອນສົ່ງ (ຈາກຮ້ານ):</div><div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">${o.fulfillment_steps.map(s=>`<img src="${s.photo_url}" title="${s.label||''}" onclick="window.open('${s.photo_url}','_blank')" style="width:44px; height:44px; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid var(--line);">`).join('')}</div>` : ''}
       ${o.tracking_url ? `<a href="${o.tracking_url}" target="_blank" style="font-size:11.5px; color:var(--maroon); font-weight:600; display:inline-block; margin-top:4px;">🔗 ລິງກ໌ຕິດຕາມພັດສະດຸ</a>` : ''}
+      ${o.receipt_photo_url ? `<div class="hint" style="margin-top:6px; color:var(--maroon); font-weight:600;">📷 ຫຼັກຖານຮັບເຄື່ອງ (ຈາກລູກຄ້າ):</div><div style="display:flex; gap:4px; margin-top:4px;"><img src="${o.receipt_photo_url}" onclick="window.open('${o.receipt_photo_url}','_blank')" style="width:44px; height:44px; object-fit:cover; border-radius:6px; cursor:pointer; border:1px solid var(--line);">${o.receipt_video_url?`<video src="${o.receipt_video_url}" controls style="width:80px; height:44px; border-radius:6px;"></video>`:''}</div>` : ''}
       ${(o.status!=='cancelled' && o.status!=='delivered' && estimateDeliveryDate(o)) ? `<div class="hint" style="margin-top:4px; color:var(--maroon); font-weight:600;">📅 ຄາດວ່າຈະຮອດ ${estimateDeliveryDate(o)}</div>` : ''}
       ${deliveryCountdownHtml(o)}
       ${(o.status==='cancelled' && o.cancel_reason) ? `<div class="hint" style="margin-top:4px; background:#FBE7E7; color:var(--danger); padding:6px 8px; border-radius:8px;">✕ ${o.cancelled_by==='customer'?'ລູກຄ້າຍົກເລີກ':'ຍົກເລີກໂດຍແອດມິນ'} — ${o.cancel_reason}</div>` : ''}
@@ -879,7 +881,7 @@ function renderOrderDetailInner(o, statuses){
 function openAdminOrderDetail(id){
   const o = adminOrdersList.find(x=>x.id===id);
   if(!o) return;
-  const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
+  const statuses = ['pending','paid','packing','shipping','arrived','delivered','cancelled'];
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>ລາຍລະອຽດອໍເດີ #${o.order_number}</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body"><div class="admin-list-item" style="margin:0; box-shadow:none; padding:0;">
@@ -891,7 +893,7 @@ function openAdminOrderDetail(id){
 }
 function paintAdminOrders(){
   const body = document.getElementById('adminBody');
-  const statuses = ['pending','paid','packing','shipping','delivered','cancelled'];
+  const statuses = ['pending','paid','packing','shipping','arrived','delivered','cancelled'];
   const officialCount = OFFICIAL_STORE_SELLER_ID ? adminOrdersList.filter(o=>orderHasSeller(o, OFFICIAL_STORE_SELLER_ID)).length : 0;
   const officialChip = OFFICIAL_STORE_SELLER_ID ? `
     <button onclick="adminToggleOfficialStoreFilter()" style="display:flex; align-items:center; gap:6px; width:100%; margin-bottom:12px; border:1.5px solid ${adminOfficialStoreFilter?'var(--maroon)':'var(--line)'}; background:${adminOfficialStoreFilter?'var(--gold-light)':'#fff'}; border-radius:12px; padding:10px 12px; font-weight:700; font-size:12.5px; color:var(--ink);">

@@ -419,6 +419,7 @@ nav.bottom .icon{font-size:19px;}
 .status-pending{background:#FCEFD9; color:var(--warn);}
 .status-paid, .status-approved{background:#E2F1E5; color:var(--ok);}
 .status-shipping, .status-packing{background:#E1EAF7; color:#2E5FA3;}
+.status-arrived{background:#FDEBD3; color:#B9691A;}
 .status-delivered{background:#E2F1E5; color:var(--ok);}
 .status-cancelled, .status-rejected{background:#FBE7E7; color:var(--danger);}
 .status-pending_verification{background:#FCEFD9; color:var(--warn);}
@@ -736,6 +737,14 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-handle"></div>
   <div class="sheet-header"><h3>🔄 ຂໍຄືນສິນຄ້າ/ເງິນຄືນ</h3><button class="closex" onclick="closeModal('modalReturnRequest')">✕</button></div>
   <div class="sheet-body" id="returnRequestBody"></div>
+</div></div>
+
+<!-- Confirm receipt with photo/video proof (shown once an order is 'arrived' — courier delivered,
+     awaiting the customer's own confirmation before it's marked ສຳເລັດ/complete) -->
+<div class="overlay" id="modalConfirmReceipt"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>✅ ຢືນຢັນຮັບເຄື່ອງ</h3><button class="closex" onclick="closeModal('modalConfirmReceipt')">✕</button></div>
+  <div class="sheet-body" id="confirmReceiptBody"></div>
 </div></div>
 
 <script>
@@ -2867,7 +2876,7 @@ function paintCustomerOrders(){
 // Used everywhere a raw status is shown to a customer or admin so nothing appears in English anymore.
 const ORDER_STATUS_LABELS = {
   pending:'ລໍຖ້າຢືນຢັນ', paid:'ຊຳລະເງິນແລ້ວ', packing:'ກຳລັງແພັກເຄື່ອງ',
-  shipping:'ກຳລັງຂົນສົ່ງ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ',
+  shipping:'ກຳລັງຂົນສົ່ງ', arrived:'ຮອດຈຸດໝາຍແລ້ວ', delivered:'ຈັດສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກແລ້ວ',
   pending_verification:'ລໍຖ້າກວດສອບການໂອນ', return_requested:'ກຳລັງກວດສອບການຂໍຄືນ', returned:'ຄືນສິນຄ້າ/ເງິນສຳເລັດ'
 };
 function orderStatusLabel(s){ return ORDER_STATUS_LABELS[s] || s; }
@@ -2922,30 +2931,69 @@ function renderCancelBtn(o, orderId){
     <button class="btn btn-ghost btn-sm" ${locked?'disabled':''} style="width:auto; padding:5px 12px; font-size:11px; color:var(--danger); border-color:var(--danger);${locked?' opacity:.4; cursor:not-allowed;':''}" onclick="event.stopPropagation();${locked?'':` openCancelOrderModal(${orderId},'${o.order_number}')`}">${locked?'🔒':'✕'} ຍົກເລີກຄຳສັ່ງຊື້</button>
   </div>${locked ? `<div class="hint" style="text-align:right; margin-top:2px; font-size:10px;">ຮ້ານອັບໂຫລດຫຼັກຖານແພັກສິນຄ້າແລ້ວ ຈຶ່ງບໍ່ສາມາດຍົກເລີກເອງໄດ້</div>` : ''}`;
 }
-// Shown only while status==='shipping'. Lets the customer close out the order themselves the
-// moment the parcel actually arrives, which immediately captures the seller's pre-locked
-// commission deposit and (for wallet/QR-paid orders) releases their sale proceeds — instead of
-// silently waiting on the hourly auto-confirm cron job to do it once the grace period lapses.
+// Shown only while status==='arrived' (courier has handed it over — seller marked it "ຮອດແລ້ວ").
+// Opens the photo/video proof modal instead of finalizing immediately: the customer must attach at
+// least one photo (video optional) before they can actually confirm. This immediately captures the
+// seller's pre-locked commission deposit and (for wallet/QR-paid orders) releases their sale
+// proceeds — instead of silently waiting on the hourly auto-confirm cron job to do it once the
+// grace period lapses.
 function renderConfirmReceivedBtn(o, orderId){
-  if(o.status!=='shipping') return '';
+  if(o.status!=='arrived') return '';
   return `<div style="margin-top:10px;">
-    <button class="btn btn-gold" style="width:100%;" onclick="event.stopPropagation(); confirmReceivedOrder(${orderId},'${o.order_number}')">✅ ໄດ້ຮັບເຄື່ອງແລ້ວ</button>
-    <div class="hint" style="text-align:center; margin-top:4px; font-size:10.5px;">ກົດຢືນຢັນທັນທີທີ່ໄດ້ຮັບເຄື່ອງ — ຫາກບໍ່ກົດ ລະບົບຈະຖືວ່າໄດ້ຮັບອັດຕະໂນມັດຫຼັງຄາດວ່າຈະຮອດ${(()=>{try{const g=(STATE.settings&&STATE.settings.seller_auto_confirm_grace_days)||1; return ' + '+g+' ມື້';}catch(e){return '';}})()}</div>
+    <button class="btn btn-gold" style="width:100%;" onclick="event.stopPropagation(); openConfirmReceiptModal(${orderId},'${o.order_number}')">✅ ໄດ້ຮັບເຄື່ອງແລ້ວ — ຖ່າຍຮູບຢືນຢັນ</button>
+    <div class="hint" style="text-align:center; margin-top:4px; font-size:10.5px;">ຖ່າຍຮູບ (ຫຼືວິດີໂອ) ສິນຄ້າແລ້ວກົດຢືນຢັນ — ຫາກບໍ່ກົດ ລະບົບຈະຖືວ່າໄດ້ຮັບອັດຕະໂນມັດຫຼັງຄາດວ່າຈະຮອດ${(()=>{try{const g=(STATE.settings&&STATE.settings.seller_auto_confirm_grace_days)||1; return ' + '+g+' ມື້';}catch(e){return '';}})()}</div>
   </div>`;
 }
-async function confirmReceivedOrder(orderId, orderNumber){
-  if(!confirm(`ຢືນຢັນວ່າໄດ້ຮັບອໍເດີ #${orderNumber} ຄົບຖ້ວນແລ້ວບໍ?`)) return;
-  try{
-    await sbRPC('customer_confirm_received', {p_customer_id: STATE.customer.id, p_order_id: orderId});
-    showToast('✅ ຢືນຢັນຮັບເຄື່ອງແລ້ວ ຂອບໃຈທີ່ຊື້ສິນຄ້າກັບ KhaiDee');
-    openOrderDetail(orderId);
-    if(typeof loadOrders==='function') loadOrders();
-  }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
+let _receiptPhotoFile = null;
+let _receiptVideoFile = null;
+function openConfirmReceiptModal(orderId, orderNumber){
+  _receiptPhotoFile = null; _receiptVideoFile = null;
+  const wrap = document.getElementById('confirmReceiptBody');
+  wrap.innerHTML = `
+    <div class="hint" style="margin-bottom:10px;">ຄຳສັ່ງຊື້ #${orderNumber} — ຖ່າຍຮູບສິນຄ້າທີ່ໄດ້ຮັບ (ບັງຄັບ) ແລະ ວິດີໂອເປີດກ່ອງ (ບໍ່ບັງຄັບ) ເພື່ອເປັນຫຼັກຖານກ່ອນຢືນຢັນ</div>
+    <div class="field"><label>📷 ຮູບສິນຄ້າ (ບັງຄັບ)</label><input type="file" id="receiptPhotoFile" accept="image/*" capture="environment"></div>
+    <div id="receiptPhotoPreview"></div>
+    <div class="field"><label>🎥 ວິດີໂອ (ບໍ່ບັງຄັບ)</label><input type="file" id="receiptVideoFile" accept="video/*" capture="environment"></div>
+    <div id="receiptUploadProgress" class="hint"></div>
+    <button class="btn" style="margin-top:16px; background:var(--maroon); color:#fff;" id="receiptConfirmBtn" disabled onclick="submitConfirmReceipt(${orderId},'${orderNumber}')">✅ ຢືນຢັນຮັບເຄື່ອງ</button>
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="closeModal('modalConfirmReceipt')">ຍົກເລີກ</button>`;
+  document.getElementById('receiptPhotoFile').onchange = (e)=>{
+    _receiptPhotoFile = (e.target.files||[])[0] || null;
+    document.getElementById('receiptConfirmBtn').disabled = !_receiptPhotoFile;
+    const prev = document.getElementById('receiptPhotoPreview');
+    prev.innerHTML = _receiptPhotoFile ? `<img src="${URL.createObjectURL(_receiptPhotoFile)}" style="width:90px; height:90px; object-fit:cover; border-radius:10px; margin:4px 0 8px;">` : '';
+  };
+  document.getElementById('receiptVideoFile').onchange = (e)=>{ _receiptVideoFile = (e.target.files||[])[0] || null; };
+  openModal('modalConfirmReceipt');
+}
+async function submitConfirmReceipt(orderId, orderNumber){
+  onGuard('confirm-receipt-'+orderId, async ()=>{
+    if(!_receiptPhotoFile){ showToast('ກະລຸນາຖ່າຍຮູບສິນຄ້າກ່ອນ'); return; }
+    const btn = document.getElementById('receiptConfirmBtn');
+    btn.disabled = true; btn.textContent = 'ກຳລັງອັບໂຫລດ...';
+    const progress = document.getElementById('receiptUploadProgress');
+    try{
+      const photoUrl = await sbUploadWithProgress('khaidee-products', `receipt_${orderId}_photo_${Date.now()}_${_receiptPhotoFile.name}`, _receiptPhotoFile, (p)=>{ if(progress) progress.textContent = `ອັບໂຫລດຮູບ ${p}%`; });
+      let videoUrl = null;
+      if(_receiptVideoFile){
+        videoUrl = await sbUploadWithProgress('khaidee-products', `receipt_${orderId}_video_${Date.now()}_${_receiptVideoFile.name}`, _receiptVideoFile, (p)=>{ if(progress) progress.textContent = `ອັບໂຫລດວິດີໂອ ${p}%`; });
+      }
+      if(progress) progress.textContent = '';
+      await sbRPC('customer_confirm_received', {p_customer_id: STATE.customer.id, p_order_id: orderId, p_photo_url: photoUrl, p_video_url: videoUrl});
+      closeModal('modalConfirmReceipt');
+      showToast('✅ ຢືນຢັນຮັບເຄື່ອງແລ້ວ ຂອບໃຈທີ່ຊື້ສິນຄ້າກັບ KhaiDee');
+      openOrderDetail(orderId);
+      if(typeof loadOrders==='function') loadOrders();
+    }catch(e){
+      showToast('ບໍ່ສຳເລັດ: ' + e.message);
+      btn.disabled = false; btn.textContent = '✅ ຢືນຢັນຮັບເຄື່ອງ';
+    }
+  });
 }
 // Groups the 6 real statuses into the 4 tabs the customer/admin actually think in terms of.
 const ORDER_TABS = [
   {key:'pending', ico:'🕐', lbl:'ລໍຖ້າດຳເນີນການ', match:['pending','paid','packing']},
-  {key:'shipping', ico:'🚚', lbl:'ກຳລັງຂົນສົ່ງ', match:['shipping']},
+  {key:'shipping', ico:'🚚', lbl:'ກຳລັງຂົນສົ່ງ', match:['shipping','arrived']},
   {key:'delivered', ico:'✅', lbl:'ສຳເລັດ', match:['delivered']},
   {key:'cancelled', ico:'✕', lbl:'ຍົກເລີກ', match:['cancelled']}
 ];
@@ -2968,6 +3016,7 @@ const ORDER_STATUS_STEPS = [
   {key:'paid', ico:'💰', lbl:'ຊຳລະແລ້ວ'},
   {key:'packing', ico:'📦', lbl:'ແພັກເຄື່ອງ'},
   {key:'shipping', ico:'🚚', lbl:'ກຳລັງສົ່ງ'},
+  {key:'arrived', ico:'📍', lbl:'ຮອດແລ້ວ'},
   {key:'delivered', ico:'✅', lbl:'ສຳເລັດ'}
 ];
 // COD orders skip real payment before packing (the seller packs/ships without waiting for a
@@ -3044,6 +3093,12 @@ async function openOrderDetail(orderId){
           ${o.fulfillment_steps.map(s=>`<div style="text-align:center;"><img src="${s.photo_url}" onclick="window.open('${s.photo_url}','_blank')" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--line);"><div class="hint" style="margin-top:2px; font-size:10.5px;">${s.label||''}</div></div>`).join('')}
         </div>` : ''}
         ${o.tracking_url ? `<a href="${o.tracking_url}" target="_blank" class="btn btn-ghost btn-sm" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">🔗 ຕິດຕາມພັດສະດຸກັບຂົນສົ່ງ</a>` : ''}
+        ${(o.receipt_photo_url) ? `
+        <h4 style="font-size:13px; margin:14px 0 4px;">📷 ຫຼັກຖານການຮັບເຄື່ອງ (ຈາກທ່ານ)</h4>
+        <div style="display:flex; gap:8px;">
+          <img src="${o.receipt_photo_url}" onclick="window.open('${o.receipt_photo_url}','_blank')" style="width:72px; height:72px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid var(--line);">
+          ${o.receipt_video_url ? `<video src="${o.receipt_video_url}" controls style="width:120px; height:72px; border-radius:8px; border:1px solid var(--line);"></video>` : ''}
+        </div>` : ''}
         <h4 style="font-size:13px; margin:14px 0 4px;">🛍️ ລາຍການສິນຄ້າ</h4>
         ${(o.items||[]).map(i=>`
           <div class="od-item" onclick="event.stopPropagation();">
@@ -3181,7 +3236,11 @@ async function loadReturnBox(o, orderId){
   catch(e){ return; } // RPC not deployed yet — just don't show the return UI rather than erroring
   if(!ret){
     if(o.status==='delivered'){
-      box.innerHTML = `<button class="btn btn-ghost" style="margin-top:12px; color:var(--maroon); border-color:var(--maroon);" onclick="openReturnRequestModal(${orderId},'${o.order_number}',${o.total})">🔄 ຂໍຄືນສິນຄ້າ/ເງິນຄືນ</button>`;
+      // COD customers pay cash at the door, so the ask reads as "return the item" (the refund of
+      // the cash they handed over is the same underlying flow, just phrased for what they did).
+      // Customers who already paid by QR/wallet/transfer see the money explicitly named.
+      const label = o.payment_method==='cod' ? '🔄 ຂໍຄືນສິນຄ້າ' : '🔄 ຂໍຄືນສິນຄ້າ ແລະ ຂໍເງິນຄືນ';
+      box.innerHTML = `<button class="btn btn-ghost" style="margin-top:12px; color:var(--maroon); border-color:var(--maroon);" onclick="openReturnRequestModal(${orderId},'${o.order_number}',${o.total})">${label}</button>`;
     }
     return;
   }

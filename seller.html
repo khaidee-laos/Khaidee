@@ -151,6 +151,7 @@ header.top{background:linear-gradient(135deg,var(--maroon),var(--maroon-dark)); 
 .status-delivered{background:#E9F5EC; color:var(--ok);}
 .status-cancelled{background:#FBEAEA; color:var(--danger);}
 .status-shipping{background:#FFF3E0; color:var(--warn);}
+.status-arrived{background:#FDEBD3; color:#B9691A;}
 .chiprow{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
 .chiprow button{font-size:10.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--line); background:#fff;}
 .chiprow button.active{background:var(--maroon); color:#fff; border-color:var(--maroon); font-weight:700;}
@@ -993,7 +994,7 @@ async function deleteProduct(id){
 }
 
 /* ============================================================ ORDERS (order items belonging to this seller's products) ============================================================ */
-const STATUS_LABEL = {pending:'ລໍຖ້າແພັກ', confirmed:'ແພັກແລ້ວ', shipping:'ກຳລັງສົ່ງ', delivered:'ສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກ'};
+const STATUS_LABEL = {pending:'ລໍຖ້າແພັກ', confirmed:'ແພັກແລ້ວ', shipping:'ກຳລັງສົ່ງ', arrived:'ຮອດແລ້ວ (ລໍລູກຄ້າຢືນຢັນ)', delivered:'ສົ່ງສຳເລັດ', cancelled:'ຍົກເລີກ'};
 // Real Lao courier companies with a base tracking/branch-lookup URL, so the seller can just pick
 // a name from a dropdown instead of hunting the courier's website themselves. "ອື່ນໆ" (other) falls
 // back to a free-text carrier name + manual tracking link, for couriers not in this short list.
@@ -1016,7 +1017,7 @@ let ORDERS_CACHE = [];
 // finished, and what fell through — instead of one long undifferentiated list.
 const ORDER_GROUPS = [
   {key:'new',       label:'🆕 ອໍເດີໃໝ່',     emptyText:'ບໍ່ມີອໍເດີໃໝ່',        statuses:['pending']},
-  {key:'active',    label:'⏳ ກຳລັງດຳເນີນການ', emptyText:'ບໍ່ມີອໍເດີກຳລັງດຳເນີນການ', statuses:['confirmed','shipping']},
+  {key:'active',    label:'⏳ ກຳລັງດຳເນີນການ', emptyText:'ບໍ່ມີອໍເດີກຳລັງດຳເນີນການ', statuses:['confirmed','shipping','arrived']},
   {key:'delivered', label:'✅ ສົ່ງສຳເລັດ',     emptyText:'ຍັງບໍ່ມີອໍເດີສົ່ງສຳເລັດ',  statuses:['delivered']},
   {key:'cancelled', label:'✕ ຍົກເລີກ',        emptyText:'ບໍ່ມີອໍເດີທີ່ຍົກເລີກ',    statuses:['cancelled']},
 ];
@@ -1055,7 +1056,8 @@ function orderItemCard(i){
           ${(!canArrangeShipment(i) && (i.seller_status==='pending'||i.seller_status==='confirmed')) ? `<div class="hint" style="margin-top:4px; color:var(--warn); font-weight:600;">⏳ ລໍຖ້າຢືນຢັນການຊຳລະເງິນກ່ອນ ຈຶ່ງຈະຈັດການການສົ່ງໄດ້</div>` : ''}
           <div class="chiprow">
             ${(i.seller_status==='pending'||i.seller_status==='confirmed') ? (canArrangeShipment(i) ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">📦 ຈັດການການສົ່ງ</button>` : '') : ''}
-            ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markDelivered(${i.order_item_id})">✅ ລູກຄ້າໄດ້ຮັບແລ້ວ</button>` : ''}
+            ${i.seller_status==='shipping' ? `<button class="active" onclick="openShipmentSheet(${i.order_item_id})">🚚 ເບິ່ງການຈັດສົ່ງ</button><button onclick="markArrived(${i.order_item_id})">📍 ຮອດຜູ້ຮັບແລ້ວ</button>` : ''}
+            ${i.seller_status==='arrived' ? `<span class="hint" style="align-self:center;">📍 ຮອດແລ້ວ — ລໍລູກຄ້າຖ່າຍຮູບ/ວິດີໂອ ແລະ ກົດຢືນຢັນຮັບເຄື່ອງ</span>` : ''}
             ${(i.seller_status==='pending') ? `<button onclick="setItemStatus(${i.order_item_id},'cancelled')" style="color:var(--danger);">✕ ຍົກເລີກ</button>` : ''}
           </div>
         </div>`;
@@ -1095,17 +1097,17 @@ async function setItemStatus(itemId, status){
   try{ await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: status}); renderOrders(); }
   catch(e){ showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
 }
-async function markDelivered(itemId){
-  if(!confirm('ຢືນຢັນວ່າລູກຄ້າໄດ້ຮັບສິນຄ້ານີ້ແລ້ວບໍ? (ແອດມິນຈະກວດສອບ ແລະ ໂອນເງິນເຂົ້າກະເປົາຂອງທ່ານຫລັງຈາກນີ້)')) return;
-  // Reserve a blank tab RIGHT NOW, synchronously, inside the click handler — same trick used on
-  // the customer storefront for the new-order WhatsApp redirect — so the tab isn't blocked by
-  // mobile browsers once we open it a moment later after the RPC call finishes.
-  const waTab = window.open('', '_blank');
+// Seller/courier declares the parcel has physically reached the recipient. This no longer
+// finalizes the order by itself — it unlocks the customer's own "ໄດ້ຮັບເຄື່ອງແລ້ວ" confirm step
+// (photo + optional video) in their app. Actual delivery (and payout release) only happens once
+// the customer confirms, or the auto-confirm safety-net fires after the grace period.
+async function markArrived(itemId){
+  if(!confirm('ຢືນຢັນວ່າພັດສະດຸນີ້ຮອດຜູ້ຮັບແລ້ວບໍ? ລູກຄ້າຈະໄດ້ຮັບການແຈ້ງເຕືອນໃຫ້ຖ່າຍຮູບ/ວິດີໂອ ແລະ ກົດຢືນຢັນຮັບເຄື່ອງໃນແອັບ')) return;
   try{
-    await sbRPC('seller_order_item_set_status', {p_seller_id: STATE.seller.id, p_order_item_id: itemId, p_status: 'delivered'});
+    await sbRPC('seller_order_item_mark_arrived', {p_seller_id: STATE.seller.id, p_order_item_id: itemId});
     renderOrders();
-    notifyAdminReleasePayment(itemId, waTab);
-  }catch(e){ if(waTab) waTab.close(); showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
+    showToast('📍 ແຈ້ງລູກຄ້າແລ້ວ — ລໍການຢືນຢັນຈາກລູກຄ້າ');
+  }catch(e){ showToast('ອັບເດດບໍ່ສຳເລັດ: ' + e.message); }
 }
 // After the seller confirms a customer received their item, ping the admin on WhatsApp to
 // review and release the payout — same pattern as the customer→admin "new order" notification
