@@ -1359,7 +1359,10 @@ async function generateProductDescription(overlay){
   btn.disabled = true; btn.textContent = '⏳ ກຳລັງຂຽນ...';
   try{
     const prompt = `ຂຽນລາຍລະອຽດສິນຄ້າສຳລັບຮ້ານຄ້າອອນລາຍ ເປັນພາສາລາວລ້ວນໆ, ຍາວ 3-5 ປະໂຫຍກ, ໜ້າສົນໃຈ ແລະ ຊັດເຈນ ໃຫ້ລູກຄ້າເຂົ້າໃຈງ່າຍ. ໃຫ້ກ່າວເຖິງຈຸດເດັ່ນ, ການນຳໃຊ້ ຫຼື ປະໂຫຍດຂອງສິນຄ້າ. ຫ້າມແຕ່ງຂໍ້ມູນສະເພາະ (ເຊັ່ນ: ຂະໜາດ, ວັດສະດຸ, ຈຳນວນ) ທີ່ບໍ່ໄດ້ໃຫ້ໄວ້ຂ້າງລຸ່ມ.\n\nຊື່ສິນຄ້າ: ${nameLo}\nໝວດໝູ່: ${catName||'-'}\nລາຄາ: ${price?fmtMoney(Number(price)):'-'}\n\nຕອບກັບແຕ່ຂໍ້ຄວາມລາຍລະອຽດເທົ່ານັ້ນ, ບໍ່ຕ້ອງມີຄຳນຳ ຫຼື ຫົວຂໍ້.`;
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
+    // gemini-2.5-flash was retired for new/unauthorized projects (404 "no longer available to
+    // new users") — switched to gemini-3.6-flash, the current stable/GA Flash model as of Aug
+    // 2026. If this breaks again in the future, check https://ai.google.dev/gemini-api/docs/models
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
