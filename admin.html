@@ -372,7 +372,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="products">🛍️ ສິນຄ້າ</button>
     <button data-tab="categories">📂 ໝວດໝູ່</button>
     <button data-tab="customers">👥 ລູກຄ້າ</button>
-    <button data-tab="sellers">🏪 ຜູ້ຂາຍ</button>
+    <button data-tab="sellers">🏪 ຜູ້ຂາຍ<span id="sellerKycBadge" class="hidden" style="display:inline-block; margin-left:4px; background:var(--danger); color:#fff; border-radius:10px; padding:1px 6px; font-size:11px; font-weight:700;">0</span></button>
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
     <button data-tab="seller_topups">➕ ເຕີມເງິນຜູ້ຂາຍ</button>
     <button data-tab="ai_slip">🤖 ຕຣວດສະລິບ AI<span id="aiSlipBadge" class="hidden" style="display:inline-block; margin-left:4px; background:var(--danger); color:#fff; border-radius:10px; padding:1px 6px; font-size:11px; font-weight:700;">0</span></button>
@@ -645,6 +645,8 @@ async function enterAdmin(){
   switchAdminTab('dashboard');
   pollAiSlipBadge();
   setInterval(pollAiSlipBadge, 30000);
+  pollSellerKycBadge();
+  setInterval(pollSellerKycBadge, 30000);
 }
 // Keeps the 🤖 tab's badge count current even while the admin is on a different tab — actual
 // sound/vibration for a brand-new problem slip comes from the push notification (slip-ai-check
@@ -657,6 +659,14 @@ async function pollAiSlipBadge(){
     ]);
     const issues = [...(c||[]), ...(s||[])].filter(t=> t.status==='pending' && t.slip_url && t.ai_status==='issue').length;
     updateAiSlipBadge(issues);
+  }catch(e){ /* quiet — this is a background poll */ }
+}
+// Same idea as pollAiSlipBadge above, but for seller KYC applications — keeps the 🏪 ຜູ້ຂາຍ
+// tab's red counter current (pending + not-yet-confirmed-ok by AI) even from another tab.
+async function pollSellerKycBadge(){
+  try{
+    STATE.adminSellers = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword});
+    updateSellerKycBadge();
   }catch(e){ /* quiet — this is a background poll */ }
 }
 // gemini_api_key is deliberately excluded from the public site_settings_public view (anyone
@@ -1516,26 +1526,52 @@ async function adminAdjustWallet(id){
 /* ============================================================ SELLERS (KYC approval queue)
    Backend requirements (SQL side, not in this file):
    - sellers table needs: status text ('pending'|'approved'|'rejected'|'suspended') default 'pending',
-     province, district, village, id_card_url, reject_reason, approved_at.
-   - seller_application_submit(p_store_name, p_phone, p_email, p_password, p_province, p_district,
-     p_village, p_id_card_url): INSERTs a seller with status='pending'. Must NOT return a usable session.
+     full_name, province, district, village, id_card_url, selfie_with_id_url, reject_reason,
+     approved_at, auto_approved bool default false.
+   - AI KYC check columns on the SAME sellers row (mirrors how ai_status/ai_amount/etc. already
+     live directly on wallet_transactions rows for the slip checker, rather than a separate
+     table — same pattern here since each application is exactly one sellers row):
+     ai_status text ('pending'|'ok'|'issue'), ai_note text, ai_id_name text (OCR'd name off the
+     card), ai_id_number text (OCR'd ID number, store masked/partial if possible), ai_face_match_score
+     numeric (0-1 likeness between id_card_url and selfie_with_id_url), ai_checked_at timestamptz.
+   - A DB trigger on INSERT into sellers should call a new `seller-kyc-ai-check` edge function
+     (same shape as the existing slip-ai-check trigger) which reads id_card_url + selfie_with_id_url
+     with Gemini vision, OCRs the card, compares the OCR'd name to full_name, compares the two
+     faces for a match score, and checks the card isn't expired/cropped/unreadable. If confidence
+     is high on every check, the function (service role — NOT the admin_seller_approve RPC, since
+     no admin password exists at that point) may set status='approved', approved_at=now(),
+     auto_approved=true directly, skipping the manual queue. Otherwise it leaves status='pending'
+     with ai_status='issue'|'ok' so the admin can see exactly what the AI found. An admin can
+     still suspend an auto-approved seller later via admin_seller_suspend if something looks wrong
+     after the fact — auto-approval is a triage shortcut, not a way to bypass admin oversight.
+   - seller_application_submit(p_store_name, p_full_name, p_phone, p_email, p_password, p_province,
+     p_district, p_village, p_id_card_url, p_selfie_with_id_url, p_withdraw_qr_url, p_terms_accepted):
+     INSERTs a seller with status='pending'. Must NOT return a usable session.
    - seller_login(p_identifier, p_password): must only succeed when status='approved'; otherwise raise
      an exception with a human-readable message (e.g. "ບັນຊີກຳລັງລໍຖ້າການກວດສອບ" / "ຄຳຂໍຖືກປະຕິເສດ").
    - admin_list_sellers(p_password): admin-only, returns every seller row above plus id/created_at.
+     The row's own `id` doubles as both the "application ID" and the "shop ID" — it's the same
+     value used everywhere else (openShop(seller.id), products.seller_id, etc.) and never changes
+     across resubmission/approval/suspension, so it's what admin should search/reference if a
+     seller needs to be looked up later (rule violations, a customer complaint, etc.).
    - admin_seller_approve(p_password, p_seller_id): sets status='approved', approved_at=now().
    - admin_seller_reject(p_password, p_seller_id, p_reason): sets status='rejected', reject_reason.
    - admin_seller_suspend / admin_seller_reactivate(p_password, p_seller_id): toggles status='suspended'/'approved'
      for a seller who was already approved (e.g. policy violation), without deleting their data.
    - admin_reset_seller_password(p_password, p_seller_id, p_new_password): admin-set password reset.
+   - admin_recheck_seller_kyc_ai(p_password, p_seller_id): re-triggers the same Gemini check by
+     hand (mirrors admin_recheck_slip_ai) — useful right after setting/rotating the Gemini API key.
    - Storage: khaidee-seller-kyc bucket should be PRIVATE (unlike khaidee-products) since it holds ID
-     card photos — restrict read access to the admin role via storage RLS. ============================================================ */
+     card photos and face selfies — restrict read access to the admin role via storage RLS. ============================================================ */
 STATE.adminSellers = STATE.adminSellers || [];
 STATE.adminSellerFilter = STATE.adminSellerFilter || 'pending';
+STATE.adminSellerSearch = STATE.adminSellerSearch || '';
 async function renderAdminSellers(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   try{
     STATE.adminSellers = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword});
+    updateSellerKycBadge();
     let nameReqs = [];
     try{ nameReqs = await sbRPC('admin_list_name_change_requests', {p_password: STATE.adminPassword}); }catch(e){}
     body.innerHTML = (nameReqs.length ? `<div style="margin-bottom:14px;">
@@ -1552,6 +1588,7 @@ async function renderAdminSellers(){
         </div>`).join('')}
     </div>` : '') +
     `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditSellerProfile(null)">➕ ເພີ່ມຮ້ານໃໝ່</button>
+    <div class="field" style="margin-bottom:10px;"><input id="adminSellerSearchInput" placeholder="🔍 ຄົ້ນຫາ ID ຄຳຂໍ/ຮ້ານ, ຊື່ຮ້ານ, ຊື່ຜູ້ສະໝັກ, ເບີໂທ, ອີເມວ..." value="${STATE.adminSellerSearch}" oninput="onAdminSellerSearch(this.value)"></div>
     <div class="chiprow" style="margin-bottom:10px;">
       ${['pending','approved','suspended','rejected','all'].map(s=>`<button class="${STATE.adminSellerFilter===s?'active':''}" onclick="adminSellerFilterSet('${s}')">${{pending:'ລໍຖ້າກວດສອບ',approved:'ອະນຸມັດແລ້ວ',suspended:'ຖືກລະງັບ',rejected:'ປະຕິເສດ',all:'ທັງໝົດ'}[s]}</button>`).join('')}
     </div>
@@ -1564,37 +1601,121 @@ async function adminReviewNameChange(id, approve){
   try{ await sbRPC('admin_review_name_change', {p_password:STATE.adminPassword, p_request_id:id, p_approve:approve, p_note:note}); renderAdminSellers(); }
   catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
-function adminSellerFilterSet(s){ STATE.adminSellerFilter = s; renderAdminSellers(); }
+function adminSellerFilterSet(s){ STATE.adminSellerFilter = s; renderAdminSellerList(); }
+// Debounced-free live search across the fields an admin would actually be handed when a
+// complaint/rule-violation comes in: application/shop ID, store name, applicant's real name,
+// phone, or email — so a specific person can be found fast without paging through the list.
+function onAdminSellerSearch(v){ STATE.adminSellerSearch = v; renderAdminSellerList(); }
+function filterAdminSellers(list){
+  const f = STATE.adminSellerFilter;
+  let out = f==='all' ? list : list.filter(s=>s.status===f);
+  const q = (STATE.adminSellerSearch||'').trim().toLowerCase();
+  if(q) out = out.filter(s=> String(s.id).includes(q) || (s.store_name||'').toLowerCase().includes(q) || (s.full_name||'').toLowerCase().includes(q) || (s.phone||'').toLowerCase().includes(q) || (s.email||'').toLowerCase().includes(q));
+  return out;
+}
+// Compact photo-tile grid — same visual pattern as the ເຕີມເງິນ tile-grid — so the admin
+// scans applications by thumbnail first and only opens the ones that need a closer look.
+function sellerAiDot(s){
+  if(s.auto_approved) return '#12938A'; // teal: AI auto-approved this one, no human ever reviewed it
+  if(s.ai_status==='issue') return 'var(--danger)';
+  if(s.status==='approved') return 'var(--ok)';
+  if(s.status==='rejected') return 'var(--danger)';
+  if(s.status==='suspended') return 'var(--warn)';
+  return '#B9862C'; // pending, not flagged
+}
 function renderAdminSellerList(){
   const wrap = document.getElementById('adminSellerList');
   if(!wrap) return;
-  const f = STATE.adminSellerFilter;
-  const list = f==='all' ? STATE.adminSellers : STATE.adminSellers.filter(s=>s.status===f);
+  const list = filterAdminSellers(STATE.adminSellers);
   if(!list.length){ wrap.innerHTML = '<div class="empty">ບໍ່ມີລາຍການ 🏪</div>'; return; }
+  wrap.innerHTML = `<div class="tile-grid">${list.map(s=>`
+    <div class="tile" onclick="openSellerApplicationDetail('${s.id}')">
+      <div class="tile-dot" style="background:${sellerAiDot(s)}" title="${s.auto_approved?'AI ອະນຸມັດອັດຕະໂນມັດ':(s.ai_status==='issue'?'AI ພົບຈຸດສົງໄສ':'')}"></div>
+      <div class="tile-img">${s.id_card_url?`<img src="${s.id_card_url}">`:(s.logo_url?`<img src="${s.logo_url}">`:'🏪')}</div>
+      <div class="tile-title">${s.store_name}</div>
+      <div class="tile-sub">#${s.id}${s.auto_approved?' 🤖':''}</div>
+    </div>`).join('')}</div>`;
+}
+// Full detail popup — laid out like the application form itself (every field the applicant
+// submitted), both KYC photos side by side, the AI check results, and every action button —
+// so the admin never has to jump between screens to decide on one application.
+function openSellerApplicationDetail(id){
+  const s = (STATE.adminSellers||[]).find(x=>String(x.id)===String(id));
+  if(!s) return;
   const statusClass = {pending:'status-pending', approved:'status-approved', rejected:'status-rejected', suspended:'status-shipping'};
   const statusLabel = {pending:'ລໍຖ້າກວດສອບ', approved:'ອະນຸມັດແລ້ວ', rejected:'ປະຕິເສດ', suspended:'ຖືກລະງັບ'};
-  wrap.innerHTML = list.map(s=>`
-    <div class="admin-list-item">
-      <div class="top">
-        <span class="title">${s.logo_url?`<img src="${s.logo_url}" style="width:22px; height:22px; border-radius:6px; object-fit:cover; vertical-align:middle; margin-right:4px;">`:''}${s.store_name} ${sellerVerifiedBadge(s)}</span>
-        <span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span>
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>📋 ໃບສະໝັກຜູ້ຂາຍ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="top" style="margin-bottom:8px;"><span class="title">${s.store_name} ${sellerVerifiedBadge(s)}</span><span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span></div>
+    <div class="hint" style="line-height:1.8;">
+      🆔 ID ຄຳຂໍ/ຮ້ານ: <b>#${s.id}</b> <span style="opacity:.7;">(ໃຊ້ຄົ້ນຫາໄດ້ຖ້າມີການລະເມີດກົດ ຫຼື ລູກຄ້າຮ້ອງຮຽນ)</span><br>
+      👤 ຊື່ຜູ້ສະໝັກ (ຕາມບັດ): ${s.full_name||'-'}<br>
+      📞 ${s.phone||'-'} • ✉️ ${s.email||'-'}<br>
+      📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')||'-'}<br>
+      🗓️ ສະໝັກເມື່ອ: ${s.created_at ? new Date(s.created_at).toLocaleString('lo-LA') : '-'}
+      ${s.auto_approved?'<br>🤖 <b style="color:#12938A;">ອະນຸມັດອັດຕະໂນມັດໂດຍ AI</b> (ບໍ່ມີແອດມິນກວດສອບດ້ວຍມື)':''}
+    </div>
+    ${s.reject_reason ? `<div class="hint" style="color:var(--danger); margin-top:6px;">ເຫດຜົນປະຕິເສດ: ${s.reject_reason}</div>` : ''}
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px;">
+      <div>
+        <div class="hint" style="margin:0 0 4px;">ບັດປະຈຳຕົວ</div>
+        ${s.id_card_url?`<img src="${s.id_card_url}" onclick="window.open('${s.id_card_url}','_blank')" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer;">`:'<div class="hint">ບໍ່ມີ</div>'}
       </div>
-      <div class="hint">${s.phone||'-'} • ${s.email||'-'} • 👥 ${s.follower_count||0} ຜູ້ຕິດຕາມ</div>
-      <div class="hint">📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')}</div>
-      <div class="hint">💰 Wallet (ຖອນໄດ້): <b>${fmtMoney(s.wallet_balance||0)}</b> (ຫັກຄ່າທຳນຽມ 5% ອັດຕະໂນມັດແລ້ວ) • 💵 ເງິນສົດ COD ທີ່ເກັບໄປແລ້ວ (ຖອນຜ່ານລະບົບບໍ່ໄດ້): <b>${fmtMoney(s.cod_cash_collected||0)}</b></div>
-      <div class="hint">ສະໝັກເມື່ອ: ${s.created_at ? new Date(s.created_at).toLocaleString('lo-LA') : '-'}</div>
-      ${s.reject_reason ? `<div class="hint" style="color:var(--danger);">ເຫດຜົນປະຕິເສດ: ${s.reject_reason}</div>` : ''}
-      ${s.id_card_url ? `<img src="${s.id_card_url}" onclick="window.open('${s.id_card_url}','_blank')" style="width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--line); margin-top:8px; cursor:pointer;">` : ''}
-      <div class="chiprow">
-        <button onclick="adminEditSellerProfile('${s.id}')">✏️ ຂໍ້ມູນ/ໂລໂກ້/ຮູບປົກ</button>
-        ${s.status==='pending' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminRejectSeller('${s.id}')" style="color:var(--danger);">❌ ປະຕິເສດ</button>` : ''}
-        ${s.status==='approved' ? `<button onclick="adminSuspendSeller('${s.id}')" style="color:var(--warn);">🚫 ລະງັບ</button><button onclick="adminResetSellerPw('${s.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>` : ''}
-        ${s.status==='suspended' ? `<button onclick="adminReactivateSeller('${s.id}')" style="color:var(--ok);">✅ ເປີດຄືນ</button>` : ''}
-        ${s.status==='rejected' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button>` : ''}
-        ${s.status==='approved' ? `<button onclick="adminToggleSellerVerified('${s.id}', ${!s.is_verified})" style="color:var(--gold);">${s.is_verified?'✖️ ຖອນການຢືນຢັນ':'🏆 ຢືນຢັນຮ້ານ (ຂາຍດີ)'}</button>` : ''}
-        <button onclick="adminDeleteSeller('${s.id}')" style="color:var(--danger);">🗑️ ລຶບຮ້ານ</button>
+      <div>
+        <div class="hint" style="margin:0 0 4px;">ຮູບຄູ່ກັບບັດ</div>
+        ${s.selfie_with_id_url?`<img src="${s.selfie_with_id_url}" onclick="window.open('${s.selfie_with_id_url}','_blank')" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer;">`:'<div class="hint">ບໍ່ມີ (ຄຳຂໍເກົ່າ ກ່ອນເພີ່ມຮູບຄູ່)</div>'}
       </div>
-    </div>`).join('');
+    </div>
+
+    <div class="top" style="margin-top:14px;"><span class="title" style="font-size:12.5px;">🤖 ຜົນກວດ AI</span>${aiKycStatusPill(s)}</div>
+    ${s.ai_checked_at ? `<div class="hint" style="margin-top:6px; line-height:1.8; background:var(--bg-soft,#faf9f7); padding:8px 10px; border-radius:8px;">
+        📝 ຊື່ອ່ານໄດ້ຈາກບັດ: <b>${s.ai_id_name||'-'}</b>${s.ai_id_name && s.full_name && s.ai_id_name.trim().toLowerCase()!==s.full_name.trim().toLowerCase()?' <span style="color:var(--danger); font-weight:700;">(ບໍ່ກົງກັບຊື່ທີ່ປ້ອນ!)</span>':''}<br>
+        🔢 ເລກບັດ: ${s.ai_id_number||'-'}<br>
+        🙂 ຄວາມກົງກັນຂອງໃບໜ້າ: ${s.ai_face_match_score!=null?Math.round(s.ai_face_match_score*100)+'%':'-'}<br>
+        ${s.ai_note?`💬 ${s.ai_note}`:''}
+      </div>` : `<div class="hint" style="margin-top:6px;">AI ຍັງບໍ່ໄດ້ກວດຄຳຂໍນີ້ (ອາດກຳລັງປະມວນຜົນຢູ່ ຫຼື ຍັງບໍ່ໄດ້ຕັ້ງ Gemini API Key)</div>`}
+    <button class="btn btn-ghost" style="margin-top:8px;" onclick="adminRecheckSellerKycAi('${s.id}', this)">🔄 ${s.ai_checked_at?'ກວດຄືນດ້ວຍ AI':'ກວດດ້ວຍ AI ດຽວນີ້'}</button>
+
+    ${s.withdraw_qr_url?`<div class="hint" style="margin:12px 0 4px;">QR ຮັບເງິນ</div><img src="${s.withdraw_qr_url}" style="width:100px; height:100px; object-fit:cover; border-radius:8px; border:1px solid var(--line); cursor:pointer;" onclick="window.open('${s.withdraw_qr_url}','_blank')">`:''}
+
+    <div class="chiprow" style="margin-top:16px;">
+      <button onclick="adminEditSellerProfile('${s.id}')">✏️ ຂໍ້ມູນ/ໂລໂກ້/ຮູບປົກ</button>
+      ${s.status==='pending' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminRejectSeller('${s.id}')" style="color:var(--danger);">❌ ປະຕິເສດ</button>` : ''}
+      ${s.status==='approved' ? `<button onclick="adminSuspendSeller('${s.id}')" style="color:var(--warn);">🚫 ລະງັບ</button><button onclick="adminResetSellerPw('${s.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>` : ''}
+      ${s.status==='suspended' ? `<button onclick="adminReactivateSeller('${s.id}')" style="color:var(--ok);">✅ ເປີດຄືນ</button>` : ''}
+      ${s.status==='rejected' ? `<button onclick="adminApproveSeller('${s.id}')" style="color:var(--ok);">✅ ອະນຸມັດ</button>` : ''}
+      ${s.status==='approved' ? `<button onclick="adminToggleSellerVerified('${s.id}', ${!s.is_verified})" style="color:var(--gold);">${s.is_verified?'✖️ ຖອນການຢືນຢັນ':'🏆 ຢືນຢັນຮ້ານ (ຂາຍດີ)'}</button>` : ''}
+      <button onclick="adminDeleteSeller('${s.id}')" style="color:var(--danger);">🗑️ ລຶບຮ້ານ</button>
+    </div>
+    <div class="hint" style="margin-top:14px; word-break:break-all;">💰 Wallet (ຖອນໄດ້): <b>${fmtMoney(s.wallet_balance||0)}</b> • 💵 ເງິນສົດ COD ທີ່ເກັບໄປແລ້ວ: <b>${fmtMoney(s.cod_cash_collected||0)}</b></div>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+}
+function aiKycStatusPill(s){
+  if(s.auto_approved) return `<span class="status-pill status-approved">🤖 ອະນຸມັດອັດຕະໂນມັດ</span>`;
+  if(s.ai_status==='ok') return `<span class="status-pill status-approved">✅ ປົກກະຕິ</span>`;
+  if(s.ai_status==='issue') return `<span class="status-pill status-rejected">⚠️ ພົບຈຸດສົງໄສ</span>`;
+  return `<span class="status-pill status-pending">⏳ ຍັງບໍ່ໄດ້ກວດ</span>`;
+}
+// Manually re-triggers the seller-kyc-ai-check edge function by hand — same idea as
+// aiSlipRecheck, useful right after setting/rotating the Gemini API key or if a check errored.
+async function adminRecheckSellerKycAi(id, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ ກຳລັງກວດ...'; }
+  try{
+    await sbRPC('admin_recheck_seller_kyc_ai', {p_password: STATE.adminPassword, p_seller_id: id});
+    showToast('ສົ່ງໃຫ້ AI ກວດແລ້ວ, ລໍຖ້າ 5-10 ວິນາທີແລ້ວກົດໂຫລດຄືນ');
+    setTimeout(()=>{ document.querySelectorAll('.overlay.show').forEach(o=>o.remove()); renderAdminSellers(); }, 6000);
+  }catch(e){ showToast('ຜິດພາດ: ' + e.message); if(btn){ btn.disabled=false; btn.textContent='🔄 ກວດດ້ວຍ AI'; } }
+}
+// Badge on the 🏪 ຜູ້ຂາຍ tab button — counts applications waiting on a human: still pending
+// AND either the AI hasn't checked yet or flagged an issue (auto-approved ones don't need eyes).
+function updateSellerKycBadge(){
+  const badge = document.getElementById('sellerKycBadge'); if(!badge) return;
+  const n = (STATE.adminSellers||[]).filter(s=> s.status==='pending' && s.ai_status!=='ok').length;
+  badge.textContent = n; badge.classList.toggle('hidden', !n);
 }
 // Admin-only endorsement, separate from a seller's KYC approval status: this is the "trusted
 // by the platform" mark (shown to customers as sellerVerifiedBadge) rather than a login gate.
@@ -1650,27 +1771,27 @@ function adminEditSellerProfile(id){
 }
 async function adminDeleteSeller(id){
   if(!confirm('ລຶບຮ້ານນີ້? ສິນຄ້າຂອງຮ້ານຈະບໍ່ຖືກລຶບ ແຕ່ຈະບໍ່ມີເຈົ້າຂອງຮ້ານອີກຕໍ່ໄປ')) return;
-  try{ await sbRPC('admin_delete_seller', {p_password:STATE.adminPassword, p_seller_id:id}); renderAdminSellers(); }
+  try{ await sbRPC('admin_delete_seller', {p_password:STATE.adminPassword, p_seller_id:id}); document.querySelectorAll('.overlay.show').forEach(o=>o.remove()); renderAdminSellers(); }
   catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminApproveSeller(id){
   if(!confirm('ອະນຸມັດຜູ້ຂາຍນີ້? ຮ້ານຄ້ານີ້ຈະສາມາດເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້')) return;
-  try{ await sbRPC('admin_seller_approve', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
+  try{ await sbRPC('admin_seller_approve', {p_password: STATE.adminPassword, p_seller_id: id}); document.querySelectorAll('.overlay.show').forEach(o=>o.remove()); renderAdminSellers(); }
   catch(e){ showToast('ອະນຸມັດບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminRejectSeller(id){
   const reason = prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຈະສະແດງໃຫ້ຜູ້ຂາຍເຫັນ):');
   if(reason===null) return;
-  try{ await sbRPC('admin_seller_reject', {p_password: STATE.adminPassword, p_seller_id: id, p_reason: reason}); renderAdminSellers(); }
+  try{ await sbRPC('admin_seller_reject', {p_password: STATE.adminPassword, p_seller_id: id, p_reason: reason}); document.querySelectorAll('.overlay.show').forEach(o=>o.remove()); renderAdminSellers(); }
   catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminSuspendSeller(id){
   if(!confirm('ລະງັບການຂາຍຂອງຮ້ານນີ້ຊົ່ວຄາວ?')) return;
-  try{ await sbRPC('admin_seller_suspend', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
+  try{ await sbRPC('admin_seller_suspend', {p_password: STATE.adminPassword, p_seller_id: id}); document.querySelectorAll('.overlay.show').forEach(o=>o.remove()); renderAdminSellers(); }
   catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminReactivateSeller(id){
-  try{ await sbRPC('admin_seller_reactivate', {p_password: STATE.adminPassword, p_seller_id: id}); renderAdminSellers(); }
+  try{ await sbRPC('admin_seller_reactivate', {p_password: STATE.adminPassword, p_seller_id: id}); document.querySelectorAll('.overlay.show').forEach(o=>o.remove()); renderAdminSellers(); }
   catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function adminResetSellerPw(id){

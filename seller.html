@@ -509,12 +509,16 @@ function showAuthScreen(mode){
         <div class="field"><label>ເມືອງ</label><select id="sRegDistrict">${sellerDistrictOptions(LAOS_PROVINCES[0], null)}</select></div>
         <div class="field"><label>ບ້ານ</label><input id="sRegVillage" placeholder="ພິມຊື່ບ້ານ"></div>
       </div>
-      <div class="field"><label>ຮູບຖ່າຍບັດປະຈຳຕົວ (ຖືບັດຄູ່ກັບໜ້າ) *</label><input type="file" id="sRegIdCard" accept="image/*" capture="environment" onchange="onSellerIdCardChange()"></div>
+      <div class="field"><label>ຊື່ ແລະ ນາມສະກຸນ (ຕາມບັດປະຈຳຕົວ) *</label><input id="sRegFullName" placeholder="ຊື່ຈິງຕາມທີ່ປາກົດຢູ່ໃນບັດ"></div>
+      <div class="field"><label>ຮູບຖ່າຍບັດປະຈຳຕົວ (ຖ່າຍໃຫ້ເຫັນຂໍ້ມູນຊັດເຈນ ບໍ່ເບົ້າ) *</label><input type="file" id="sRegIdCard" accept="image/*" capture="environment" onchange="onSellerIdCardChange()"></div>
       <div id="sRegIdPreview"></div>
+      <div class="field"><label>ຮູບຖ່າຍຕົນເອງຄູ່ກັບບັດ (ໃບໜ້າ+ບັດ ຕ້ອງເຫັນຊັດທັງສອງຢ່າງ) *</label><input type="file" id="sRegSelfieWithId" accept="image/*" capture="user" onchange="onSellerSelfieChange()"></div>
+      <div id="sRegSelfiePreview"></div>
+      <div class="hint" style="margin:-6px 0 12px;">🤖 AI ຈະກວດຮູບບັດ ແລະ ຮູບຄູ່ ໂດຍອັດຕະໂນມັດ ເພື່ອຢືນຢັນວ່າເປັນຄົນດຽວກັນ — ຖ່າຍໃນທີ່ແຈ້ງ ບໍ່ມີແສງສະທ້ອນ ຈະຊ່ວຍໃຫ້ຜົນກວດແມ່ນຍຳ ແລະ ໄວຂຶ້ນ</div>
       <div class="field"><label>ຮູບ QR Code ຮັບເງິນ (ສຳລັບຖອນເງິນ)</label><input type="file" id="sRegQr" accept="image/*" onchange="onSellerQrChange()"></div>
       <div id="sRegQrPreview"></div>
       <div class="hint" style="margin:-6px 0 12px;">💡 ໃສ່ໄວ້ນຳຕັ້ງແຕ່ຕອນສະໝັກ ຈະຊ່ວຍໃຫ້ຖອນເງິນຄັ້ງຕໍ່ໄປໄວຂຶ້ນ ບໍ່ຕ້ອງຄົ້ນຫາຮູບໃໝ່ທຸກຄັ້ງ (ຫຼືຈະໃສ່ພາຍຫຼັງຢູ່ໜ້າ "ບັນຊີ" ກໍໄດ້)</div>
-      <div class="hint" style="margin:10px 0 12px;">📌 ເມື່ອກົດ "ສົ່ງຄຳຂໍສະໝັກ" ຂໍ້ມູນຂອງທ່ານຈະຖືກສົ່ງເຂົ້າລະບົບ ແລະ ຈະເປີດ WhatsApp ໃຫ້ອັດຕະໂນມັດເພື່ອແຈ້ງແອດມິນກວດສອບ ແລະ ຢືນຢັນຕົວຕົນ — ໄດ້ຮັບອະນຸມັດແລ້ວທ່ານຈຶ່ງຈະໃຊ້ອີເມວ/ລະຫັດຜ່ານຂ້າງເທິງເຂົ້າສູ່ລະບົບ ແລະ ໂພສສິນຄ້າໄດ້</div>
+      <div class="hint" style="margin:10px 0 12px;">📌 ເມື່ອກົດ "ສົ່ງຄຳຂໍສະໝັກ" ຂໍ້ມູນ ແລະ ຮູບຂອງທ່ານຈະຖືກສົ່ງໃຫ້ AI ກວດສອບທັນທີ — ຖ້າຂໍ້ມູນຄົບຖ້ວນ ຊັດເຈນ ແລະ ຮູບຄູ່ກົງກັບບັດ ລະບົບອາດ<b>ອະນຸມັດອັດຕະໂນມັດ</b>ໂດຍບໍ່ຕ້ອງລໍຖ້າແອດມິນ; ຖ້າ AI ພົບຈຸດສົງໄສ ແອດມິນຈະເປັນຄົນກວດສອບ ແລະ ຢືນຢັນຕົວຕົນອີກຄັ້ງ</div>
       <button type="button" class="btn btn-ghost" style="margin-bottom:10px;" onclick="showSellerGuide()">📖 ອ່ານຄຳແນະນຳ / ເງື່ອນໄຂການເປັນຜູ້ຂາຍກ່ອນ</button>
       <label style="display:flex; align-items:flex-start; gap:8px; margin:4px 0 14px; font-size:12.5px; line-height:1.6; cursor:pointer;">
         <input type="checkbox" id="sRegAcceptTerms" style="margin-top:3px; width:16px; height:16px; flex-shrink:0;">
@@ -529,7 +533,7 @@ function showAuthScreen(mode){
       <div style="text-align:center;">
         <div class="pending-icon">⏳</div>
         <div style="font-weight:700; font-size:14.5px; margin-bottom:6px;">ຄຳຂໍສະໝັກຂອງທ່ານຖືກສົ່ງແລ້ວ</div>
-        <div class="hint" style="margin-bottom:18px;">ແອດມິນຈະກວດສອບຂໍ້ມູນ ແລະ ຮູບບັດປະຈຳຕົວຂອງທ່ານ ປົກກະຕິໃຊ້ເວລາ 1-2 ວັນ. ເມື່ອອະນຸມັດແລ້ວ ທ່ານຈະສາມາດເຂົ້າສູ່ລະບົບດ້ວຍອີເມວ/ລະຫັດຜ່ານທີ່ໄດ້ຕັ້ງໄວ້.</div>
+        <div class="hint" style="margin-bottom:18px;">🤖 AI ກວດຂໍ້ມູນ ແລະ ຮູບຂອງທ່ານທັນທີ. ຖ້າຄົບຖ້ວນ ຊັດເຈນ ອາດອະນຸມັດອັດຕະໂນມັດພາຍໃນບໍ່ຈົນນາທີ — ຖ້າ AI ພົບຈຸດສົງໄສ ແອດມິນຈະກວດສອບອີກຄັ້ງ ປົກກະຕິບໍ່ເກີນ 1-2 ວັນ. ເມື່ອອະນຸມັດແລ້ວ ທ່ານຈະສາມາດເຂົ້າສູ່ລະບົບດ້ວຍອີເມວ/ລະຫັດຜ່ານທີ່ໄດ້ຕັ້ງໄວ້.</div>
         <a href="https://wa.me/${num}" target="_blank" class="btn btn-gold" style="text-decoration:none; margin-bottom:10px;">💬 ສອບຖາມສະຖານະຜ່ານ WhatsApp</a>
         <button class="btn btn-ghost" id="pendingToLogin">ກັບໄປໜ້າເຂົ້າສູ່ລະບົບ</button>
       </div>`;
@@ -557,6 +561,14 @@ function onSellerIdCardChange(){
   if(!f){ prev.innerHTML=''; return; }
   prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="ຮູບບັດປະຈຳຕົວ">`;
 }
+let sellerSelfieFile = null;
+function onSellerSelfieChange(){
+  const f = document.getElementById('sRegSelfieWithId').files[0];
+  sellerSelfieFile = f || null;
+  const prev = document.getElementById('sRegSelfiePreview');
+  if(!f){ prev.innerHTML=''; return; }
+  prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="ຮູບຖ່າຍຄູ່ກັບບັດ">`;
+}
 let sellerQrFile = null;
 function onSellerQrChange(){
   const f = document.getElementById('sRegQr').files[0];
@@ -578,6 +590,7 @@ async function doSellerLogin(){
 }
 async function doSellerRegister(){
   const store = document.getElementById('sRegStore').value.trim();
+  const fullName = document.getElementById('sRegFullName').value.trim();
   const phone = document.getElementById('sRegPhone').value.trim();
   const email = document.getElementById('sRegEmail').value.trim();
   const pw = document.getElementById('sRegPw').value;
@@ -585,24 +598,42 @@ async function doSellerRegister(){
   const district = document.getElementById('sRegDistrict').value;
   const village = document.getElementById('sRegVillage').value.trim();
   const errBox = document.getElementById('authScreenErr');
-  if(!store||!phone||!email||pw.length<6||!village){ errBox.innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
+  if(!store||!fullName||!phone||!email||pw.length<6||!village){ errBox.innerHTML = `<div class="err">ກະລຸນາປ້ອນຂໍ້ມູນໃຫ້ຄົບ (ລະຫັດຜ່ານຢ່າງໜ້ອຍ 6 ໂຕ)</div>`; return; }
   if(!document.getElementById('sRegAcceptTerms').checked){ errBox.innerHTML = `<div class="err">ກະລຸນາຕິກຍອມຮັບເງື່ອນໄຂການເປັນຜູ້ຂາຍກ່ອນສົ່ງຄຳຂໍສະໝັກ</div>`; return; }
   if(!sellerIdCardFile){ errBox.innerHTML = `<div class="err">ກະລຸນາອັບໂຫລດຮູບຖ່າຍບັດປະຈຳຕົວ</div>`; return; }
+  if(!sellerSelfieFile){ errBox.innerHTML = `<div class="err">ກະລຸນາອັບໂຫລດຮູບຖ່າຍຕົນເອງຄູ່ກັບບັດ (ໃຫ້ AI ຢືນຢັນວ່າເປັນຄົນດຽວກັນ)</div>`; return; }
   const btn = document.getElementById('sRegSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...';
   try{
     // KYC bucket — recommend making this a PRIVATE bucket (not "khaidee-products") with
-    // storage RLS so only the admin RPC/service role can read it, since it holds ID card photos.
-    const idCardUrl = await sbUpload('khaidee-seller-kyc', `app_${Date.now()}_${sellerIdCardFile.name}`, sellerIdCardFile);
+    // storage RLS so only the admin RPC/service role can read it, since it holds ID card +
+    // face photos. Both images are uploaded separately so the AI check (and any admin viewing
+    // the application) can inspect the card and the "liveness" selfie side by side.
+    const idCardUrl = await sbUpload('khaidee-seller-kyc', `app_id_${Date.now()}_${sellerIdCardFile.name}`, sellerIdCardFile);
+    const selfieUrl = await sbUpload('khaidee-seller-kyc', `app_selfie_${Date.now()}_${sellerSelfieFile.name}`, sellerSelfieFile);
     let qrUrl = null;
     if(sellerQrFile){ qrUrl = await sbUpload('khaidee-products', `seller_qr_reg_${Date.now()}_${sellerQrFile.name}`, sellerQrFile); }
     // seller_application_submit must INSERT a seller row with status='pending' and must NOT
-    // return a usable session — the account only becomes usable once an admin approves it.
+    // return a usable session — the account only becomes usable once status flips to 'approved'.
+    // NEW params: p_full_name (the applicant's real/legal name as printed on the ID card — used
+    // by the AI check to compare against what it OCRs off the card) and p_selfie_with_id_url.
+    // Inserting this row should fire a DB trigger (mirroring the existing slip-ai-check trigger)
+    // that calls a new `seller-kyc-ai-check` edge function. That function should, with Gemini
+    // vision: (1) OCR the ID card (name/ID number/expiry), (2) compare the OCR'd name against
+    // p_full_name, (3) compare the face in id_card_url against the face in selfie_with_id_url
+    // for a match/likeness score, (4) check the card isn't expired/cropped/unreadable. Write the
+    // results onto this seller row (ai_status: 'ok'|'issue', ai_note, ai_id_name, ai_id_number,
+    // ai_face_match_score, ai_checked_at). If everything checks out with high confidence, the
+    // function itself (service role, not the admin_seller_approve RPC) may set
+    // status='approved', approved_at=now(), auto_approved=true — skipping the manual queue
+    // entirely. If anything looks off, leave status='pending' with ai_status='issue' so the
+    // admin sees it flagged in the 🏪 ຜູ້ຂາຍ tab and reviews it by hand.
     await sbRPC('seller_application_submit', {
-      p_store_name: store, p_phone: phone, p_email: email, p_password: pw,
-      p_province: province, p_district: district, p_village: village, p_id_card_url: idCardUrl,
+      p_store_name: store, p_full_name: fullName, p_phone: phone, p_email: email, p_password: pw,
+      p_province: province, p_district: district, p_village: village,
+      p_id_card_url: idCardUrl, p_selfie_with_id_url: selfieUrl,
       p_withdraw_qr_url: qrUrl, p_terms_accepted: document.getElementById('sRegAcceptTerms').checked
     });
-    sellerIdCardFile = null; sellerQrFile = null;
+    sellerIdCardFile = null; sellerSelfieFile = null; sellerQrFile = null;
     notifyAdminSellerRegister(store, phone); // opens WhatsApp to alert admin right after a successful submit
     showAuthScreen('pending');
   }catch(e){ errBox.innerHTML = `<div class="err">${e.message}</div>`; btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍສະໝັກ'; }
