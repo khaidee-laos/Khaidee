@@ -640,8 +640,17 @@ async function tryAdminLogin(){
 async function enterAdmin(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('adminApp').style.display='block';
-  await Promise.all([loadCategories(), loadCarriers(), loadSellersPublic()]);
+  await Promise.all([loadCategories(), loadCarriers(), loadSellersPublic(), loadAdminSecretSettings()]);
   switchAdminTab('dashboard');
+}
+// gemini_api_key is deliberately excluded from the public site_settings_public view (anyone
+// with the anon key could otherwise read it), so once logged in as admin we fetch it separately
+// through an admin-password-gated RPC instead.
+async function loadAdminSecretSettings(){
+  try{
+    const key = await sbRPC('admin_get_secret_setting', {p_password: STATE.adminPassword, p_key: 'gemini_api_key'});
+    if(key) STATE.settings.gemini_api_key = key;
+  }catch(e){ console.warn('loadAdminSecretSettings failed', e); }
 }
 function logoutAdmin(){
   STATE.adminPassword = null;
@@ -1213,7 +1222,7 @@ async function adminEditProduct(id){
       <label>ຄຳອະທິບາຍ</label>
       <textarea id="pDesc" rows="4">${p.description||''}</textarea>
       <button type="button" class="btn btn-ghost" id="pAiDescBtn" style="margin-top:6px; font-size:12.5px; padding:8px 10px;">🤖 ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ</button>
-      ${STATE.settings.anthropic_api_key?'':'<div class="hint" style="margin-top:4px;">ຕ້ອງຕັ້ງຄ່າ Anthropic API Key ໃນ ການຕັ້ງຄ່າ ► AI ຂຽນລາຍລະອຽດສິນຄ້າ ກ່ອນ ຈຶ່ງຈະໃຊ້ໄດ້</div>'}
+      ${STATE.settings.gemini_api_key?'':'<div class="hint" style="margin-top:4px;">ຕ້ອງຕັ້ງຄ່າ Gemini API Key ໃນ ການຕັ້ງຄ່າ ► AI ຂຽນລາຍລະອຽດສິນຄ້າ ກ່ອນ ຈຶ່ງຈະໃຊ້ໄດ້</div>'}
     </div>
     <div class="row2"><div class="field"><label>ລາຄາ</label><input type="number" id="pPrice" value="${p.price||''}"></div>
     <div class="field"><label>ລາຄາປຽບທຽບ</label><input type="number" id="pCompare" value="${p.compare_price||''}"></div></div>
@@ -1315,14 +1324,16 @@ async function adminEditProduct(id){
   };
 }
 /* ---- AI-assisted product description ----
-   Calls the Anthropic Messages API directly from the admin's browser using the key saved in
-   Settings ► AI ຂຽນລາຍລະອຽດສິນຄ້າ, so the admin doesn't have to hand-write every listing.
+   Calls the Google Gemini API (generativelanguage.googleapis.com) directly from the admin's
+   browser using the free-tier key saved in Settings ► AI ຂຽນລາຍລະອຽດສິນຄ້າ, so the admin
+   doesn't have to hand-write every listing. Gemini's free tier (get a key at ai.google.dev, no
+   credit card needed) resets daily and is plenty for occasional product-description writing.
    Note: this keeps the key on the client (admin panel only) for simplicity — fine as long as
    admin access itself stays private; for a public multi-admin setup this should eventually
    move behind a small server-side proxy instead of calling the API straight from the browser. */
 async function generateProductDescription(overlay){
-  const key = STATE.settings.anthropic_api_key;
-  if(!key){ showToast('ກະລຸນາຕັ້ງຄ່າ Anthropic API Key ໃນໜ້າ "ການຕັ້ງຄ່າ" ກ່ອນ'); return; }
+  const key = STATE.settings.gemini_api_key;
+  if(!key){ showToast('ກະລຸນາຕັ້ງຄ່າ Gemini API Key ໃນໜ້າ "ການຕັ້ງຄ່າ" ກ່ອນ'); return; }
   const nameLo = overlay.querySelector('#pNameLo').value.trim();
   if(!nameLo){ showToast('ກະລຸນາພິມຊື່ສິນຄ້າ (ພາສາລາວ) ກ່ອນ ເພື່ອໃຫ້ AI ຮູ້ວ່າຈະຂຽນລາຍລະອຽດຫຍັງ'); return; }
   const catId = Number(overlay.querySelector('#pCat').value);
@@ -1332,23 +1343,20 @@ async function generateProductDescription(overlay){
   btn.disabled = true; btn.textContent = '⏳ ກຳລັງຂຽນ...';
   try{
     const prompt = `ຂຽນລາຍລະອຽດສິນຄ້າສຳລັບຮ້ານຄ້າອອນລາຍ ເປັນພາສາລາວລ້ວນໆ, ຍາວ 3-5 ປະໂຫຍກ, ໜ້າສົນໃຈ ແລະ ຊັດເຈນ ໃຫ້ລູກຄ້າເຂົ້າໃຈງ່າຍ. ໃຫ້ກ່າວເຖິງຈຸດເດັ່ນ, ການນຳໃຊ້ ຫຼື ປະໂຫຍດຂອງສິນຄ້າ. ຫ້າມແຕ່ງຂໍ້ມູນສະເພາະ (ເຊັ່ນ: ຂະໜາດ, ວັດສະດຸ, ຈຳນວນ) ທີ່ບໍ່ໄດ້ໃຫ້ໄວ້ຂ້າງລຸ່ມ.\n\nຊື່ສິນຄ້າ: ${nameLo}\nໝວດໝູ່: ${catName||'-'}\nລາຄາ: ${price?fmtMoney(Number(price)):'-'}\n\nຕອບກັບແຕ່ຂໍ້ຄວາມລາຍລະອຽດເທົ່ານັ້ນ, ບໍ່ຕ້ອງມີຄຳນຳ ຫຼື ຫົວຂໍ້.`;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
+        'x-goog-api-key': key
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 400,
-        messages: [{role:'user', content: prompt}]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 400 }
       })
     });
     const data = await res.json();
     if(!res.ok) throw new Error(data?.error?.message || 'API error');
-    const text = (data.content||[]).map(b=>b.text||'').join('').trim();
+    const text = ((data.candidates||[])[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
     if(!text) throw new Error('ບໍ່ໄດ້ຮັບຄຳຕອບຈາກ AI');
     overlay.querySelector('#pDesc').value = text;
   }catch(e){
@@ -2192,8 +2200,8 @@ async function renderAdminSettings(){
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">🤖 AI ຂຽນລາຍລະອຽດສິນຄ້າອັດຕະໂນມັດ</h4>
-    <div class="hint" style="margin-top:-4px;">ໃສ່ Anthropic API key ຂອງທ່ານເພື່ອເປີດໃຊ້ປຸ່ມ "ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ" ໃນໜ້າເພີ່ມ/ແກ້ໄຂສິນຄ້າ — ລະບົບຈະຂຽນລາຍລະອຽດເປັນພາສາລາວໃຫ້ຈາກຊື່ ແລະ ໝວດໝູ່ສິນຄ້າ.<br>⚠️ <b>ຄຳເຕືອນ:</b> key ນີ້ຖືກເກັບໄວ້ໃນຕາຕະລາງການຕັ້ງຄ່າດຽວກັນກັບ whatsapp_number ເຊິ່ງລູກຄ້າທົ່ວໄປສາມາດອ່ານໄດ້ (site_settings_public) — ຫາກຕ້ອງການໃຊ້ຢ່າງປອດໄພແທ້ໆ ຄວນຍ້າຍ key ນີ້ໄປໄວ້ໃນຕາຕະລາງ/Edge Function ແຍກຕ່າງຫາກທີ່ຈຳກັດໃຫ້ອ່ານໄດ້ສະເພາະແອດມິນເທົ່ານັ້ນ ກ່ອນນຳໄປໃຊ້ຈິງ.</div>
-    <div class="field"><label>Anthropic API Key</label><input type="password" autocomplete="off" id="stAiKey" value="${STATE.settings.anthropic_api_key||''}" placeholder="sk-ant-..."></div>
+    <div class="hint" style="margin-top:-4px;">ໃສ່ Gemini API key (ຟຣີ, ໄດ້ໂຄຕ້າໃໝ່ທຸກມື້) ເພື່ອເປີດໃຊ້ປຸ່ມ "ຂຽນລາຍລະອຽດໃຫ້ອັດຕະໂນມັດ" ໃນໜ້າເພີ່ມ/ແກ້ໄຂສິນຄ້າ — ລະບົບຈະຂຽນລາຍລະອຽດເປັນພາສາລາວໃຫ້ຈາກຊື່ ແລະ ໝວດໝູ່ສິນຄ້າ.<br>🔑 ຂໍ key ຟຣີໄດ້ທີ່ <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (ບໍ່ຕ້ອງໃສ່ບັດເຄຣດິດ). key ນີ້ຖືກເກັບແຍກຕ່າງຫາກ ອ່ານໄດ້ສະເພາະຫຼັງລ໊ອກອິນແອດມິນເທົ່ານັ້ນ.</div>
+    <div class="field"><label>Gemini API Key</label><input type="password" autocomplete="off" id="stAiKey" value="${STATE.settings.gemini_api_key||''}" placeholder="AIza..."></div>
     <button class="btn btn-primary" id="stAiKeySave">ບັນທຶກ API Key</button>
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
@@ -2245,7 +2253,12 @@ async function renderAdminSettings(){
   document.getElementById('stAiKeySave').onclick = async ()=>{
     const btn = document.getElementById('stAiKeySave'); btn.disabled = true;
     try{
-      await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:'anthropic_api_key', p_value:document.getElementById('stAiKey').value.trim()});
+      const newKey = document.getElementById('stAiKey').value.trim();
+      await sbRPC('admin_update_setting', {p_password:STATE.adminPassword, p_key:'gemini_api_key', p_value:newKey});
+      // gemini_api_key is excluded from the public settings view on purpose (see
+      // loadAdminSecretSettings), so loadSettings() won't return it — update it locally instead
+      // of re-fetching, otherwise this would look unset again until next login.
+      STATE.settings.gemini_api_key = newKey;
       await loadSettings();
       showToast('ບັນທຶກ API Key ແລ້ວ');
     }catch(e){ showToast('ຜິດພາດ: ' + e.message); } finally { btn.disabled = false; }
