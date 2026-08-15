@@ -2530,8 +2530,7 @@ function startQrPolling(orderNumber){
   async function checkNow(){
     tries++;
     try{
-      const rows = await sbSelect('orders', `order_number=eq.${orderNumber}&select=status`);
-      const status = rows && rows[0] && rows[0].status;
+      const status = await sbRPC('order_get_status_by_number', {p_order_number: orderNumber});
       if(status === 'paid'){
         clearInterval(qrPollTimer); qrPollTimer = null;
         activeQrCheck = null;
@@ -3371,8 +3370,7 @@ function startOrderDetailQrPolling(orderId, orderNumber){
   async function checkNow(){
     tries++;
     try{
-      const rows = await sbSelect('orders', `order_number=eq.${orderNumber}&select=status`);
-      const status = rows && rows[0] && rows[0].status;
+      const status = await sbRPC('order_get_status_by_number', {p_order_number: orderNumber});
       if(status === 'paid'){
         clearInterval(orderDetailQrPollTimer); orderDetailQrPollTimer = null;
         activeQrCheck = null;
