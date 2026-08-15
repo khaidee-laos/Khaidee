@@ -907,9 +907,7 @@ async function renderAdminOrders(){
     (!STATE.products || !STATE.products.length) ? loadProducts() : Promise.resolve(),
     resolveOfficialStoreSellerId()
   ]);
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  adminOrdersList = [...MOCK_ORDERS, ...(orders||[])];
-  // ▲ END MOCK DATA INJECTION ▲
+  adminOrdersList = orders;
   paintAdminOrders();
 }
 function adminToggleOfficialStoreFilter(){
@@ -1073,10 +1071,7 @@ async function renderAdminProducts(){
   await loadProducts();
   try{ STATE.adminSellersForProduct = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword}); }
   catch(e){ STATE.adminSellersForProduct = []; }
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  const productsForDisplay = [...MOCK_PRODUCTS, ...(STATE.products||[])];
-  // ▲ END MOCK DATA INJECTION ▲
-  const productRows = productsForDisplay.map(p=>({
+  const productRows = STATE.products.map(p=>({
     onClick:`adminEditProduct(${p.id})`,
     cells:[
       (p.images&&p.images[0]) ? `<img class="dt-img" src="${p.images[0]}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">🛍️</div>`,
@@ -1492,58 +1487,10 @@ function adminEditCategory(id){
 function customerCode(id){
   return '#' + String(id||'').replace(/-/g,'').slice(0,8).toUpperCase();
 }
-// ▼▼▼ MOCK DATA — TEMPORARY, FOR TABLE-LAYOUT PREVIEW ONLY. DELETE THIS WHOLE BLOCK ONCE APPROVED. ▼▼▼
-const MOCK_ORDERS = [
-  {id:900001, order_number:'KD-90001', customer_name:'ສົມສີ ວົງດວງດີ', customer_phone:'020 5551 2233', items:[{product_name:'ເສື້ອຢືດຄໍກົມ', qty:2},{product_name:'ໝວກແກ໊ບ', qty:1}], total:185000, status:'pending', created_at:new Date().toISOString()},
-  {id:900002, order_number:'KD-90002', customer_name:'ບຸນມີ ພັນທະວົງ', customer_phone:'020 7712 4455', items:[{product_name:'ກະເປົາຖື', qty:1}], total:320000, status:'paid', created_at:new Date().toISOString()},
-  {id:900003, order_number:'KD-90003', customer_name:'ນາງ ຄຳແພງ ສີວິໄລ', customer_phone:'030 9988 7766', items:[{product_name:'ຣອງເທົ້າແຕະ', qty:3}], total:270000, status:'shipping', created_at:new Date().toISOString()},
-  {id:900004, order_number:'KD-90004', customer_name:'ທອງດີ ແກ້ວມະນີ', customer_phone:'020 1234 5678', items:[{product_name:'ນາລິກາມືຖື', qty:1}], total:450000, status:'delivered', created_at:new Date().toISOString()},
-];
-const MOCK_PRODUCTS = [
-  {id:900101, name_lo:'ເສື້ອຢືດຄໍກົມ ສີດຳ', price:65000, stock:42, is_active:true, images:[]},
-  {id:900102, name_lo:'ກະເປົາຖືໜັງແທ້', price:320000, stock:5, is_active:true, images:[]},
-  {id:900103, name_lo:'ຣອງເທົ້າແຕະຢາງ', price:90000, stock:0, is_active:false, images:[]},
-];
-const MOCK_TOPUPS = [
-  {id:900201, full_name:'ສົມສີ ວົງດວງດີ', phone:'020 5551 2233', amount:100000, status:'pending', created_at:new Date().toISOString(), slip_url:null},
-  {id:900202, full_name:'ບຸນມີ ພັນທະວົງ', phone:'020 7712 4455', amount:250000, status:'approved', created_at:new Date().toISOString(), slip_url:null},
-];
-const MOCK_PAYOUTS = [
-  {id:900301, store_name:'ຮ້ານ ນາງແພງ ຊັອບ', amount:540000, status:'pending', requested_at:new Date().toISOString(), qr_url:null},
-  {id:900302, store_name:'ຮ້ານ ບຸນມີ ແຟຊັ່ນ', amount:1200000, status:'approved', requested_at:new Date().toISOString(), qr_url:null},
-];
-const MOCK_BANKS = [
-  {id:900401, bank_name:'ທະນາຄານການຄ້າຕ່າງປະເທດລາວ', bank_name_en:'BCEL', account_number:'020-1-23-45678901', account_name:'ບໍລິສັດ ຂາຍດີ', is_active:true, logo_url:null, logo_emoji:'🏦'},
-  {id:900402, bank_name:'ທະນາຄານລາວ-ຫວຽດ', bank_name_en:'LVB', account_number:'', account_name:'', is_active:false, logo_url:null, logo_emoji:'🏦'},
-];
-const MOCK_COUPONS = [
-  {id:900501, code:'SALE20-K7F2', discount_type:'percent', discount_value:20, expires_at:null, is_active:true},
-  {id:900502, code:'FREESHIP-9QX1', discount_type:'free_shipping', discount_value:0, expires_at:new Date(Date.now()+7*864e5).toISOString(), is_active:true},
-];
-const MOCK_ADS = [
-  {id:900601, placement:'popup', title:'ຫຼຸດ 20% ທຸກລາຍການ!', subtitle:'ໝົດອາຍຸທ້າຍເດືອນນີ້', coupon_code:'SALE20-K7F2', is_active:true, image_url:''},
-  {id:900602, placement:'banner', title:'ສິນຄ້າໃໝ່ມາແລ້ວ', subtitle:'', coupon_code:'', is_active:true, image_url:''},
-];
-const MOCK_RETURNS = [
-  {id:900701, order_number:'KD-90004', store_name:'ຮ້ານ ນາງແພງ ຊັອບ', customer_name:'ທອງດີ ແກ້ວມະນີ', customer_phone:'020 1234 5678', reason:'ສິນຄ້າບໍ່ຄືຮູບ', refund_amount:450000, status:'pending', requested_at:new Date().toISOString()},
-];
-// ▲▲▲ END MOCK DATA ▲▲▲
-const MOCK_CUSTOMERS = [
-  {id:'11111111-aaaa-1111-aaaa-111111111111', full_name:'ສົມສີ ວົງດວງດີ', phone:'020 5551 2233', email:'somsi@example.com', wallet_balance:125000, is_blocked:false},
-  {id:'22222222-bbbb-2222-bbbb-222222222222', full_name:'ບຸນມີ ພັນທະວົງ', phone:'020 7712 4455', email:'bounmy@example.com', wallet_balance:0, is_blocked:false},
-  {id:'33333333-cccc-3333-cccc-333333333333', full_name:'ນາງ ຄຳແພງ ສີວິໄລ', phone:'030 9988 7766', email:'khamphaeng@example.com', wallet_balance:530000, is_blocked:true},
-  {id:'44444444-dddd-4444-dddd-444444444444', full_name:'ທອງດີ ແກ້ວມະນີ', phone:'020 1234 5678', email:'', wallet_balance:78000, is_blocked:false},
-  {id:'55555555-eeee-5555-eeee-555555555555', full_name:'ວິໄລພອນ ຈັນທະລາ', phone:'', email:'vilaiphone@example.com', wallet_balance:15000, is_blocked:false},
-  {id:'66666666-ffff-6666-ffff-666666666666', full_name:'ອານຸສອນ ພົມມະຈັກ', phone:'020 4455 6677', email:'anouson@example.com', wallet_balance:2400000, is_blocked:false},
-];
-// ▲▲▲ END MOCK DATA ▲▲▲
 async function renderAdminCustomers(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   STATE.adminCustomers = await sbRPC('admin_list_customers', {p_password: STATE.adminPassword});
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  STATE.adminCustomers = [...MOCK_CUSTOMERS, ...(STATE.adminCustomers||[])];
-  // ▲ END MOCK DATA INJECTION ▲
   body.innerHTML = `<div class="field" style="margin-bottom:10px;"><input id="adminCustSearch" placeholder="🔍 ຄົ້ນຫາດ້ວຍ ID, ຊື່, ເບີໂທ, ອີເມວ..." oninput="renderAdminCustomerList()"></div>
     <div id="adminCustomerList"></div>`;
   renderAdminCustomerList();
@@ -1897,10 +1844,8 @@ async function renderAdminTopups(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   const list = await sbRPC('admin_list_topups', {p_password: STATE.adminPassword});
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  STATE.adminTopupsCache = [...MOCK_TOPUPS, ...(list||[])];
-  // ▲ END MOCK DATA INJECTION ▲
-  const rows = STATE.adminTopupsCache.map(t=>({
+  STATE.adminTopupsCache = list;
+  const rows = list.map(t=>({
     onClick:`adminViewTopup(${t.id})`,
     cells:[
       t.slip_url ? `<img class="dt-img" src="${t.slip_url}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">💰</div>`,
@@ -2085,10 +2030,8 @@ async function renderAdminPayouts(){
   const body = document.getElementById('adminBody');
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   const list = await sbRPC('admin_list_seller_withdrawals', {p_password: STATE.adminPassword});
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  STATE.adminPayoutsCache = [...MOCK_PAYOUTS, ...(list||[])];
-  // ▲ END MOCK DATA INJECTION ▲
-  const rows = STATE.adminPayoutsCache.map(w=>({
+  STATE.adminPayoutsCache = list;
+  const rows = list.map(w=>({
     onClick:`adminViewPayout(${w.id})`,
     cells:[
       w.qr_url ? `<img class="dt-img" src="${w.qr_url}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">💸</div>`,
@@ -2243,9 +2186,6 @@ async function renderAdminBanks(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   try{ adminBanksList = await sbRPC('admin_list_bank_accounts', {p_password: STATE.adminPassword}); }
   catch(e){ body.innerHTML = `<div class="empty">ໂຫລດບໍ່ສຳເລັດ: ${e.message}</div>`; return; }
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  adminBanksList = [...MOCK_BANKS, ...(adminBanksList||[])];
-  // ▲ END MOCK DATA INJECTION ▲
   const rows = adminBanksList.map(b=>({
     onClick:`adminEditBank(${b.id})`,
     cells:[
@@ -2340,10 +2280,8 @@ async function renderAdminCoupons(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   let list = [];
   try{ list = await sbRPC('admin_list_coupons', {p_password: STATE.adminPassword}); }catch(e){ list = []; }
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  STATE.adminCouponsCache = [...MOCK_COUPONS, ...(list||[])];
-  // ▲ END MOCK DATA INJECTION ▲
-  const rows = STATE.adminCouponsCache.map(cp=>{
+  STATE.adminCouponsCache = list;
+  const rows = list.map(cp=>{
     const expired = cp.expires_at && new Date(cp.expires_at).getTime() < Date.now();
     const isFree = cp.discount_type==='free_shipping';
     return {
@@ -2425,11 +2363,9 @@ async function renderAdminAds(){
   let list = [];
   try{ list = await sbRPC('admin_list_ads', {p_password: STATE.adminPassword}); }
   catch(e){ body.innerHTML = `<div class="empty">ຍັງເປີດໃຊ້ບໍ່ໄດ້ — ກະລຸນາລັນ SQL setup (supabase_setup_ads.sql) ກ່ອນ</div>`; return; }
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  STATE.adminAdsCache = [...MOCK_ADS, ...(list||[])];
-  // ▲ END MOCK DATA INJECTION ▲
-  const popupAds = STATE.adminAdsCache.filter(a=>a.placement==='popup');
-  const bannerAds = STATE.adminAdsCache.filter(a=>a.placement==='banner');
+  STATE.adminAdsCache = list;
+  const popupAds = list.filter(a=>a.placement==='popup');
+  const bannerAds = list.filter(a=>a.placement==='banner');
   const section = (title, hint, items)=> {
     const rows = items.map(a=>({
       onClick:`adminEditAd(${a.id})`,
@@ -2653,12 +2589,10 @@ async function renderAdminReturns(){
   let list = [];
   try{ list = await sbRPC('admin_list_returns', {p_password: STATE.adminPassword}); }
   catch(e){ body.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນໄດ້ — ຄຸນສົມບັດນີ້ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງໃນຖານຂໍ້ມູນ (ເບິ່ງ SQL migration)</div>'; return; }
-  // ▼ MOCK DATA INJECTION — TEMPORARY, DELETE THIS LINE ONCE APPROVED ▼
-  STATE.adminReturnsCache = [...MOCK_RETURNS, ...(list||[])];
-  // ▲ END MOCK DATA INJECTION ▲
-  const pendingCount = STATE.adminReturnsCache.filter(r=>r.status==='pending').length;
+  STATE.adminReturnsCache = list;
+  const pendingCount = list.filter(r=>r.status==='pending').length;
   const statusLbl = {pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'};
-  const rows = STATE.adminReturnsCache.map(r=>({
+  const rows = list.map(r=>({
     onClick:`adminViewReturn(${r.id})`,
     cells:[
       `<span class="dt-title">#${r.order_number}</span><span class="dt-sub">${r.store_name||'-'}</span>`,
