@@ -181,7 +181,7 @@ header.top{
 .catrow{display:flex; gap:10px; overflow-x:auto; padding:14px; scrollbar-width:none;}
 .catrow::-webkit-scrollbar{display:none;}
 .catchip{flex-shrink:0; display:flex; flex-direction:column; align-items:center; gap:6px; width:64px;}
-.catchip .ico{width:52px; height:52px; border-radius:16px; background:#fff; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:24px; box-shadow:var(--shadow);}
+.catchip .ico{width:52px; height:52px; border-radius:16px; background:#fff; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:24px; box-shadow:var(--shadow); overflow:hidden;}
 .catchip.active .ico{background:var(--gold-light); border-color:var(--gold);}
 .catchip span{font-size:10.5px; text-align:center; color:var(--ink-soft); line-height:1.2;}
 
@@ -1201,7 +1201,7 @@ function maybeShowPopupAd(){
 async function loadCategories(){
   STATE.categories = await sbSelect('categories', 'select=*&order=sort_order.asc');
   const chipsHtml = `<div class="catchip ${!STATE.activeCategory?'active':''}" onclick="filterCategory(null)"><div class="ico">🗂️</div><span>ທັງໝົດ</span></div>` +
-    STATE.categories.map(c=>`<div class="catchip ${STATE.activeCategory===c.id?'active':''}" onclick="filterCategory(${c.id})"><div class="ico">${c.icon||'🛍️'}</div><span>${nameFor(c)}</span></div>`).join('');
+    STATE.categories.map(c=>`<div class="catchip ${STATE.activeCategory===c.id?'active':''}" onclick="filterCategory(${c.id})"><div class="ico">${c.icon_url ? `<img src="${c.icon_url}" style="width:100%; height:100%; object-fit:cover; border-radius:inherit;">` : (c.icon||'🛍️')}</div><span>${nameFor(c)}</span></div>`).join('');
   // same chip set is mirrored on the Home page (catrow) and the Categories page (catPageChips)
   ['catrow','catPageChips'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML = chipsHtml; });
 }

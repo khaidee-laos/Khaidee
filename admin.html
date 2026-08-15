@@ -1450,7 +1450,7 @@ async function renderAdminCategories(){
     (!STATE.categories.length ? '<div class="empty">ຍັງບໍ່ມີໝວດໝູ່</div>' : `<div class="tile-grid">${STATE.categories.map(c=>`
       <div class="tile" onclick="adminEditCategory(${c.id})">
         <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCategory(${c.id})">✕</button>
-        <div class="tile-img" style="font-size:24px;">${c.icon}</div>
+        <div class="tile-img" style="font-size:24px;">${c.icon_url ? `<img src="${c.icon_url}" style="width:100%; height:100%; object-fit:cover; border-radius:inherit;">` : c.icon}</div>
         <div class="tile-title">${c.name_lo}</div>
       </div>`).join('')}</div>`);
 }
@@ -1466,7 +1466,10 @@ function adminEditCategory(id){
   const overlay = document.createElement('div'); overlay.className='overlay show center';
   overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${id?'ແກ້ໄຂໝວດໝູ່':'ເພີ່ມໝວດໝູ່'}</h3><button class="closex" data-close>✕</button></div>
   <div class="sheet-body">
-    <div class="field"><label>ໄອຄອນ (emoji)</label><input id="cIcon" value="${c.icon||'🛍️'}"></div>
+    <div class="field"><label>ໄອຄອນ (emoji) — ໃຊ້ຖ້າບໍ່ໄດ້ອັບໂຫລດຮູບ</label><input id="cIcon" value="${c.icon||'🛍️'}"></div>
+    <div id="cIconPreview" style="margin:4px 0 10px;">${c.icon_url ? `<img src="${c.icon_url}" style="width:56px; height:56px; object-fit:cover; border-radius:12px; border:1px solid var(--line); background:#fff;">` : ''}</div>
+    <div class="field"><label>ອັບໂຫລດຮູບໄອຄອນ (ຖ້າມີ ຈະໃຊ້ຮູບແທນ emoji)</label><input type="file" id="cIconFile" accept="image/*"></div>
+    ${c.icon_url ? `<button type="button" id="cRemoveIconBtn" class="btn btn-ghost" style="margin-bottom:10px; color:var(--danger);">✕ ເອົາຮູບອອກ (ໃຊ້ emoji ແທນ)</button>` : ''}
     <div class="field"><label>ຊື່ (ລາວ)</label><input id="cNameLo" value="${c.name_lo||''}"></div>
     <div class="field"><label>ຊື່ (ໄທ)</label><input id="cNameTh" value="${c.name_th||''}"></div>
     <div class="field"><label>ຊື່ (English)</label><input id="cNameEn" value="${c.name_en||''}"></div>
@@ -1475,13 +1478,29 @@ function adminEditCategory(id){
   </div></div>`;
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  let pendingIconUrl = c.icon_url || null;
+  let removeIcon = false;
+  const removeBtn = overlay.querySelector('#cRemoveIconBtn');
+  if(removeBtn){
+    removeBtn.onclick = ()=>{
+      removeIcon = true; pendingIconUrl = null;
+      document.getElementById('cIconPreview').innerHTML = '';
+      removeBtn.remove();
+    };
+  }
   overlay.querySelector('#cSaveBtn').onclick = async ()=>{
-    await sbRPC('admin_upsert_category', {p_password:STATE.adminPassword, p_category:{
-      id:id||undefined, icon:document.getElementById('cIcon').value, name_lo:document.getElementById('cNameLo').value,
-      name_th:document.getElementById('cNameTh').value, name_en:document.getElementById('cNameEn').value,
-      sort_order:Number(document.getElementById('cSort').value)
-    }});
-    overlay.remove(); renderAdminCategories();
+    const saveBtn = overlay.querySelector('#cSaveBtn'); saveBtn.disabled = true; saveBtn.textContent = 'ກຳລັງບັນທຶກ...';
+    try{
+      const file = document.getElementById('cIconFile').files[0];
+      if(file){ pendingIconUrl = await sbUpload('khaidee-products', `category_icon_${Date.now()}_${file.name}`, file); removeIcon = false; }
+      await sbRPC('admin_upsert_category', {p_password:STATE.adminPassword, p_category:{
+        id:id||undefined, icon:document.getElementById('cIcon').value, icon_url: removeIcon ? null : pendingIconUrl,
+        name_lo:document.getElementById('cNameLo').value,
+        name_th:document.getElementById('cNameTh').value, name_en:document.getElementById('cNameEn').value,
+        sort_order:Number(document.getElementById('cSort').value)
+      }});
+      overlay.remove(); renderAdminCategories();
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); saveBtn.disabled=false; saveBtn.textContent='ບັນທຶກ'; }
   };
 }
 function customerCode(id){
