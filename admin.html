@@ -283,6 +283,22 @@ nav.bottom .icon{font-size:19px;}
 .tile .tile-sub{font-size:9px; color:var(--ink-soft); margin-top:2px;}
 .tile .tile-dot{position:absolute; top:5px; left:5px; width:8px; height:8px; border-radius:50%; box-shadow:0 0 0 2px #fff; z-index:2;}
 .tile .tile-del{position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:rgba(43,27,20,.55); color:#fff; font-size:10px; border:none; z-index:2; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+/* ---- Big data table (orders / products / customers / topups / withdrawals / banks / coupons / ads / returns / theme) ---- */
+.dtable-wrap{background:#fff; border-radius:14px; box-shadow:var(--shadow); overflow-x:auto; margin-bottom:16px; -webkit-overflow-scrolling:touch;}
+table.dtable{width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap;}
+table.dtable thead th{position:sticky; top:0; background:var(--cream); color:var(--ink-soft); font-size:10.5px; font-weight:800; text-align:left; padding:10px 12px; border-bottom:1.5px solid var(--line); z-index:1;}
+table.dtable tbody td{padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:middle;}
+table.dtable tbody tr{cursor:pointer; transition:background .1s;}
+table.dtable tbody tr:last-child td{border-bottom:none;}
+table.dtable tbody tr:hover{background:var(--cream);}
+table.dtable .dt-img{width:42px; height:42px; border-radius:8px; object-fit:cover; display:block; background:var(--gold-light); flex-shrink:0;}
+table.dtable .dt-img-lg{width:100%; max-width:220px; height:76px; border-radius:10px; object-fit:cover; display:block; background:var(--gold-light);}
+table.dtable .dt-title{font-weight:700; font-size:12.5px; color:var(--ink); white-space:normal;}
+table.dtable .dt-sub{font-size:10.5px; color:var(--ink-soft); white-space:normal;}
+table.dtable .dt-amount{font-weight:800; color:var(--maroon);}
+table.dtable .dt-del{background:var(--cream); border:none; color:var(--danger); width:26px; height:26px; border-radius:50%; font-size:12px; cursor:pointer;}
+table.dtable .dt-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; flex-shrink:0;}
+.dtable-section-title{font-size:13px; font-weight:800; margin:18px 4px 8px; color:var(--ink);}
 .status-select{font-size:11px; font-weight:700; padding:6px 8px; border-radius:8px; border:1.5px solid var(--line); background:#fff; color:var(--maroon); font-family:inherit;}
 .status-packing{background:#E1EAF7; color:#2E5FA3;}
 .status-pending_verification{background:#FCEFD9; color:var(--warn);}
@@ -624,6 +640,18 @@ setInterval(()=>{
   });
 }, 1000);
 function fmtMoney(n){ return (STATE.settings.currency||'₭') + ' ' + Number(n||0).toLocaleString('en-US'); }
+// Generic "big table" renderer shared by orders/products/customers/topups/withdrawals/banks/
+// coupons/ads/returns/theme — headers is an array of column label strings, rows is an array of
+// {onClick: 'jsExprString', cells: ['<td-inner-html>', ...]}. Row click opens the same detail
+// modal each section already had before switching from tiles/cards to a table; nothing about
+// how a row is *edited* changed, only how the list is laid out.
+function dtable(headers, rows, emptyMsg){
+  if(!rows.length) return `<div class="empty">${emptyMsg||'ບໍ່ມີລາຍການ'}</div>`;
+  return `<div class="dtable-wrap"><table class="dtable">
+    <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr onclick="${r.onClick}">${r.cells.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table></div>`;
+}
 
 /* ============================================================ AUTH / SESSION ============================================================ */
 async function tryAdminLogin(){
@@ -941,24 +969,28 @@ function paintAdminOrders(){
   let filtered = adminOrdersList.filter(o=>orderTabOf(o.status)===adminOrdersTab);
   if(adminOfficialStoreFilter) filtered = filtered.filter(o=>orderHasSeller(o, OFFICIAL_STORE_SELLER_ID));
 
+  const orderRows = filtered.map(o=>({
+    onClick:`openAdminOrderDetail(${o.id})`,
+    cells:[
+      `<span class="dt-title">#${o.order_number}</span>`,
+      `<div class="dt-title">${o.customer_name||'-'}</div><div class="dt-sub">${o.customer_phone||'-'}</div>`,
+      `<span class="dt-sub">${(o.items||[]).map(i=>`${i.product_name} x${i.qty}`).join(', ')}</span>`,
+      `<span class="dt-amount">${fmtMoney(o.total)}</span>`,
+      `<span class="status-pill status-${o.status}">${orderStatusLabel(o.status)}</span>`,
+      `<span class="dt-sub">${new Date(o.created_at).toLocaleString('lo-LA')}</span>`,
+      `<button class="dt-del" title="ລຶບອໍເດີ" onclick="event.stopPropagation(); adminDeleteOrder(${o.id})">✕</button>`
+    ]
+  }));
+  const headers = ['ອໍເດີ','ລູກຄ້າ','ລາຍການ','ລວມ','ສະຖານະ','ວັນທີ',''];
+
   if(adminOfficialStoreFilter){
-    // Compact tap-to-open boxes, per the admin's request for this filtered view specifically.
     body.innerHTML = officialChip + renderOrderTabs(adminOrdersTab, adminOrdersList, 'adminSetOrdersTab') +
-      (filtered.length ? `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">${filtered.map(o=>`
-        <div class="tile" style="cursor:pointer;" onclick="openAdminOrderDetail(${o.id})">
-          <div style="font-size:11px; color:var(--ink-soft); font-weight:700;">#${o.order_number}</div>
-          <div class="status-pill status-${o.status}" style="margin-top:5px; font-size:9.5px;">${orderStatusLabel(o.status)}</div>
-          <div style="font-weight:700; color:var(--maroon); margin-top:5px; font-size:12px;">${fmtMoney(o.total)}</div>
-        </div>`).join('')}</div>` : '<div class="empty">ບໍ່ມີອໍເດີຈາກຮ້ານນີ້ໃນໝວດນີ້</div>');
+      dtable(headers, orderRows, 'ບໍ່ມີອໍເດີຈາກຮ້ານນີ້ໃນໝວດນີ້');
     return;
   }
 
   body.innerHTML = officialChip + renderOrderTabs(adminOrdersTab, adminOrdersList, 'adminSetOrdersTab') +
-    (filtered.map(o=>`
-    <div class="admin-list-item">
-      <button class="del-x" title="ລຶບອໍເດີ" onclick="adminDeleteOrder(${o.id})">✕</button>
-      ${renderOrderDetailInner(o, statuses)}
-    </div>`).join('') || '<div class="empty">ບໍ່ມີອໍເດີໃນໝວດນີ້</div>');
+    dtable(headers, orderRows, 'ບໍ່ມີອໍເດີໃນໝວດນີ້');
 }
 // Setting status to 'delivered' is the trigger point for releasing money to the seller: the
 // admin_update_order_status RPC, when p_release_funds is true, should compute 5% platform
@@ -1040,15 +1072,18 @@ async function renderAdminProducts(){
   await loadProducts();
   try{ STATE.adminSellersForProduct = await sbRPC('admin_list_sellers', {p_password: STATE.adminPassword}); }
   catch(e){ STATE.adminSellersForProduct = []; }
+  const productRows = STATE.products.map(p=>({
+    onClick:`adminEditProduct(${p.id})`,
+    cells:[
+      (p.images&&p.images[0]) ? `<img class="dt-img" src="${p.images[0]}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">🛍️</div>`,
+      `<span class="dt-dot" style="background:${p.is_active?'var(--ok)':'var(--ink-soft)'}"></span><span class="dt-title">${p.name_lo}</span>`,
+      `<span class="dt-amount">${fmtMoney(p.price)}</span>`,
+      `<span class="dt-sub">${p.stock ?? '-'}</span>`,
+      `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteProduct(${p.id})">✕</button>`
+    ]
+  }));
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditProduct(null)">➕ ເພີ່ມສິນຄ້າໃໝ່</button>` +
-    (!STATE.products.length ? '<div class="empty">ຍັງບໍ່ມີສິນຄ້າ</div>' : `<div class="tile-grid">${STATE.products.map(p=>`
-      <div class="tile" onclick="adminEditProduct(${p.id})">
-        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteProduct(${p.id})">✕</button>
-        <div class="tile-dot" style="background:${p.is_active?'var(--ok)':'var(--ink-soft)'}"></div>
-        <div class="tile-img">${(p.images&&p.images[0]) ? `<img src="${p.images[0]}">` : '🛍️'}</div>
-        <div class="tile-title">${p.name_lo}</div>
-        <div class="tile-sub">${fmtMoney(p.price)}</div>
-      </div>`).join('')}</div>`);
+    dtable(['ຮູບ','ຊື່ສິນຄ້າ','ລາຄາ','ສະຕັອກ',''], productRows, 'ຍັງບໍ່ມີສິນຄ້າ');
   document.querySelectorAll('.fab').forEach(f=>f.remove());
 }
 let pAttrDefs = [];      // category_attributes for the currently selected category
@@ -1472,17 +1507,19 @@ function renderAdminCustomerList(){
   const wrap = document.getElementById('adminCustomerList');
   if(!wrap) return;
   if(!list.length){ wrap.innerHTML = '<div class="empty">ບໍ່ພົບລູກຄ້າ 🔍</div>'; return; }
-  wrap.innerHTML = list.map(c=>`
-    <div class="admin-list-item">
-      <div class="top"><span class="title">${c.full_name}</span>${c.is_blocked?'<span class="status-pill status-cancelled">ບລັອກ</span>':''}</div>
-      <div class="hint">${customerCode(c.id)} • ${c.phone} • ${c.email}</div>
-      <div class="hint">ກະເປົາເງິນ: ${fmtMoney(c.wallet_balance)}</div>
-      <div class="chiprow">
-        <button onclick="adminEditCustomer('${c.id}')">✏️ ແກ້ໄຂ</button>
-        <button onclick="adminResetPw('${c.id}')">🔑 ຣີເຊັດລະຫັດຜ່ານ</button>
-        <button onclick="adminAdjustWallet('${c.id}')">💰 ປັບຍອດເງິນ</button>
-      </div>
-    </div>`).join('');
+  const rows = list.map(c=>({
+    onClick:`adminEditCustomer('${c.id}')`,
+    cells:[
+      `<span class="dt-title">${c.full_name}</span><span class="dt-sub">${customerCode(c.id)}</span>`,
+      `<span class="dt-sub">${c.phone||'-'}</span>`,
+      `<span class="dt-sub">${c.email||'-'}</span>`,
+      `<span class="dt-amount">${fmtMoney(c.wallet_balance)}</span>`,
+      c.is_blocked?'<span class="status-pill status-cancelled">ບລັອກ</span>':'<span class="status-pill status-approved">ປົກກະຕິ</span>',
+      `<button class="btn-sm btn-ghost" onclick="event.stopPropagation(); adminResetPw('${c.id}')">🔑</button>
+       <button class="btn-sm btn-ghost" onclick="event.stopPropagation(); adminAdjustWallet('${c.id}')">💰</button>`
+    ]
+  }));
+  wrap.innerHTML = dtable(['ຊື່/ID','ເບີໂທ','ອີເມວ','ກະເປົາເງິນ','ສະຖານະ',''], rows, 'ບໍ່ພົບລູກຄ້າ 🔍');
 }
 function adminEditCustomer(id){
   sbRPC('admin_list_customers', {p_password:STATE.adminPassword}).then(list=>{
@@ -1610,7 +1647,7 @@ function filterAdminSellers(list){
   const f = STATE.adminSellerFilter;
   let out = f==='all' ? list : list.filter(s=>s.status===f);
   const q = (STATE.adminSellerSearch||'').trim().toLowerCase();
-  if(q) out = out.filter(s=> String(s.id).includes(q) || (s.store_name||'').toLowerCase().includes(q) || (s.full_name||'').toLowerCase().includes(q) || (s.phone||'').toLowerCase().includes(q) || (s.email||'').toLowerCase().includes(q));
+  if(q) out = out.filter(s=> String(s.id).includes(q) || (s.shop_code||'').toLowerCase().includes(q) || (s.store_name||'').toLowerCase().includes(q) || (s.full_name||'').toLowerCase().includes(q) || (s.phone||'').toLowerCase().includes(q) || (s.email||'').toLowerCase().includes(q));
   return out;
 }
 // Compact photo-tile grid — same visual pattern as the ເຕີມເງິນ tile-grid — so the admin
@@ -1633,7 +1670,7 @@ function renderAdminSellerList(){
       <div class="tile-dot" style="background:${sellerAiDot(s)}" title="${s.auto_approved?'AI ອະນຸມັດອັດຕະໂນມັດ':(s.ai_status==='issue'?'AI ພົບຈຸດສົງໄສ':'')}"></div>
       <div class="tile-img">${s.id_card_url?`<img src="${s.id_card_url}">`:(s.logo_url?`<img src="${s.logo_url}">`:'🏪')}</div>
       <div class="tile-title">${s.store_name}</div>
-      <div class="tile-sub">#${s.id}${s.auto_approved?' 🤖':''}</div>
+      <div class="tile-sub">#${s.shop_code||s.id}${s.auto_approved?' 🤖':''}</div>
     </div>`).join('')}</div>`;
 }
 // Full detail popup — laid out like the application form itself (every field the applicant
@@ -1649,7 +1686,7 @@ function openSellerApplicationDetail(id){
   <div class="sheet-body">
     <div class="top" style="margin-bottom:8px;"><span class="title">${s.store_name} ${sellerVerifiedBadge(s)}</span><span class="status-pill ${statusClass[s.status]||''}">${statusLabel[s.status]||s.status}</span></div>
     <div class="hint" style="line-height:1.8;">
-      🆔 ID ຄຳຂໍ/ຮ້ານ: <b>#${s.id}</b> <span style="opacity:.7;">(ໃຊ້ຄົ້ນຫາໄດ້ຖ້າມີການລະເມີດກົດ ຫຼື ລູກຄ້າຮ້ອງຮຽນ)</span><br>
+      🆔 ID ຄຳຂໍ/ຮ້ານ: <b>#${s.shop_code||s.id}</b> <span style="opacity:.7;">(ໃຊ້ຄົ້ນຫາໄດ້ຖ້າມີການລະເມີດກົດ ຫຼື ລູກຄ້າຮ້ອງຮຽນ)</span><br>
       👤 ຊື່ຜູ້ສະໝັກ (ຕາມບັດ): ${s.full_name||'-'}<br>
       📞 ${s.phone||'-'} • ✉️ ${s.email||'-'}<br>
       📍 ${[s.village,s.district,s.province].filter(Boolean).join(', ')||'-'}<br>
@@ -1806,14 +1843,19 @@ async function renderAdminTopups(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   const list = await sbRPC('admin_list_topups', {p_password: STATE.adminPassword});
   STATE.adminTopupsCache = list;
-  body.innerHTML = !list.length ? '<div class="empty">ບໍ່ມີຄຳຂໍເຕີມເງິນ</div>' : `<div class="tile-grid">${list.map(t=>`
-    <div class="tile" onclick="adminViewTopup(${t.id})">
-      <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteTopup(${t.id})">✕</button>
-      <div class="tile-dot" style="background:${adminStatusColor(t.status)}"></div>
-      <div class="tile-img">${t.slip_url ? `<img src="${t.slip_url}">` : '💰'}</div>
-      <div class="tile-title">${t.full_name}</div>
-      <div class="tile-sub">${fmtMoney(t.amount)}</div>
-    </div>`).join('')}</div>`;
+  const rows = list.map(t=>({
+    onClick:`adminViewTopup(${t.id})`,
+    cells:[
+      t.slip_url ? `<img class="dt-img" src="${t.slip_url}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">💰</div>`,
+      `<span class="dt-dot" style="background:${adminStatusColor(t.status)}"></span><span class="dt-title">${t.full_name}</span>`,
+      `<span class="dt-sub">${t.phone||''}</span>`,
+      `<span class="dt-amount">${fmtMoney(t.amount)}</span>`,
+      `<span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span>`,
+      `<span class="dt-sub">${new Date(t.created_at).toLocaleString('lo-LA')}</span>`,
+      `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteTopup(${t.id})">✕</button>`
+    ]
+  }));
+  body.innerHTML = dtable(['ສະລິບ','ຊື່','ເບີໂທ','ຈຳນວນ','ສະຖານະ','ວັນທີ',''], rows, 'ບໍ່ມີຄຳຂໍເຕີມເງິນ');
 }
 function adminViewTopup(id){
   const t = (STATE.adminTopupsCache||[]).find(x=>x.id===id);
@@ -1987,13 +2029,17 @@ async function renderAdminPayouts(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   const list = await sbRPC('admin_list_seller_withdrawals', {p_password: STATE.adminPassword});
   STATE.adminPayoutsCache = list;
-  body.innerHTML = !list.length ? '<div class="empty">ບໍ່ມີຄຳຂໍຖອນເງິນ</div>' : `<div class="tile-grid">${list.map(w=>`
-    <div class="tile" onclick="adminViewPayout(${w.id})">
-      <div class="tile-dot" style="background:${adminStatusColor(w.status)}"></div>
-      <div class="tile-img">${w.qr_url ? `<img src="${w.qr_url}">` : '💸'}</div>
-      <div class="tile-title">${w.store_name||'-'}</div>
-      <div class="tile-sub">${fmtMoney(w.amount)}</div>
-    </div>`).join('')}</div>`;
+  const rows = list.map(w=>({
+    onClick:`adminViewPayout(${w.id})`,
+    cells:[
+      w.qr_url ? `<img class="dt-img" src="${w.qr_url}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">💸</div>`,
+      `<span class="dt-dot" style="background:${adminStatusColor(w.status)}"></span><span class="dt-title">${w.store_name||'-'}</span>`,
+      `<span class="dt-amount">${fmtMoney(w.amount)}</span>`,
+      `<span class="status-pill status-${w.status}">${w.status}</span>`,
+      `<span class="dt-sub">${w.requested_at ? new Date(w.requested_at).toLocaleString('lo-LA') : ''}</span>`
+    ]
+  }));
+  body.innerHTML = dtable(['QR','ຮ້ານຄ້າ','ຈຳນວນ','ສະຖານະ','ວັນທີ'], rows, 'ບໍ່ມີຄຳຂໍຖອນເງິນ');
 }
 function adminViewPayout(id){
   const w = (STATE.adminPayoutsCache||[]).find(x=>x.id===id);
@@ -2138,17 +2184,18 @@ async function renderAdminBanks(){
   body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
   try{ adminBanksList = await sbRPC('admin_list_bank_accounts', {p_password: STATE.adminPassword}); }
   catch(e){ body.innerHTML = `<div class="empty">ໂຫລດບໍ່ສຳເລັດ: ${e.message}</div>`; return; }
+  const rows = adminBanksList.map(b=>({
+    onClick:`adminEditBank(${b.id})`,
+    cells:[
+      b.logo_url ? `<img class="dt-img" src="${b.logo_url}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">${b.logo_emoji||'🏦'}</div>`,
+      `<span class="dt-title">${b.bank_name_en||b.bank_name}</span><span class="dt-sub">${b.bank_name}</span>`,
+      `<span class="dt-sub">${b.account_number? (b.account_number+(b.account_name?' • '+b.account_name:'')) : '⚠️ ຍັງບໍ່ໄດ້ໃສ່ເລກບັນຊີ'}</span>`,
+      b.is_active?'<span class="status-pill status-approved">ເປີດໃຊ້ງານ</span>':'<span class="status-pill status-cancelled">ປິດຢູ່</span>',
+      `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteBank(${b.id})">✕</button>`
+    ]
+  }));
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:12px;" onclick="adminEditBank(null)">➕ ເພີ່ມທະນາຄານ</button>` +
-    (!adminBanksList.length ? '<div class="empty">ຍັງບໍ່ມີທະນາຄານ</div>' : adminBanksList.map(b=>`
-      <div class="tile" style="display:flex; align-items:center; gap:10px; padding:12px; margin-bottom:8px; cursor:pointer;" onclick="adminEditBank(${b.id})">
-        <div style="font-size:26px; width:38px; height:38px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:8px; overflow:hidden; background:${b.logo_url?'#fff':'transparent'}; border:${b.logo_url?'1px solid var(--line)':'none'};">${b.logo_url?`<img src="${b.logo_url}" style="width:100%; height:100%; object-fit:cover;">`:(b.logo_emoji||'🏦')}</div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-weight:800; font-size:13.5px;">${b.bank_name_en||b.bank_name} ${b.is_active?'<span style="color:var(--ok); font-size:11px;">● ເປີດໃຊ້ງານ</span>':'<span style="color:var(--ink-soft); font-size:11px;">● ປິດຢູ່</span>'}</div>
-          <div class="hint" style="margin-top:2px;">${b.bank_name}</div>
-          <div class="hint" style="margin-top:2px;">${b.account_number? ('ເລກບັນຊີ: '+b.account_number+(b.account_name?' • '+b.account_name:'')) : '⚠️ ຍັງບໍ່ໄດ້ໃສ່ເລກບັນຊີ'}</div>
-        </div>
-        <button class="tile-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteBank(${b.id})">✕</button>
-      </div>`).join(''));
+    dtable(['ໂລໂກ້','ຊື່ທະນາຄານ','ເລກບັນຊີ','ສະຖານະ',''], rows, 'ຍັງບໍ່ມີທະນາຄານ');
 }
 async function adminDeleteBank(id){
   if(!confirm('ລຶບທະນາຄານນີ້?')) return;
@@ -2232,15 +2279,24 @@ async function renderAdminCoupons(){
   let list = [];
   try{ list = await sbRPC('admin_list_coupons', {p_password: STATE.adminPassword}); }catch(e){ list = []; }
   STATE.adminCouponsCache = list;
+  const rows = list.map(cp=>{
+    const expired = cp.expires_at && new Date(cp.expires_at).getTime() < Date.now();
+    const isFree = cp.discount_type==='free_shipping';
+    return {
+      onClick:`adminEditCoupon(${cp.id})`,
+      cells:[
+        `<span style="font-size:20px;">${isFree?'🚚':'🎟️'}</span>`,
+        `<span class="dt-title">${cp.code}</span>`,
+        `<span class="dt-sub">${isFree?'ສົ່ງຟຣີ':`ສ່ວນຫລຸດ ${cp.discount_value}%`}</span>`,
+        `<span class="dt-sub">${cp.expires_at ? new Date(cp.expires_at).toLocaleDateString('lo-LA') : 'ບໍ່ໝົດອາຍຸ'}${expired?' (ໝົດອາຍຸແລ້ວ)':''}</span>`,
+        (!cp.is_active||expired)?'<span class="status-pill status-cancelled">ປິດ/ໝົດອາຍຸ</span>':'<span class="status-pill status-approved">ໃຊ້ງານໄດ້</span>',
+        `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCoupon(${cp.id})">✕</button>`
+      ]
+    };
+  });
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:14px;" onclick="adminEditCoupon()">➕ ສ້າງຄູປອງໃໝ່</button>
     <div class="hint" style="margin:-6px 0 14px;">ຄູປອງທີ່ສ້າງທີ່ນີ້ຈະສົ່ງໄປໃຫ້ຮ້ານຄ້າທຸກຮ້ານ — ຜູ້ຂາຍຈະເລືອກເອົາໄປຕິດໃສ່ສິນຄ້າຂອງເຂົາເອງ (ພ້ອມກຳນົດຈຳນວນ ຫຼື ບໍ່ຈຳກັດ) ຈາກໜ້າຮ້ານຄ້າຂອງເຂົາ</div>` +
-    (!list.length ? '<div class="empty">ຍັງບໍ່ມີຄູປອງ</div>' : list.map(cp=>{
-      const expired = cp.expires_at && new Date(cp.expires_at).getTime() < Date.now();
-      return `<div style="position:relative;" onclick="adminEditCoupon(${cp.id})">
-        <button class="ct-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteCoupon(${cp.id})">✕</button>
-        <div class="${(!cp.is_active||expired)?'dim':''}">${couponTicketPreviewHtml(cp.discount_type, cp.discount_value, cp.expires_at, cp.code)}</div>
-      </div>`;
-    }).join(''));
+    dtable(['','ໂຄ້ດ','ປະເພດ','ໝົດອາຍຸ','ສະຖານະ',''], rows, 'ຍັງບໍ່ມີຄູປອງ');
 }
 function adminEditCoupon(id){
   const cp = id ? (STATE.adminCouponsCache||[]).find(x=>x.id===id) : null;
@@ -2308,24 +2364,22 @@ async function renderAdminAds(){
   STATE.adminAdsCache = list;
   const popupAds = list.filter(a=>a.placement==='popup');
   const bannerAds = list.filter(a=>a.placement==='banner');
-  const section = (title, hint, items)=> `
-    <h4 style="font-size:13px; margin:18px 0 2px;">${title}</h4>
-    <div class="hint" style="margin-top:0;">${hint}</div>
-    ${!items.length ? '<div class="empty" style="padding:20px 0;">ຍັງບໍ່ມີ</div>' : items.map(a=>`
-      <div class="admin-list-item">
-        <div style="display:flex; gap:10px;">
-          <img src="${a.image_url}" style="width:64px; height:64px; object-fit:cover; border-radius:8px; flex-shrink:0;">
-          <div style="min-width:0; flex:1;">
-            <div class="top"><span class="title">${a.title||'(ບໍ່ມີຫົວຂໍ້)'}</span>${a.is_active?'':'<span class="status-pill status-cancelled">ປິດ</span>'}</div>
-            <div class="hint">${a.subtitle||''}</div>
-            ${a.coupon_code?`<div class="hint">🎟️ ${a.coupon_code}</div>`:''}
-          </div>
-        </div>
-        <div class="chiprow">
-          <button onclick="adminEditAd(${a.id})">✏️ ແກ້ໄຂ</button>
-          <button onclick="adminDeleteAd(${a.id})">🗑️ ລຶບ</button>
-        </div>
-      </div>`).join('')}`;
+  const section = (title, hint, items)=> {
+    const rows = items.map(a=>({
+      onClick:`adminEditAd(${a.id})`,
+      cells:[
+        `<img class="dt-img-lg" src="${a.image_url}">`,
+        `<span class="dt-title">${a.title||'(ບໍ່ມີຫົວຂໍ້)'}</span><span class="dt-sub">${a.subtitle||''}</span>`,
+        a.coupon_code ? `🎟️ ${a.coupon_code}` : '<span class="dt-sub">-</span>',
+        a.is_active?'<span class="status-pill status-approved">ໃຊ້ງານ</span>':'<span class="status-pill status-cancelled">ປິດ</span>',
+        `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteAd(${a.id})">✕</button>`
+      ]
+    }));
+    return `
+    <div class="dtable-section-title">${title}</div>
+    <div class="hint" style="margin:0 4px 8px;">${hint}</div>
+    ${dtable(['ຮູບ','ຫົວຂໍ້','ຄູປອງ','ສະຖານະ',''], rows, 'ຍັງບໍ່ມີ')}`;
+  };
   body.innerHTML = `
     <button class="btn btn-gold" style="margin-bottom:6px;" onclick="adminEditAd()">➕ ເພີ່ມໂຄສະນາ</button>
     ${section('🎉 ໂຄສະນາປັອບອັບ (ຕອນເປີດແອັບຄັ້ງທຳອິດ)', 'ຂຶ້ນສະແດງ 1 ຄັ້ງຕໍ່ວັນ ຫຼັງຈາກເປີດແອັບ', popupAds)}
@@ -2535,15 +2589,21 @@ async function renderAdminReturns(){
   catch(e){ body.innerHTML = '<div class="empty">ບໍ່ສາມາດໂຫລດຂໍ້ມູນໄດ້ — ຄຸນສົມບັດນີ້ອາດຍັງບໍ່ໄດ້ຕິດຕັ້ງໃນຖານຂໍ້ມູນ (ເບິ່ງ SQL migration)</div>'; return; }
   STATE.adminReturnsCache = list;
   const pendingCount = list.filter(r=>r.status==='pending').length;
+  const statusLbl = {pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'};
+  const rows = list.map(r=>({
+    onClick:`adminViewReturn(${r.id})`,
+    cells:[
+      `<span class="dt-title">#${r.order_number}</span><span class="dt-sub">${r.store_name||'-'}</span>`,
+      `<span class="dt-sub">${r.customer_name||''} ${r.customer_phone?'• '+r.customer_phone:''}</span>`,
+      `<span class="dt-sub">${r.reason}</span>`,
+      `<span class="dt-amount">${fmtMoney(r.refund_amount)}</span>`,
+      `<span class="status-pill status-${r.status}">${statusLbl[r.status]||r.status}</span>`,
+      `<span class="dt-sub">${new Date(r.requested_at).toLocaleString('lo-LA')}</span>`
+    ]
+  }));
   body.innerHTML = `
     ${pendingCount ? `<div class="hint" style="margin-bottom:12px; background:var(--gold-light); padding:10px 12px; border-radius:10px; font-weight:700; color:var(--maroon-dark);">🔔 ມີ ${pendingCount} ຄຳຂໍລໍຖ້າກວດສອບ</div>` : ''}
-    ${!list.length ? '<div class="empty">ຍັງບໍ່ມີການຂໍຄືນສິນຄ້າ</div>' : list.map(r=>`
-      <div class="admin-list-item" style="cursor:pointer;" onclick="adminViewReturn(${r.id})">
-        <div class="top"><span class="title">#${r.order_number} • ${r.store_name||'-'}</span><span class="status-pill status-${r.status}">${({pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ'})[r.status]||r.status}</span></div>
-        <div class="hint">${r.customer_name||''} ${r.customer_phone?'• '+r.customer_phone:''} • ${new Date(r.requested_at).toLocaleString('lo-LA')}</div>
-        <div class="hint" style="margin-top:4px;">ເຫດຜົນ: ${r.reason}</div>
-        <div style="margin-top:4px; font-weight:700;">${fmtMoney(r.refund_amount)}</div>
-      </div>`).join('')}`;
+    ${dtable(['ອໍເດີ','ລູກຄ້າ','ເຫດຜົນ','ຈຳນວນຄືນ','ສະຖານະ','ວັນທີ'], rows, 'ຍັງບໍ່ມີການຂໍຄືນສິນຄ້າ')}`;
 }
 function adminViewReturn(id){
   const r = (STATE.adminReturnsCache||[]).find(x=>x.id===id);
@@ -2606,16 +2666,15 @@ const FONT_CHOICES = [
   {name:'Quicksand', label:'ມົນ ໜ້າຮັກ (Quicksand)'}
 ];
 
-function renderAdminTheme(){
-  const body = document.getElementById('adminBody');
+// Same color-editor markup as before — now injected into a modal on row click instead of
+// always being shown inline, so the theme tab itself can be a compact "big table" like every
+// other section. The ids (theme_<prefix>_<field> etc.) are unchanged, so saveThemeApp /
+// resetThemeApp / _themePreviewUpdate all keep working exactly as before, just inside a modal.
+function themeAppCardHtml(prefix){
   const s = STATE.settings;
-  const currentFont = s.theme_font_family || 'Noto Sans Lao';
-  const currentRadius = Number(s.theme_radius_scale) || 1;
-
-  const appCard = (prefix)=>{
-    const def = APP_THEME_DEFAULTS[prefix];
-    const previewHref = prefix==='customer' ? 'index.html' : (prefix==='seller' ? 'seller.html' : 'admin.html');
-    return `<div class="theme-app-card" id="themeCard_${prefix}">
+  const def = APP_THEME_DEFAULTS[prefix];
+  const previewHref = prefix==='customer' ? 'index.html' : (prefix==='seller' ? 'seller.html' : 'admin.html');
+  return `<div class="theme-app-card" id="themeCard_${prefix}" style="box-shadow:none; padding:0; margin:0;">
       <div class="theme-app-head">
         <span class="dot" id="themeDot_${prefix}" style="background:${s[prefix+'_theme_primary']||def.primary};"></span>
         <h4>${def.label}</h4>
@@ -2636,15 +2695,12 @@ function renderAdminTheme(){
         <button class="btn btn-ghost" style="flex:1;" onclick="resetThemeApp('${prefix}')">↺ ຄ່າເລີ່ມຕົ້ນ</button>
       </div>
     </div>`;
-  };
-
-  body.innerHTML = `
-    <div class="hint" style="margin-bottom:14px;">ປັບສີ/ໂລໂກ້/ຮູບແບບຂອງແຕ່ລະແອັບແຍກກັນ — ບັນທຶກແລ້ວຈະມີຜົນທັນທີຄັ້ງຕໍ່ໄປທີ່ຜູ້ໃຊ້ເປີດແອັບນັ້ນ (ບໍ່ຕ້ອງອັບເດດແອັບ).</div>
-    ${appCard('customer')}
-    ${appCard('seller')}
-    ${appCard('admin')}
-    <div class="theme-app-card">
-      <div class="theme-app-head"><span class="dot" style="background:var(--gold);"></span><h4>🔤 ຟອນ ແລະ ✨ ຄວາມໂຄ້ງມົນ (ໃຊ້ຮ່ວມກັນທັງ 3 ແອັບ)</h4></div>
+}
+function themeTypographyCardHtml(){
+  const s = STATE.settings;
+  const currentFont = s.theme_font_family || 'Noto Sans Lao';
+  const currentRadius = Number(s.theme_radius_scale) || 1;
+  return `<div class="theme-app-card" style="box-shadow:none; padding:0; margin:0;">
       <div class="font-pick-row" id="fontPickRow">
         ${FONT_CHOICES.map(f=>`<button data-font="${f.name}" class="${f.name===currentFont?'active':''}" style="font-family:'${f.name}','Noto Sans Lao',sans-serif;" onclick="pickFont('${f.name}')">${f.label}</button>`).join('')}
       </div>
@@ -2660,10 +2716,43 @@ function renderAdminTheme(){
         <div style="font-size:11px; color:var(--ink-soft);">ຕົວຢ່າງ (<span id="radiusVal">${currentRadius}×</span>)</div>
       </div>
       <button class="btn btn-primary" style="margin-top:14px;" onclick="saveThemeTypography()">💾 ບັນທຶກຟອນ ແລະ ຄວາມໂຄ້ງມົນ</button>
-    </div>
+    </div>`;
+}
+function openThemeEditor(prefix){
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  const title = prefix==='typography' ? '🔤 ຟອນ ແລະ ✨ ຄວາມໂຄ້ງມົນ' : `🎨 ${APP_THEME_DEFAULTS[prefix].label}`;
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>${title}</h3><button class="closex" data-close>✕</button></div>
+    <div class="sheet-body">${prefix==='typography' ? themeTypographyCardHtml() : themeAppCardHtml(prefix)}</div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  if(prefix!=='typography') _themePreviewUpdate(prefix);
+}
+function renderAdminTheme(){
+  const body = document.getElementById('adminBody');
+  const s = STATE.settings;
+  const rows = ['customer','seller','admin'].map(prefix=>{
+    const def = APP_THEME_DEFAULTS[prefix];
+    return {
+      onClick:`openThemeEditor('${prefix}')`,
+      cells:[
+        `<span class="dt-dot" style="width:16px; height:16px; background:${s[prefix+'_theme_primary']||def.primary};"></span>`,
+        `<span class="dt-title">${def.label}</span>`,
+        `<span class="dt-sub">ກົດເພື່ອແກ້ໄຂສີ/ຮູບແບບ →</span>`
+      ]
+    };
+  });
+  rows.push({
+    onClick:`openThemeEditor('typography')`,
+    cells:[
+      `<span style="font-size:18px;">🔤</span>`,
+      `<span class="dt-title">ຟອນ ແລະ ຄວາມໂຄ້ງມົນ</span>`,
+      `<span class="dt-sub">ໃຊ້ຮ່ວມກັນທັງ 3 ແອັບ — ກົດເພື່ອແກ້ໄຂ →</span>`
+    ]
+  });
+  body.innerHTML = `
+    <div class="hint" style="margin-bottom:14px;">ປັບສີ/ໂລໂກ້/ຮູບແບບຂອງແຕ່ລະແອັບແຍກກັນ — ບັນທຶກແລ້ວຈະມີຜົນທັນທີຄັ້ງຕໍ່ໄປທີ່ຜູ້ໃຊ້ເປີດແອັບນັ້ນ (ບໍ່ຕ້ອງອັບເດດແອັບ).</div>
+    ${dtable(['','ແອັບ',''], rows)}
     <div class="hint">ຄຳແນະນຳ: ຖ້າຢາກໃຫ້ທັງ 3 ແອັບໂຕນສີດຽວກັນ, ຕັ້ງໃຫ້ "ສີຫຼັກ" ຂອງທັງ 3 ຄືກັນ. ຖ້າຢາກໃຫ້ແຍກກັນຊັດເຈນ (ເຊັ່ນ: ຮ້ານຄ້າ=ແດງ, ຜູ້ຂາຍ=ຟ້າ, ແອດມິນ=ມ່ວງ) ປ່ອຍໃຫ້ຄ່າເລີ່ມຕົ້ນຂອງແຕ່ລະອັນຕ່າງກັນຄືເດີມກໍໄດ້.</div>`;
-
-  ['customer','seller','admin'].forEach(_themePreviewUpdate);
 }
 
 function _themePreviewUpdate(prefix){
