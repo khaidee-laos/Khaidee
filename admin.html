@@ -375,6 +375,7 @@ nav.bottom .icon{font-size:19px;}
     <button data-tab="sellers">🏪 ຜູ້ຂາຍ</button>
     <button data-tab="topups">💰 ເຕີມເງິນ</button>
     <button data-tab="seller_topups">➕ ເຕີມເງິນຜູ້ຂາຍ</button>
+    <button data-tab="ai_slip">🤖 ຕຣວດສະລິບ AI<span id="aiSlipBadge" class="hidden" style="display:inline-block; margin-left:4px; background:var(--danger); color:#fff; border-radius:10px; padding:1px 6px; font-size:11px; font-weight:700;">0</span></button>
     <button data-tab="payouts">💸 ຖອນເງິນຜູ້ຂາຍ</button>
     <button data-tab="finance">📒 ປະຫວັດການເງິນ</button>
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
@@ -642,6 +643,21 @@ async function enterAdmin(){
   document.getElementById('adminApp').style.display='block';
   await Promise.all([loadCategories(), loadCarriers(), loadSellersPublic(), loadAdminSecretSettings()]);
   switchAdminTab('dashboard');
+  pollAiSlipBadge();
+  setInterval(pollAiSlipBadge, 30000);
+}
+// Keeps the 🤖 tab's badge count current even while the admin is on a different tab — actual
+// sound/vibration for a brand-new problem slip comes from the push notification (slip-ai-check
+// edge function → admin-push-notify), this is just the little red counter on the tab itself.
+async function pollAiSlipBadge(){
+  try{
+    const [c, s] = await Promise.all([
+      sbRPC('admin_list_topups', {p_password: STATE.adminPassword}),
+      sbRPC('admin_list_seller_topups', {p_password: STATE.adminPassword})
+    ]);
+    const issues = [...(c||[]), ...(s||[])].filter(t=> t.status==='pending' && t.slip_url && t.ai_status==='issue').length;
+    updateAiSlipBadge(issues);
+  }catch(e){ /* quiet — this is a background poll */ }
 }
 // gemini_api_key is deliberately excluded from the public site_settings_public view (anyone
 // with the anon key could otherwise read it), so once logged in as admin we fetch it separately
@@ -665,7 +681,7 @@ function switchAdminTab(tab){
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups, seller_topups:renderAdminSellerTopups,
     payouts:renderAdminPayouts, finance:renderAdminFinance, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
-    ads:renderAdminAds, returns:renderAdminReturns, theme:renderAdminTheme, settings:renderAdminSettings};
+    ads:renderAdminAds, returns:renderAdminReturns, theme:renderAdminTheme, settings:renderAdminSettings, ai_slip:renderAdminAiSlip};
   (renderers[tab]||function(){})();
 }
 document.getElementById('adminPassInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryAdminLogin(); });
@@ -1761,6 +1777,74 @@ async function adminApproveSellerTopup(id, approve){
   });
 }
 
+/* ============================================================ AI SLIP CHECK (🤖 ຕຣວດສະລິບ AI) ============================================================
+   The actual AI reading happens server-side already: a DB trigger fires the moment a customer
+   or seller top-up gets a slip_url, which calls the `slip-ai-check` edge function. That function
+   reads the slip with Gemini vision, extracts amount/ref-number/date-time/sender/receiver name,
+   checks the ref-number against every other top-up on file (both customer + seller tables) to
+   catch a re-used slip, compares the amount to what was requested, writes it all onto the
+   wallet_transactions / seller_wallet_transactions row (ai_status/ai_note/ai_ref_number/...),
+   and pushes an admin notification. It NEVER auto-approves or auto-rejects — this tab is just
+   where the admin reads what the AI found and makes the actual call themselves, same buttons as
+   the ເຕີມເງິນ/ເຕີມເງິນຜູ້ຂາຍ tabs (adminApproveTopup / adminApproveSellerTopup, reused below). */
+function aiSlipStatusPill(s){
+  if(s==='ok') return `<span class="status-pill status-approved">✅ ປົກກະຕິ</span>`;
+  if(s==='issue') return `<span class="status-pill status-rejected">⚠️ ພົບບັນຫາ</span>`;
+  return `<span class="status-pill status-pending">⏳ ຍັງບໍ່ໄດ້ກວດ</span>`;
+}
+async function renderAdminAiSlip(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  const [custList, sellList] = await Promise.all([
+    sbRPC('admin_list_topups', {p_password: STATE.adminPassword}),
+    sbRPC('admin_list_seller_topups', {p_password: STATE.adminPassword})
+  ]);
+  const pending = [
+    ...(custList||[]).filter(t=>t.status==='pending' && t.slip_url).map(t=>({...t, kind:'customer', who:t.full_name, who2:t.phone})),
+    ...(sellList||[]).filter(t=>t.status==='pending' && t.slip_url).map(t=>({...t, kind:'seller', who:t.store_name, who2:''}))
+  ].sort((a,b)=> new Date(b.created_at) - new Date(a.created_at));
+  STATE.aiSlipPending = pending;
+  updateAiSlipBadge(pending.filter(t=>t.ai_status==='issue').length);
+  if(!pending.length){ body.innerHTML = '<div class="empty">ບໍ່ມີສະລິບລໍຖ້າກວດ 🎉</div>'; return; }
+  body.innerHTML = pending.map(t=>`
+    <div class="admin-list-item" style="margin-bottom:12px;">
+      <div style="display:flex; gap:12px;">
+        <img src="${t.slip_url}" onclick="window.open('${t.slip_url}','_blank')" style="width:88px; height:88px; object-fit:cover; border-radius:8px; cursor:pointer; flex-shrink:0; border:1px solid var(--line);">
+        <div style="flex:1; min-width:0;">
+          <div class="top"><span class="title">${t.kind==='customer'?'👛 ລູກຄ້າ':'➕ ຮ້ານຄ້າ'}: ${t.who||'-'}${t.who2?' ('+t.who2+')':''}</span>${aiSlipStatusPill(t.ai_status)}</div>
+          <div class="hint">ຍອດແຈ້ງ: ${fmtMoney(t.amount)} · ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+        </div>
+      </div>
+      ${t.ai_checked_at ? `<div class="hint" style="margin-top:10px; line-height:1.8; background:var(--bg-soft,#faf9f7); padding:8px 10px; border-radius:8px;">
+          💵 ຍອດອ່ານໄດ້: <b>${t.ai_amount!=null?fmtMoney(t.ai_amount):'-'}</b>${t.ai_amount!=null && Math.abs(t.ai_amount-t.amount)>1?` <span style="color:var(--danger); font-weight:700;">(ບໍ່ກົງກັບຍອດແຈ້ງ!)</span>`:''}<br>
+          🔢 ເລກອ້າງອີງ: ${t.ai_ref_number||'-'}<br>
+          🕐 ວັນເວລາໂອນ (ໃນສະລິບ): ${t.ai_slip_datetime?new Date(t.ai_slip_datetime).toLocaleString('lo-LA'):'-'}<br>
+          🏦 ທະນາຄານ: ${t.ai_bank_name||'-'}<br>
+          👤 ຜູ້ໂອນ → ຜູ້ຮັບ: ${t.ai_sender_name||'-'} → ${t.ai_receiver_name||'-'}<br>
+          ${t.ai_note?`📝 ${t.ai_note}`:''}
+        </div>` : `<div class="hint" style="margin-top:8px;">AI ຍັງບໍ່ໄດ້ກວດສະລິບນີ້ (ອາດກຳລັງປະມວນຜົນຢູ່ ຫຼື ຍັງບໍ່ໄດ້ຕັ້ງ Gemini API Key)</div>`}
+      <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="aiSlipRecheck('${t.kind}', ${t.id}, this)">🔄 ${t.ai_checked_at?'ກວດຄືນດ້ວຍ AI':'ກວດດ້ວຍ AI ດຽວນີ້'}</button>
+        <button class="btn btn-primary" onclick="${t.kind==='customer'?`adminApproveTopup(${t.id}, true)`:`adminApproveSellerTopup(${t.id}, true)`}">✔️ ອະນຸມັດ</button>
+        <button class="btn btn-ghost" style="color:var(--danger);" onclick="${t.kind==='customer'?`adminApproveTopup(${t.id}, false)`:`adminApproveSellerTopup(${t.id}, false)`}">✖️ ປະຕິເສດ</button>
+      </div>
+    </div>`).join('');
+}
+function updateAiSlipBadge(n){
+  const badge = document.getElementById('aiSlipBadge'); if(!badge) return;
+  badge.textContent = n; badge.classList.toggle('hidden', !n);
+}
+// Manually re-triggers the same server-side Gemini check the DB trigger fires automatically —
+// useful right after the admin sets/changes the Gemini API key, or if a check errored out before.
+async function aiSlipRecheck(kind, id, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ ກຳລັງກວດ...'; }
+  try{
+    await sbRPC('admin_recheck_slip_ai', {p_password: STATE.adminPassword, p_source: kind, p_txn_id: id});
+    showToast('ສົ່ງໃຫ້ AI ກວດແລ້ວ, ລໍຖ້າ 5-10 ວິນາທີແລ້ວກົດໂຫລດຄືນ');
+    setTimeout(renderAdminAiSlip, 6000);
+  }catch(e){ showToast('ຜິດພາດ: ' + e.message); if(btn){ btn.disabled=false; btn.textContent='🔄 ກວດດ້ວຍ AI'; } }
+}
+
 /* ============================================================ SELLER PAYOUTS (withdraw requests) ============================================================
    Needs on the Supabase side:
    - admin_list_seller_withdrawals(p_password) -> [{id, seller_id, store_name, amount, qr_url, status, slip_url, admin_note, requested_at}]
@@ -2221,6 +2305,12 @@ async function renderAdminSettings(){
     <button class="btn btn-primary" id="stContactSave">ບັນທຶກຂໍ້ມູນຕິດຕໍ່</button>
 
     <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
+    <h4 style="font-size:13px;">🔔 ການແຈ້ງເຕືອນສຽງ (ອໍເດີໃໝ່, ຄຳຂໍເຕີມເງິນ, ສະລິບມີບັນຫາ)</h4>
+    <div class="hint" style="margin-top:-4px;">ເປີດໄວ້ໃນອຸປະກອນນີ້ ເພື່ອໃຫ້ມີສຽງ+ສັ່ນທັນທີ ເຖິງແມ່ນປິດແອັບໄວ້ ຄືກັນກັບ seller.html</div>
+    <button class="btn btn-gold" id="pushToggleBtn" onclick="togglePushNotifications()" style="margin-top:8px;">🔔 ເປີດການແຈ້ງເຕືອນສຽງ</button>
+    <div class="hint" id="pushStatusHint" style="margin-top:6px;"></div>
+
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--line);">
     <h4 style="font-size:13px;">ປ່ຽນລະຫັດຜ່ານແອດມິນ</h4>
     <div class="field"><label>ລະຫັດຜ່ານປັດຈຸບັນ</label><input type="password" autocomplete="off" id="apOld"></div>
     <div class="field"><label>ລະຫັດຜ່ານໃໝ່</label><input type="password" autocomplete="off" id="apNew"></div>
@@ -2295,6 +2385,7 @@ async function renderAdminSettings(){
       showToast('ປ່ຽນລະຫັດຜ່ານແອດມິນສຳເລັດ');
     }catch(e){ showToast('ລະຫັດຜ່ານປັດຈຸບັນບໍ່ຖືກຕ້ອງ'); }
   };
+  refreshPushToggleUI();
 }
 
 /* ============================================================ RETURNS / REFUNDS ============================================================
@@ -2500,6 +2591,89 @@ async function saveThemeTypography(){
     showToast('ບັນທຶກຟອນ ແລະ ຄວາມໂຄ້ງມົນແລ້ວ ✅');
   }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + (e.message||e)); }
 }
+/* ============================================================ PUSH NOTIFICATIONS (sound + vibration for new orders, topup requests,
+   and AI slip-check flags — works even when the admin app/tab is closed, via Web Push + a
+   service worker. Same pattern/backend as seller.html's push toggle, just admin_* RPCs and the
+   admin-push-notify edge function instead of the seller ones. ============================================================ */
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function pushSupported(){
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+async function refreshPushToggleUI(){
+  const btn = document.getElementById('pushToggleBtn');
+  const hint = document.getElementById('pushStatusHint');
+  if(!btn) return;
+  if(!pushSupported()){
+    btn.textContent = '🔕 ອຸປະກອນນີ້ບໍ່ຮອງຮັບການແຈ້ງເຕືອນ';
+    btn.disabled = true;
+    if(hint) hint.textContent = 'ລອງເປີດຜ່ານ Chrome (Android) ຫຼືເພີ່ມແອັບໄປໜ້າຈໍຫຼັກກ່ອນ (iPhone, iOS 16.4+)';
+    return;
+  }
+  let isOn = false;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    isOn = !!sub && Notification.permission === 'granted';
+  }catch(e){ /* ignore */ }
+  btn.textContent = isOn ? '🔕 ປິດການແຈ້ງເຕືອນສຽງ' : '🔔 ເປີດການແຈ້ງເຕືອນສຽງ';
+  btn.className = isOn ? 'btn btn-ghost' : 'btn btn-gold';
+  btn.disabled = false;
+  if(hint) hint.textContent = isOn
+    ? '✅ ເປີດຢູ່ — ອຸປະກອນນີ້ຈະມີສຽງ+ສັ່ນທັນທີທີ່ມີອໍເດີໃໝ່/ຄຳຂໍເຕີມເງິນ/ສະລິບມີບັນຫາ ເຖິງແມ່ນປິດແອັບໄວ້'
+    : 'ຍັງບໍ່ໄດ້ເປີດ — ຈະບໍ່ໄດ້ຍິນສຽງແຈ້ງເຕືອນຕອນປິດແອັບຖ້າຍັງບໍ່ກົດເປີດ';
+}
+async function togglePushNotifications(){
+  const btn = document.getElementById('pushToggleBtn');
+  if(!pushSupported()){ showToast('ອຸປະກອນ ຫຼື ບຣາວເຊີນີ້ບໍ່ຮອງຮັບການແຈ້ງເຕືອນ'); return; }
+  if(btn) btn.disabled = true;
+  try{
+    // iOS Safari requires the permission prompt to be the very first awaited call here (see
+    // seller.html's identical note) or every later push call fails silently.
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){
+      showToast('ກະລຸນາອະນຸຍາດການແຈ້ງເຕືອນຈາກບຣາວເຊີ/ໂທລະສັບເພື່ອເປີດໃຊ້');
+      return;
+    }
+    const swReg = await registerSw();
+    if(!swReg){ showToast('ຕິດຕັ້ງລະບົບແຈ້ງເຕືອນບໍ່ສຳເລັດ'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if(existing){
+      await sbRPC('admin_remove_push_subscription', {p_password: STATE.adminPassword, p_endpoint: existing.endpoint}).catch(()=>{});
+      await existing.unsubscribe();
+      showToast('ປິດການແຈ້ງເຕືອນສຽງແລ້ວ');
+    }else{
+      const vapidKey = await sbRPC('get_vapid_public_key', {});
+      let sub;
+      try{
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
+      }catch(subErr){
+        await new Promise(r=>setTimeout(r, 1200));
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) });
+      }
+      const j = sub.toJSON();
+      await sbRPC('admin_save_push_subscription', {
+        p_password: STATE.adminPassword, p_endpoint: j.endpoint,
+        p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_user_agent: navigator.userAgent
+      });
+      showToast('🔔 ເປີດການແຈ້ງເຕືອນສຽງແລ້ວ!');
+    }
+  }catch(e){
+    const msg = /internal service error|AbortError/i.test(e.message||'')
+      ? 'ບໍ່ສາມາດເປີດການແຈ້ງເຕືອນໄດ້ຕອນນີ້ (ບັນຫາຈາກລະບົບ Push ຂອງບຣາວເຊີ/ໂທລະສັບ) — ລອງປິດ-ເປີດ WiFi ໃໝ່ ຫຼືລອງອີກຄັ້ງ'
+      : 'ມີບັນຫາ: ' + e.message;
+    showToast(msg);
+  }
+  finally{ refreshPushToggleUI(); }
+}
+
 /* ============================================================ BOOT ============================================================ */
 async function registerSw(){
   if(!('serviceWorker' in navigator)) return null;
