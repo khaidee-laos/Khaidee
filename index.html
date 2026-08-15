@@ -260,6 +260,7 @@ nav.bottom .icon{font-size:19px;}
 .sheet-header{display:flex; align-items:center; justify-content:space-between; padding:10px 16px; border-bottom:1px solid var(--line);}
 .sheet-header h3{margin:0; font-size:15.5px;}
 .closex{background:var(--cream); border:none; width:30px; height:30px; border-radius:999px; font-size:15px; color:var(--ink-soft);}
+.share-btn{background:var(--cream); border:none; width:30px; height:30px; border-radius:999px; font-size:14px; color:var(--ink-soft); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
 .sheet-body{padding:16px;}
 #productDetailBody{margin:-16px -16px 0;} /* let the Shopee-style gallery bleed to the sheet's edges */
 
@@ -324,6 +325,19 @@ nav.bottom .icon{font-size:19px;}
 .pd-related-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px;}
 .pd-sticky-bar{position:sticky; bottom:0; background:#fff; padding:10px 16px; display:flex; gap:10px; border-top:1px solid var(--line); margin:16px -16px -16px;}
 .pd-sticky-bar button{flex:1;}
+
+/* ---- Share sheet (Shopee/Lazada-style "share this product/shop") ---- */
+#modalShare .sheet{max-height:82vh;}
+.share-preview{display:flex; gap:10px; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line);}
+.share-preview img{width:52px; height:52px; border-radius:10px; object-fit:cover; background:var(--gold-light); flex-shrink:0;}
+.share-preview .name{font-size:13px; font-weight:700; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.share-preview .price{font-size:13px; color:var(--maroon); font-weight:800; margin-top:3px;}
+.share-linkrow{display:flex; gap:8px; padding:14px 16px 4px;}
+.share-linkrow input{flex:1; min-width:0; padding:10px 12px; border:1.5px solid var(--line); border-radius:10px; font-size:11.5px; background:var(--cream); color:var(--ink-soft);}
+.share-linkrow button{width:auto; padding:10px 16px; white-space:nowrap; flex-shrink:0;}
+.share-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px 6px; padding:16px 16px 22px; text-align:center;}
+.share-opt{display:flex; flex-direction:column; align-items:center; gap:6px; background:none; border:none; font-size:11px; color:var(--ink-soft); font-weight:600;}
+.share-opt .ic{width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:21px; color:#fff;}
 
 /* ---- Product detail: FULL PAGE (Lazada-style) instead of a bottom-sheet popup ---- */
 #modalProduct.overlay{align-items:stretch; justify-content:stretch;}
@@ -645,7 +659,7 @@ nav.bottom .icon{font-size:19px;}
 
 <!-- Product Detail (full page, not a popup — swipe/back-button style like Lazada) -->
 <div class="overlay" id="modalProduct"><div class="sheet">
-  <div class="sheet-header"><button class="closex" onclick="closeModal('modalProduct')" aria-label="back">←</button><h3 data-i18n="product_detail">ລາຍລະອຽດສິນຄ້າ</h3><span style="width:30px;"></span></div>
+  <div class="sheet-header"><button class="closex" onclick="closeModal('modalProduct')" aria-label="back">←</button><h3 data-i18n="product_detail">ລາຍລະອຽດສິນຄ້າ</h3><button class="share-btn" onclick="shareProduct(detailProductId)" aria-label="share">📤</button></div>
   <div class="sheet-body" id="productDetailBody"></div>
 </div></div>
 
@@ -659,8 +673,15 @@ nav.bottom .icon{font-size:19px;}
 <!-- Shop / Store page -->
 <div class="overlay" id="modalShop"><div class="sheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-header"><h3>ໜ້າຮ້ານຄ້າ</h3><button class="closex" onclick="closeModal('modalShop')">✕</button></div>
+  <div class="sheet-header"><h3 style="flex:1;">ໜ້າຮ້ານຄ້າ</h3><div style="display:flex; gap:8px; flex-shrink:0;"><button class="share-btn" onclick="shareShop(STATE.activeShop && STATE.activeShop.id)" aria-label="share">📤</button><button class="closex" onclick="closeModal('modalShop')">✕</button></div></div>
   <div class="sheet-body" id="shopBody" style="padding:0;"></div>
+</div></div>
+
+<!-- Share sheet: Shopee/Lazada-style "share this product/shop" popup -->
+<div class="overlay" id="modalShare"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>📤 ແບ່ງປັນ</h3><button class="closex" onclick="closeModal('modalShare')">✕</button></div>
+  <div id="shareBody"></div>
 </div></div>
 
 <!-- Checkout -->
@@ -1719,6 +1740,99 @@ function paintProductDetail(id){
       <button class="btn btn-primary" id="pdBuyNowBtn" ${(displayStock??0)<=0?'disabled':''} onclick="openBuyOptions(${p.id}, 'buy')">${(displayStock??0)<=0?'⛔ ສິນຄ້າໝົດ':'⚡ ຊື້ເລີຍ'}</button>
     </div>`;
 }
+/* ============================================================ SHARE (Shopee/Lazada-style share sheet) ============================================================
+   Builds a deep-link back into this same page (?product=ID or ?shop=ID) so anyone opening the
+   shared link lands straight on that product/shop — see the URLSearchParams check in init()
+   near the bottom of this file, which reopens the right modal once the catalog has loaded. */
+let CURRENT_SHARE = null;
+function shareBaseUrl(){ return location.origin + location.pathname; }
+function buildShareUrl(type, id){
+  const u = new URL(shareBaseUrl());
+  u.searchParams.set(type, id);
+  return u.toString();
+}
+function shareProduct(id){
+  const p = STATE.products.find(x=>x.id===id); if(!p) return;
+  CURRENT_SHARE = {
+    title: nameFor(p),
+    text: `${nameFor(p)} — ${fmtMoney(p.price)} ທີ່ ${STATE.settings.site_name||'KhaiDee ຂາຍດີ'}`,
+    image: (p.images && p.images[0]) || '',
+    price: fmtMoney(p.price),
+    url: buildShareUrl('product', id)
+  };
+  paintShareSheet();
+  openModal('modalShare');
+}
+function shareShop(sellerId){
+  if(!sellerId) return;
+  const shop = STATE.activeShop;
+  CURRENT_SHARE = {
+    title: shop ? shop.store_name : 'ຮ້ານຄ້າ',
+    text: `${shop?shop.store_name:'ຮ້ານຄ້າ'} — ${STATE.settings.site_name||'KhaiDee ຂາຍດີ'}`,
+    image: shop ? (shop.logo_url||'') : '',
+    price: '',
+    url: buildShareUrl('shop', sellerId)
+  };
+  paintShareSheet();
+  openModal('modalShare');
+}
+function paintShareSheet(){
+  if(!CURRENT_SHARE) return;
+  const s = CURRENT_SHARE;
+  document.getElementById('shareBody').innerHTML = `
+    <div class="share-preview">
+      <img src="${s.image || 'https://placehold.co/100x100/F1DFAE/7A1E2B?text=KhaiDee'}">
+      <div style="min-width:0;">
+        <div class="name">${s.title}</div>
+        ${s.price?`<div class="price">${s.price}</div>`:''}
+      </div>
+    </div>
+    <div class="share-linkrow">
+      <input id="shareLinkInput" readonly value="${s.url}" onclick="this.select()">
+      <button class="btn btn-primary" onclick="copyShareLink()">📋 ຄັດລອກ</button>
+    </div>
+    <div class="share-grid">
+      <button class="share-opt" onclick="shareToFacebook()"><span class="ic" style="background:#1877F2;">📘</span>Facebook</button>
+      <button class="share-opt" onclick="shareToLine()"><span class="ic" style="background:#06C755;">💬</span>LINE</button>
+      <button class="share-opt" onclick="shareToTelegram()"><span class="ic" style="background:#26A5E4;">✈️</span>Telegram</button>
+      <button class="share-opt" onclick="shareToWhatsApp()"><span class="ic" style="background:#25D366;">📞</span>WhatsApp</button>
+      ${navigator.share ? `<button class="share-opt" onclick="shareViaSystem()"><span class="ic" style="background:linear-gradient(135deg,var(--maroon),var(--maroon-dark));">⋯</span>ອື່ນໆ</button>` : ''}
+    </div>`;
+}
+function copyShareLink(){
+  if(!CURRENT_SHARE) return;
+  const done = ()=> showToast('🔗 ຄັດລອກລິ້ງແລ້ວ — ນຳໄປວາງແຊຣ໌ໄດ້ເລີຍ');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(CURRENT_SHARE.url).then(done).catch(()=>{
+      const inp = document.getElementById('shareLinkInput');
+      if(inp){ inp.select(); document.execCommand('copy'); done(); }
+    });
+  }else{
+    const inp = document.getElementById('shareLinkInput');
+    if(inp){ inp.select(); document.execCommand('copy'); done(); }
+  }
+}
+function shareToFacebook(){
+  if(!CURRENT_SHARE) return;
+  window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(CURRENT_SHARE.url)}`, '_blank', 'noopener,width=600,height=600');
+}
+function shareToLine(){
+  if(!CURRENT_SHARE) return;
+  window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(CURRENT_SHARE.url)}&text=${encodeURIComponent(CURRENT_SHARE.text)}`, '_blank', 'noopener');
+}
+function shareToTelegram(){
+  if(!CURRENT_SHARE) return;
+  window.open(`https://t.me/share/url?url=${encodeURIComponent(CURRENT_SHARE.url)}&text=${encodeURIComponent(CURRENT_SHARE.text)}`, '_blank', 'noopener');
+}
+function shareToWhatsApp(){
+  if(!CURRENT_SHARE) return;
+  window.open(`https://wa.me/?text=${encodeURIComponent(CURRENT_SHARE.text+' '+CURRENT_SHARE.url)}`, '_blank', 'noopener');
+}
+function shareViaSystem(){
+  if(!CURRENT_SHARE || !navigator.share) return;
+  navigator.share({title: CURRENT_SHARE.title, text: CURRENT_SHARE.text, url: CURRENT_SHARE.url}).catch(()=>{});
+}
+
 // Shared by confirmBuyOptions() — resolves whatever the customer has (optionally) ticked to a
 // variant row + a human-readable label. Selecting is never mandatory: if nothing matches a
 // specific variant, the product's normal price/stock is used instead of blocking the purchase.
@@ -3989,6 +4103,11 @@ function hideSplash(){
 (async function init(){
   const splashStart = Date.now();
   applyI18n();
+  // Deep link support for shared product/shop links (?product=ID or ?shop=ID) generated by
+  // shareProduct()/shareShop() above — opened once the catalog below has finished loading.
+  const sharedParams = new URLSearchParams(location.search);
+  const sharedProductId = sharedParams.get('product') ? Number(sharedParams.get('product')) : null;
+  const sharedShopId = sharedParams.get('shop') ? Number(sharedParams.get('shop')) : null;
   try{
     await loadSettings();
     if(STATE.settings.logo_url){
@@ -4007,7 +4126,13 @@ function hideSplash(){
   // keep the splash on screen for at least ~2s so the corner animation has room to play,
   // even if data loaded faster than that
   const elapsed = Date.now() - splashStart;
-  setTimeout(hideSplash, Math.max(0, 2000 - elapsed));
+  const splashDelay = Math.max(0, 2000 - elapsed);
+  setTimeout(hideSplash, splashDelay);
+  if(sharedProductId){
+    setTimeout(()=>{ if(STATE.products.find(x=>x.id===sharedProductId)) openProduct(sharedProductId); }, splashDelay + 250);
+  }else if(sharedShopId){
+    setTimeout(()=>openShop(sharedShopId), splashDelay + 250);
+  }
 })();
 
 /* ---- PWA: register service worker so the app can be "Add to Home Screen"-installed ---- */
