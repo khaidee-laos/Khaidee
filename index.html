@@ -3678,6 +3678,51 @@ function bankReferenceNumbersHtml(bank){
     </div>`;
   return row('ເລກອ້າງອີງ 1', bank.ref_number_1) + (bank.ref_number_2 ? row('ເລກອ້າງອີງ 2', bank.ref_number_2) : '');
 }
+/* ---- Self-generated (no-PhaJay) amount-embedded QR for the manual top-up path ----
+   Some bank accounts have their raw static QR text saved by the admin (bank_accounts.qr_payload —
+   decoded once from the bank's own merchant QR image). When that's present we build a NEW EMVCo
+   payload client-side with the customer's amount baked in (tag 54) and a freshly-computed CRC
+   (tag 63), then render it through the same api.qrserver.com image endpoint already used for the
+   PhaJay-driven QR above — no PhaJay call involved. Banks without qr_payload fall back to just
+   showing the static bank.qr_url image with no amount, same as before this feature existed. */
+function crc16Ccitt(str){
+  let crc = 0xFFFF;
+  for(let i=0;i<str.length;i++){
+    crc ^= (str.charCodeAt(i) << 8);
+    for(let b=0;b<8;b++){
+      crc = (crc & 0x8000) ? ((crc<<1) ^ 0x1021) & 0xFFFF : (crc<<1) & 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4,'0');
+}
+function parseEmvcoTlv(s){
+  let i=0; const out=[];
+  while(i < s.length-3){
+    const tag = s.substr(i,2);
+    const len = parseInt(s.substr(i+2,2),10);
+    if(isNaN(len)) break;
+    out.push({tag, val: s.substr(i+4,len)});
+    i += 4+len;
+  }
+  return out;
+}
+// Builds a fresh EMVCo/LaoQR string from a bank's static payload with the given amount embedded.
+// Drops the old CRC (tag 63) and point-of-init method (tag 01), sets 01='12' (dynamic/has-amount),
+// inserts/replaces tag 54 with the amount, then recomputes the CRC over everything else.
+function buildDynamicQrPayload(staticPayload, amount){
+  const tlv = parseEmvcoTlv(String(staticPayload||'').replace(/\s+/g,''));
+  const map = {};
+  tlv.forEach(t=>{ if(t.tag!=='63') map[t.tag]=t.val; });
+  map['01'] = '12';
+  map['54'] = String(Math.round(amount));
+  const tags = Object.keys(map).sort();
+  let body = '';
+  tags.forEach(tag=>{ body += tag + String(map[tag].length).padStart(2,'0') + map[tag]; });
+  const withCrcTag = body + '6304';
+  return withCrcTag + crc16Ccitt(withCrcTag);
+}
+function manualQrImageUrl(payload){ return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payload)}`; }
+
 // Manual/admin-verified path — all active bank accounts are eligible here (not just the PhaJay
 // ones), since this is exactly the fallback for accounts that can't do the automatic scan.
 function showTopupFormManual(tabsHtml){
@@ -3685,8 +3730,10 @@ function showTopupFormManual(tabsHtml){
   if(topupQrState.manualBankId==null && banks.length) topupQrState.manualBankId = banks[0].id;
   const selectedId = topupQrState.manualBankId;
   const bank = banks.find(b=>b.id===selectedId);
+  const hasDynamicQr = !!(bank && bank.qr_payload);
+  const generated = topupQrState.manualGenerated; // {payload, imgUrl, amount, bankId, topupNumber, txnId}
   document.getElementById('topupFormWrap').innerHTML = tabsHtml + `
-    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000" value="${topupQrState.amount||''}"></div>
+    <div class="field"><label>ຈຳນວນເງິນ</label><input type="number" id="topupAmount" placeholder="100000" min="1000" value="${topupQrState.amount||''}" oninput="onManualAmountChange()"></div>
     ${banks.length ? `<div class="field">
       <label>🏦 ເລືອກທະນາຄານ</label>
       ${banks.map(b=>`
@@ -3697,7 +3744,16 @@ function showTopupFormManual(tabsHtml){
         </div>`).join('')}
     </div>` : `<div class="hint" style="color:var(--danger);">ຍັງບໍ່ໄດ້ຕັ້ງຄ່າບັນຊີທະນາຄານ — ກະລຸນາຕິດຕໍ່ຮ້ານ</div>`}
     ${bank ? `<div style="background:var(--cream); border-radius:12px; padding:14px; margin:10px 0; text-align:center;">
-      ${bank.qr_url ? `<img src="${bank.qr_url}" style="width:170px; height:170px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">` : ''}
+      ${generated && generated.imgUrl
+        ? `<img id="manualQrImg" src="${generated.imgUrl}" style="width:190px; height:190px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">
+           <div class="hint" style="margin-top:8px; font-weight:700; color:var(--maroon);">ຍອດເງິນຝັງໃນ QR: ${fmtMoney(generated.amount)}</div>
+           <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="saveManualQrImage()">💾 ບັນທຶກຮູບ QR</button>`
+        : (hasDynamicQr
+            ? `${bank.qr_url ? `<img src="${bank.qr_url}" style="width:150px; height:150px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line); opacity:.55;">` : ''}
+               <div class="hint" style="margin-top:10px;">ໃສ່ຈຳນວນເງິນດ້ານເທິງແລ້ວກົດປຸ່ມລຸ່ມນີ້ ເພື່ອສ້າງ QR ທີ່ຝັງຍອດເງິນໄວ້ໃຫ້ອັດຕະໂນມັດ</div>
+               <button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="generateManualQr()">🔲 ສ້າງ QR ດ້ວຍຍອດນີ້</button>`
+            : (bank.qr_url ? `<img src="${bank.qr_url}" style="width:170px; height:170px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">` : ''))
+      }
       <div class="hint" style="margin-top:10px; font-weight:700; color:var(--maroon);">${bank.account_name||''}</div>
       <div class="hint">${bank.bank_name||''}${bank.account_number?' • '+bank.account_number:''}</div>
       ${bankReferenceNumbersHtml(bank)}
@@ -3708,7 +3764,54 @@ function showTopupFormManual(tabsHtml){
     <button class="btn btn-primary" id="topupManualSubmitBtn" disabled onclick="submitManualTopup()">📤 ສົ່ງສະລິບ ລໍຖ້າແອດມິນຢືນຢັນ</button>
     <div class="hint" style="margin-top:8px;">ແອດມິນຈະກວດສະລິບ ແລະ ເພີ່ມຍອດເງິນເຂົ້າກະເປົາໃຫ້ຫຼັງຈາກນັ້ນ — ຈະໄດ້ຮັບການແຈ້ງເຕືອນທັນທີທີ່ອະນຸມັດ</div>`;
 }
-function selectTopupManualBank(id){ topupQrState.manualBankId = id; showTopupForm(); }
+function selectTopupManualBank(id){ topupQrState.manualBankId = id; topupQrState.manualGenerated = null; showTopupForm(); }
+// If the amount changes after a QR was already generated, the embedded amount is now stale —
+// drop the generated QR (and its not-yet-used pending row/topup_number) so the customer has to
+// hit "generate" again with the new amount rather than silently paying the old amount.
+function onManualAmountChange(){
+  const val = document.getElementById('topupAmount').value;
+  topupQrState.amount = Number(val)||'';
+  if(topupQrState.manualGenerated) showTopupForm();
+}
+async function generateManualQr(){
+  const amount = Number(document.getElementById('topupAmount').value);
+  if(!amount || amount<=0){ showToast('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
+  const bank = (STATE.bankAccounts||[]).find(b=>b.id===topupQrState.manualBankId);
+  if(!bank || !bank.qr_payload){ showToast('ທະນາຄານນີ້ບໍ່ຮອງຮັບການສ້າງ QR ອັດຕະໂນມັດ'); return; }
+  topupQrState.amount = amount;
+  onGuard('topup-manual-generate', async ()=>{
+    try{
+      const payload = buildDynamicQrPayload(bank.qr_payload, amount);
+      // Opens a 'pending' wallet_transactions row up front (no slip yet) so the download-count
+      // and the eventual slip land on the same row — mirrors submitTopup()'s use of
+      // wallet_topup_request for the auto/PhaJay path above.
+      const res = await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: null});
+      topupQrState.manualGenerated = {
+        payload, amount, bankId: bank.id,
+        imgUrl: manualQrImageUrl(payload),
+        topupNumber: res.topup_number, txnId: res.id
+      };
+      showTopupForm();
+    }catch(e){ playErrorSound(); showToast('ສ້າງ QR ບໍ່ສຳເລັດ: ' + e.message); }
+  });
+}
+// Downloads the generated QR image (fetch->blob so it saves as a real file on mobile too, not
+// just opens the image in a new tab) and logs the tap server-side via wallet_topup_track_qr_download.
+async function saveManualQrImage(){
+  const g = topupQrState.manualGenerated;
+  if(!g) return;
+  try{
+    const resp = await fetch(g.imgUrl);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `khaidee-topup-qr-${g.topupNumber||Date.now()}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }catch(e){ window.open(g.imgUrl, '_blank'); }
+  try{ await sbRPC('wallet_topup_track_qr_download', {p_topup_number: g.topupNumber}); }catch(e){ /* counter is best-effort, never block the download over this */ }
+  showToast('ບັນທຶກຮູບ QR ແລ້ວ');
+}
 function onTopupSlipChange(){
   const f = document.getElementById('topupSlipFile').files[0];
   const prev = document.getElementById('topupSlipPreview');
@@ -3730,7 +3833,17 @@ async function submitManualTopup(){
       const slipUrl = await sbUploadWithProgress('khaidee-products', `topup_slip_${STATE.customer.id}_${Date.now()}_${small.name}`, small, (pct)=>{
         if(btn) btn.textContent = `ກຳລັງອັບໂຫລດ... ${pct}%`;
       });
-      await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
+      const g = topupQrState.manualGenerated;
+      // If a self-generated QR already opened a pending row (and possibly logged download taps
+      // on it), attach the slip to THAT same row instead of opening a second one — keeps the
+      // admin's "downloaded N times -> sent slip?" view accurate. Only reuse it if the amount
+      // still matches what's on the row (onManualAmountChange() clears manualGenerated on any
+      // amount edit, so this is mostly a defensive check).
+      if(g && g.txnId && g.amount === amount){
+        await sbRPC('wallet_topup_attach_slip', {p_customer_id: STATE.customer.id, p_txn_id: g.txnId, p_slip_url: slipUrl});
+      } else {
+        await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: slipUrl});
+      }
       playSuccessSound();
       showToast('ສົ່ງສະລິບແລ້ວ — ລໍຖ້າແອດມິນກວດສອບ ແລະ ຢືນຢັນ');
       topupQrState = {method:'manual'}; topupSlipFile = null;

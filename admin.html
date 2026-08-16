@@ -1886,6 +1886,7 @@ function adminViewTopup(id){
   <div class="sheet-body">
     <div class="top" style="margin-bottom:6px;"><span class="title">${t.full_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span></div>
     <div class="hint">${t.phone} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+    <div class="hint">💾 ລູກຄ້າກົດບັນທຶກຮູບ QR: <b>${t.qr_download_count||0} ຄັ້ງ</b>${t.qr_download_count && !t.slip_url ? ' <span style="color:var(--danger);">(ໂຫລດແລ້ວແຕ່ຍັງບໍ່ໄດ້ສົ່ງສະລິບ)</span>':''}</div>
     ${t.status==='expired_paid' ? `<div class="hint" style="margin-top:10px; background:#FBE7E7; color:var(--danger); padding:10px 12px; border-radius:10px; font-weight:600;">⚠️ QR ນີ້ໝົດອາຍຸ (ເກີນ 10 ນາທີ) ກ່ອນທີ່ຈະໄດ້ຮັບການຊຳລະ ລະບົບຈຶ່ງບໍ່ໄດ້ເພີ່ມເງິນໃຫ້ອັດຕະໂນມັດ — ກະລຸນາກວດສອບບັນຊີທະນາຄານ/PhaJay ວ່າເງິນເຂົ້າແທ້ບໍ່ກ່ອນອະນຸມັດ</div>` : ''}
     ${t.slip_url?`<img src="${t.slip_url}" style="width:100%; border-radius:12px; margin-top:12px;">`:''}
     ${(t.status==='pending'||t.status==='expired_paid')?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
@@ -1952,6 +1953,7 @@ function adminViewSellerTopup(id){
   <div class="sheet-body">
     <div class="top" style="margin-bottom:6px;"><span class="title">${t.store_name} • ${fmtMoney(t.amount)}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span></div>
     <div class="hint">${t.bank_name||''} • ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+    <div class="hint">💾 ຮ້ານຄ້າກົດບັນທຶກຮູບ QR: <b>${t.qr_download_count||0} ຄັ້ງ</b>${t.qr_download_count && !t.slip_url ? ' <span style="color:var(--danger);">(ໂຫລດແລ້ວແຕ່ຍັງບໍ່ໄດ້ສົ່ງສະລິບ)</span>':''}</div>
     ${t.slip_url?`<img src="${t.slip_url}" style="width:100%; border-radius:12px; margin-top:12px;">`:''}
     ${t.status==='pending'?`<div class="chiprow" style="margin-top:16px;"><button onclick="adminApproveSellerTopup(${t.id},true)" style="color:var(--ok);">✅ ອະນຸມັດ</button><button onclick="adminApproveSellerTopup(${t.id},false)" style="color:var(--danger);">❌ ປະຕິເສດ</button></div>`:''}
   </div></div>`;
@@ -2009,7 +2011,7 @@ async function renderAdminAiSlip(){
         <img src="${t.slip_url}" onclick="window.open('${t.slip_url}','_blank')" style="width:88px; height:88px; object-fit:cover; border-radius:8px; cursor:pointer; flex-shrink:0; border:1px solid var(--line);">
         <div style="flex:1; min-width:0;">
           <div class="top"><span class="title">${t.kind==='customer'?'👛 ລູກຄ້າ':'➕ ຮ້ານຄ້າ'}: ${t.who||'-'}${t.who2?' ('+t.who2+')':''}</span>${aiSlipStatusPill(t.ai_status)}</div>
-          <div class="hint">ຍອດແຈ້ງ: ${fmtMoney(t.amount)} · ${new Date(t.created_at).toLocaleString('lo-LA')}</div>
+          <div class="hint">ຍອດແຈ້ງ: ${fmtMoney(t.amount)} · ${new Date(t.created_at).toLocaleString('lo-LA')} · 💾 ກົດບັນທຶກຮູບ QR: <b style="color:${t.qr_download_count?'var(--maroon)':'inherit'}">${t.qr_download_count||0} ຄັ້ງ</b></div>
         </div>
       </div>
       ${t.ai_checked_at ? `<div class="hint" style="margin-top:10px; line-height:1.8; background:var(--bg-soft,#faf9f7); padding:8px 10px; border-radius:8px;">
@@ -2249,6 +2251,11 @@ function adminEditBank(id){
     <div class="field"><label>ເລກອ້າງອີງ 2 (ຖ້າມີ — ບາງບັນຊີມີ 2 ເລກ)</label><input id="bkRef2" value="${b.ref_number_2||''}" placeholder="ເລກອ້າງອີງ 2"></div>
     ${b.qr_url?`<img src="${b.qr_url}" style="width:100px; height:100px; object-fit:cover; border-radius:10px; margin:6px 0; border:1px solid var(--line);">`:''}
     <div class="field"><label>ອັບໂຫລດຮູບ QR (ຖ້າມີ)</label><input type="file" id="bkQrFile" accept="image/*"></div>
+    <div class="field">
+      <label>ຂໍ້ຄວາມ QR ຕົ້ນສະບັບ (ຖອດລະຫັດແລ້ວ) — ໃສ່ຄັ້ງດຽວ ເພື່ອໃຫ້ລູກຄ້າສ້າງ QR ໃສ່ຍອດເງິນເອງໄດ້ ບໍ່ຕ້ອງຜ່ານ PhaJay</label>
+      <textarea id="bkQrPayload" rows="3" style="width:100%; font-family:monospace; font-size:12px;" placeholder="00020101021138680016A00526628...630489A4">${b.qr_payload||''}</textarea>
+      <div class="hint" style="margin-top:4px;">ຖ້າຫວ່າງໄວ້ — ໜ້າ Wallet ລູກຄ້າຈະສະແດງແຕ່ຮູບ QR ຄົງທີ່ດ້ານເທິງ (ບໍ່ໃສ່ຍອດເງິນອັດຕະໂນມັດ)</div>
+    </div>
     <div class="field"><label>ລຳດັບການສະແດງ (ຕົວເລກນ້ອຍ = ຢູ່ເທິງສຸດ)</label><input type="number" id="bkSort" value="${b.sort_order??999}"></div>
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="bkActive" ${b.is_active?'checked':''} style="width:18px; height:18px;">
@@ -2278,6 +2285,7 @@ function adminEditBank(id){
         logo_emoji:document.getElementById('bkIcon').value,
         logo_url:logoUrl,
         qr_url:qrUrl,
+        qr_payload:document.getElementById('bkQrPayload').value.trim(),
         sort_order:Number(document.getElementById('bkSort').value)||999,
         is_active:document.getElementById('bkActive').checked}});
       overlay.remove(); renderAdminBanks();

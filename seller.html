@@ -1585,6 +1585,47 @@ async function submitWithdraw(balance){
   }catch(e){ showToast('ບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='📤 ສົ່ງຄຳຂໍຖອນເງິນ'; }
 }
 
+/* ---- Self-generated (no-PhaJay) amount-embedded QR for seller top-up — mirrors the same feature
+   on the customer side (index.html). Uses bank_accounts.qr_payload (raw EMVCo/LaoQR text, filled
+   in once per bank by the admin) to build a fresh QR with the seller's amount baked in, client-side,
+   no PhaJay call. Falls back to the plain settings.wallet_qr_url image if the selected bank has no
+   qr_payload saved. */
+function crc16Ccitt(str){
+  let crc = 0xFFFF;
+  for(let i=0;i<str.length;i++){
+    crc ^= (str.charCodeAt(i) << 8);
+    for(let b=0;b<8;b++){
+      crc = (crc & 0x8000) ? ((crc<<1) ^ 0x1021) & 0xFFFF : (crc<<1) & 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4,'0');
+}
+function parseEmvcoTlv(s){
+  let i=0; const out=[];
+  while(i < s.length-3){
+    const tag = s.substr(i,2);
+    const len = parseInt(s.substr(i+2,2),10);
+    if(isNaN(len)) break;
+    out.push({tag, val: s.substr(i+4,len)});
+    i += 4+len;
+  }
+  return out;
+}
+function buildDynamicQrPayload(staticPayload, amount){
+  const tlv = parseEmvcoTlv(String(staticPayload||'').replace(/\s+/g,''));
+  const map = {};
+  tlv.forEach(t=>{ if(t.tag!=='63') map[t.tag]=t.val; });
+  map['01'] = '12';
+  map['54'] = String(Math.round(amount));
+  const tags = Object.keys(map).sort();
+  let body = '';
+  tags.forEach(tag=>{ body += tag + String(map[tag].length).padStart(2,'0') + map[tag]; });
+  const withCrcTag = body + '6304';
+  return withCrcTag + crc16Ccitt(withCrcTag);
+}
+function manualQrImageUrl(payload){ return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payload)}`; }
+let sellerTopupGenerated = null; // {payload, imgUrl, amount, bankId, id}
+
 /* ---- Seller wallet top-up: seller transfers into a KhaiDee bank account and uploads the slip,
    admin reviews and approves same as before, then wallet_balance is credited. This is what lets
    a seller fund the 5% commission deposit required to publish/increase stock. ---- */
@@ -1593,6 +1634,7 @@ async function openTopupSheet(){
   let banks = [];
   try{ banks = await sbSelect('bank_accounts', 'is_active=eq.true&order=sort_order.asc'); }catch(e){ banks = []; }
   topupSheetBanks = banks;
+  sellerTopupGenerated = null;
   const qrUrl = STATE.settings.wallet_qr_url || '';
   const walletInfo = STATE.settings.wallet_instructions || '';
   const overlay = document.createElement('div'); overlay.className='overlay show center';
@@ -1602,10 +1644,11 @@ async function openTopupSheet(){
       ${qrUrl?`<div style="text-align:center; margin-bottom:12px;"><img src="${qrUrl}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);"></div>`:''}
       ${walletInfo?`<div class="hint" style="background:var(--gold-light); padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space:pre-wrap;">${walletInfo}</div>`:''}
       ${banks.length?`<div class="field"><label>ບັນຊີທະນາຄານ</label>
-        <select id="tpBank" onchange="renderTopupBankRefNumbers()">${banks.map(b=>`<option value="${b.id}">${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
+        <select id="tpBank" onchange="renderTopupBankRefNumbers(); resetSellerGeneratedQr();">${banks.map(b=>`<option value="${b.id}">${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
       </div>`:''}
       <div id="tpBankRefBox"></div>
-      <div class="field"><label>ຈຳນວນທີ່ໂອນ</label><input type="number" id="tpAmount" placeholder="0"></div>
+      <div class="field"><label>ຈຳນວນທີ່ໂອນ</label><input type="number" id="tpAmount" placeholder="0" oninput="resetSellerGeneratedQr()"></div>
+      <div id="tpGeneratedQrBox"></div>
       <div class="field"><label>ຮູບສະລິບການໂອນ *</label><input type="file" id="tpSlipFile" accept="image/*"></div>
       <button class="btn btn-primary" id="tpSubmitBtn" onclick="submitTopup()">📤 ສົ່ງຄຳຂໍເຕີມເງິນ</button>
     </div></div>`;
@@ -1613,6 +1656,62 @@ async function openTopupSheet(){
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
   window._closeTopupSheet = ()=> overlay.remove();
   renderTopupBankRefNumbers();
+  renderSellerGeneratedQrBox();
+}
+// Amount or bank changed after a QR was already generated -> the embedded amount/account is now
+// stale, so drop it and require the seller to tap "generate" again (same reasoning as index.html).
+function resetSellerGeneratedQr(){ sellerTopupGenerated = null; renderSellerGeneratedQrBox(); }
+function currentTopupBank(){
+  const sel = document.getElementById('tpBank');
+  return sel ? topupSheetBanks.find(b=>String(b.id)===sel.value) : topupSheetBanks[0];
+}
+function renderSellerGeneratedQrBox(){
+  const box = document.getElementById('tpGeneratedQrBox');
+  if(!box) return;
+  const bank = currentTopupBank();
+  if(sellerTopupGenerated){
+    box.innerHTML = `<div style="background:var(--cream); border-radius:12px; padding:14px; margin:10px 0; text-align:center;">
+      <img src="${sellerTopupGenerated.imgUrl}" style="width:190px; height:190px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">
+      <div class="hint" style="margin-top:8px; font-weight:700; color:var(--maroon);">ຍອດເງິນຝັງໃນ QR: ${fmtMoney(sellerTopupGenerated.amount)}</div>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="saveSellerQrImage()">💾 ບັນທຶກຮູບ QR</button>
+    </div>`;
+  } else if(bank && bank.qr_payload){
+    box.innerHTML = `<div style="text-align:center; margin:8px 0;">
+      <button type="button" class="btn btn-primary btn-sm" onclick="generateSellerQr()">🔲 ສ້າງ QR ດ້ວຍຍອດນີ້</button>
+      <div class="hint" style="margin-top:6px;">ໃສ່ຈຳນວນເງິນດ້ານເທິງກ່ອນ ແລ້ວກົດເພື່ອສ້າງ QR ທີ່ຝັງຍອດເງິນໄວ້ໃຫ້ອັດຕະໂນມັດ</div>
+    </div>`;
+  } else {
+    box.innerHTML = '';
+  }
+}
+async function generateSellerQr(){
+  const amount = Number(document.getElementById('tpAmount').value);
+  if(!amount || amount<=0){ showToast('ກະລຸນາປ້ອນຈຳນວນເງິນ'); return; }
+  const bank = currentTopupBank();
+  if(!bank || !bank.qr_payload){ showToast('ທະນາຄານນີ້ບໍ່ຮອງຮັບການສ້າງ QR ອັດຕະໂນມັດ'); return; }
+  try{
+    const payload = buildDynamicQrPayload(bank.qr_payload, amount);
+    // Opens a 'pending' seller_wallet_transactions row up front (no slip yet) so the download
+    // count and the eventual slip land on the same row for the admin to see together.
+    const res = await sbRPC('seller_request_topup', {p_seller_id: STATE.seller.id, p_amount: amount, p_slip_url: null, p_bank_account_id: bank.id});
+    sellerTopupGenerated = { payload, amount, bankId: bank.id, imgUrl: manualQrImageUrl(payload), id: res.id };
+    renderSellerGeneratedQrBox();
+  }catch(e){ showToast('ສ້າງ QR ບໍ່ສຳເລັດ: ' + e.message); }
+}
+async function saveSellerQrImage(){
+  const g = sellerTopupGenerated;
+  if(!g) return;
+  try{
+    const resp = await fetch(g.imgUrl);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `khaidee-seller-topup-qr-${g.id||Date.now()}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  }catch(e){ window.open(g.imgUrl, '_blank'); }
+  try{ await sbRPC('seller_topup_track_qr_download', {p_id: g.id}); }catch(e){ /* best-effort counter, never block the download */ }
+  showToast('ບັນທຶກຮູບ QR ແລ້ວ');
 }
 // Some Lao banks (BCEL One / LDB) need a "reference number" typed into the transfer note to
 // match the deposit — a few accounts have TWO of these (ref 1 + 2), most have none/one. Shows
@@ -1640,7 +1739,15 @@ async function submitTopup(){
   const btn = document.getElementById('tpSubmitBtn'); btn.disabled = true; btn.textContent = 'ກຳລັງສົ່ງ...';
   try{
     const slipUrl = await sbUpload('khaidee-products', `seller_topup_${STATE.seller.id}_${Date.now()}_${slipFile.name}`, slipFile);
-    await sbRPC('seller_request_topup', {p_seller_id: STATE.seller.id, p_amount: amount, p_slip_url: slipUrl, p_bank_account_id: bankSel?Number(bankSel.value):null});
+    const g = sellerTopupGenerated;
+    // If a self-generated QR already opened a pending row (possibly with download taps logged
+    // on it), attach the slip to THAT same row instead of opening a second one — same reasoning
+    // as the customer-side flow in index.html.
+    if(g && g.id && g.amount === amount){
+      await sbRPC('seller_topup_attach_slip', {p_seller_id: STATE.seller.id, p_id: g.id, p_slip_url: slipUrl});
+    } else {
+      await sbRPC('seller_request_topup', {p_seller_id: STATE.seller.id, p_amount: amount, p_slip_url: slipUrl, p_bank_account_id: bankSel?Number(bankSel.value):null});
+    }
     if(window._closeTopupSheet) window._closeTopupSheet();
     showToast('ສົ່ງຄຳຂໍເຕີມເງິນແລ້ວ ລໍຖ້າແອດມິນກວດສອບ');
     renderWallet();
