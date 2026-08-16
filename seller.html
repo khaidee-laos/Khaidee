@@ -1462,6 +1462,33 @@ async function changePw(){
 }
 
 /* ============================================================ WALLET ============================================================ */
+// Turns a topup row's status (+ what the AI slip-checker found, in ai_note) into one plain
+// sentence for the seller, instead of just the bare "approved/pending/rejected" status pill --
+// so a rejection actually says WHY (slip too old, edited/tampered, not a slip at all, amount
+// mismatch, ...) rather than leaving the seller guessing. Only applies to topup rows (the ones
+// with a slip attached) -- other transaction types don't have ai_note and just show as before.
+function walletTxnStatusExplainer(h){
+  if(h.type !== 'topup') return '';
+  // ai_note carries the raw internal reasoning (written for admins) -- strip the leading emoji/
+  // "-- ປະຕິເສດອັດຕະໂນມັດ..." boilerplate off the auto-reject case since the status pill right
+  // below already says "rejected"; no need to repeat that part back to the seller.
+  const cleanNote = (h.ai_note || '').replace(/^🚫\s*/, '').replace(/\s*--\s*ປະຕິເສດອັດຕະໂນມັດ.*$/, '').trim();
+  if(h.status === 'approved'){
+    return `<div class="hint" style="margin-top:4px; color:var(--ok); font-weight:600;">✅ ສຳເລັດ — ເງິນເຂົ້າກະເປົາທ່ານແລ້ວ</div>`;
+  }
+  if(h.status === 'rejected'){
+    return `<div class="hint" style="margin-top:4px; color:var(--danger); font-weight:600;">❌ ບໍ່ສຳເລັດ${cleanNote?': '+cleanNote:' — ກະລຸນາຕິດຕໍ່ແອດມິນສອບຖາມສາເຫດ'}</div>`;
+  }
+  // pending: if the AI already flagged a soft issue (amount mismatch, unreadable field, etc.)
+  // but didn't auto-reject, let the seller know it's flagged, not just "waiting".
+  if(h.status === 'pending'){
+    if(h.ai_status === 'issue' && cleanNote){
+      return `<div class="hint" style="margin-top:4px; color:var(--warn,#B8860B);">⚠️ ${cleanNote} — ລໍຖ້າແອດມິນກວດສອບຄືນດ້ວຍຕາ</div>`;
+    }
+    return `<div class="hint" style="margin-top:4px;">⏳ ລໍຖ້າແອດມິນກວດສະລິບ</div>`;
+  }
+  return '';
+}
 let WALLET_TAB = 'history';
 async function renderWallet(){
   const wrap = document.getElementById('walletBody');
@@ -1512,6 +1539,7 @@ async function renderWallet(){
             <div class="top"><span class="title">${({order_income:'💰 ລາຍຮັບອໍເດີ',cod_cash_collected:'💵 ເກັບເງິນສົດປາຍທາງ',withdraw:'💸 ຖອນເງິນ',withdraw_refund:'↩️ ຄືນເງິນຖອນ',topup:'➕ ເຕີມເງິນ',commission_lock:'🔒 ກັນເງິນປະກັນ',commission_release:'🔓 ຄືນເງິນປະກັນ',commission_capture:'✂️ ຫັກຄ່າຄອມ',base_deposit_lock:'🔒 ກັນເງິນປະກັນພື້ນຖານ',base_deposit_release:'🔓 ຄືນເງິນປະກັນພື້ນຖານ',admin_fee:'💼 ຄ່າທຳນຽມແອດມິນ',return_deduction:'↩️ ຫັກຄືນ (ລູກຄ້າຂໍຄືນເງິນ)'})[h.type]||'⚙️ ປັບຍອດ'}</span>
             <span style="font-weight:700; color:${h.amount>=0?'var(--ok)':'var(--danger)'};">${h.amount>=0?'+':''}${fmtMoney(h.amount)}</span></div>
             <div class="hint">${h.note||''}</div>
+            ${walletTxnStatusExplainer(h)}
             <div class="hint">${new Date(h.created_at).toLocaleString('lo-LA')} • <span class="status-pill status-${h.status}">${h.status}</span></div>
           </div>`).join(''))
         :

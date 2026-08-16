@@ -1895,9 +1895,14 @@ function adminViewTopup(id){
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
 }
 async function adminApproveTopup(id, approve){
+  let reason = null;
+  if(!approve){
+    reason = prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຈະສະແດງໃຫ້ລູກຄ້າເຫັນ — ຕົວຢ່າງ: ສະລິບເກົ່າ, ຍອດບໍ່ກົງ, ອ່ານບໍ່ອອກ):');
+    if(reason===null) return; // admin cancelled
+  }
   onGuard('topup-approve-'+id, async ()=>{
     try{
-      await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve});
+      await sbRPC('admin_approve_topup', {p_password:STATE.adminPassword, p_txn_id:id, p_approve:approve, p_admin_note: reason});
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminTopups();
@@ -1954,9 +1959,14 @@ function adminViewSellerTopup(id){
   overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
 }
 async function adminApproveSellerTopup(id, approve){
+  let reason = null;
+  if(!approve){
+    reason = prompt('ເຫດຜົນທີ່ປະຕິເສດ (ຈະສະແດງໃຫ້ຮ້ານຄ້າເຫັນ — ຕົວຢ່າງ: ສະລິບເກົ່າ, ຍອດບໍ່ກົງ, ອ່ານບໍ່ອອກ):');
+    if(reason===null) return; // admin cancelled
+  }
   onGuard('seller-topup-approve-'+id, async ()=>{
     try{
-      await sbRPC('admin_approve_seller_topup', {p_password:STATE.adminPassword, p_id:id, p_approve:approve});
+      await sbRPC('admin_approve_seller_topup', {p_password:STATE.adminPassword, p_id:id, p_approve:approve, p_admin_note: reason});
       playSuccessSound();
       document.querySelectorAll('.overlay.show').forEach(o=>o.remove());
       renderAdminSellerTopups();

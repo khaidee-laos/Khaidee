@@ -3543,6 +3543,31 @@ function initQrForegroundRecheck(){
 
 /* ============================================================ WALLET ============================================================ */
 const WALLET_TXN_STATUS_LABELS = {pending:'ລໍຖ້າ', approved:'ອະນຸມັດແລ້ວ', rejected:'ຖືກປະຕິເສດ', expired:'ໝົດອາຍຸ', expired_paid:'ໝົດອາຍຸ (ກຳລັງກວດສອບ)'};
+// Turns a topup row's status (+ what the AI slip-checker found, in ai_note) into one plain
+// sentence for the customer, instead of just the bare "approved/pending/rejected" status pill --
+// so a rejection actually says WHY (slip too old, edited/tampered, not a slip at all, amount
+// mismatch, ...) rather than leaving the customer guessing. Only applies to topup rows (the ones
+// with a slip attached) -- other transaction types don't have ai_note and just show as before.
+function walletTxnStatusExplainer(t){
+  if(t.type !== 'topup') return '';
+  // ai_note carries the raw internal reasoning (written for admins) -- strip the leading emoji/
+  // "-- ປະຕິເສດອັດຕະໂນມັດ..." boilerplate off the auto-reject case since the status pill right
+  // above already says "rejected"; no need to repeat that part back to the customer.
+  const cleanNote = (t.ai_note || '').replace(/^🚫\s*/, '').replace(/\s*--\s*ປະຕິເສດອັດຕະໂນມັດ.*$/, '').trim();
+  if(t.status === 'approved'){
+    return `<div class="hint" style="margin-top:4px; color:var(--ok); font-weight:600;">✅ ສຳເລັດ — ເງິນເຂົ້າ Wallet ຂອງທ່ານແລ້ວ</div>`;
+  }
+  if(t.status === 'rejected'){
+    return `<div class="hint" style="margin-top:4px; color:var(--danger); font-weight:600;">❌ ບໍ່ສຳເລັດ${cleanNote?': '+cleanNote:' — ກະລຸນາຕິດຕໍ່ແອດມິນສອບຖາມສາເຫດ'}</div>`;
+  }
+  if(t.status === 'pending'){
+    if(t.ai_status === 'issue' && cleanNote){
+      return `<div class="hint" style="margin-top:4px; color:var(--warn);">⚠️ ${cleanNote} — ລໍຖ້າແອດມິນກວດສອບຄືນດ້ວຍຕາ</div>`;
+    }
+    if(t.slip_url) return `<div class="hint" style="margin-top:4px;">⏳ ລໍຖ້າແອດມິນກວດສະລິບ</div>`;
+  }
+  return '';
+}
 async function showWallet(){
   requireLogin(async ()=>{
     openModal('modalWallet');
@@ -3560,7 +3585,7 @@ async function showWallet(){
           <div class="top"><span class="title">${t.type==='topup'?'➕ ເຕີມເງິນ':(t.type==='refund'?'↩️ ຄືນເງິນ':'➖ ຫັກເງິນ')}</span><span class="status-pill status-${t.status}">${WALLET_TXN_STATUS_LABELS[t.status]||t.status}</span></div>
           <div class="hint">${new Date(t.created_at).toLocaleString('lo-LA')}</div>
           ${t.slip_url ? `<img src="${t.slip_url}" onclick="window.open('${t.slip_url}','_blank')" style="width:56px; height:56px; object-fit:cover; border-radius:8px; margin-top:6px; cursor:pointer; border:1px solid var(--line);">` : ''}
-          ${t.status==='pending' && t.slip_url ? `<div class="hint" style="margin-top:4px;">⏳ ລໍຖ້າແອດມິນກວດສະລິບ</div>` : ''}
+          ${walletTxnStatusExplainer(t)}
           ${t.status==='expired_paid' ? `<div class="hint" style="margin-top:4px; color:var(--danger);">⚠️ QR ໝົດອາຍຸກ່ອນຈະຊຳລະ — ແອດມິນກຳລັງກວດສອບການໂອນເພື່ອເພີ່ມເງິນໃຫ້ທ່ານດ້ວຍມື</div>` : ''}
           <div style="margin-top:4px; font-weight:700;">${fmtMoney(t.amount)}</div>
         </div>`).join('') : '<div class="empty">ຍັງບໍ່ມີປະຫວັດ</div>'}`;
