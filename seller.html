@@ -1191,8 +1191,23 @@ async function openShipmentSheet(itemId){
       ${n===2?`
       <div class="field" style="margin-top:8px; margin-bottom:0;">
         <label>ບໍລິສັດຂົນສົ່ງ</label>
-        <select id="shipCarrierSelect" onchange="onCarrierPresetChange()">
-          ${CARRIER_PRESETS.map(c=>`<option value="${c.name}" data-url="${c.url}" ${item.carrier_name===c.name?'selected':''}>${c.name}</option>`).join('')}
+        <select id="shipCarrierSelect" onchange="onCarrierPresetChange(true)">
+          ${(()=>{
+            // If a carrier_name was already saved but doesn't exactly match any of the 3 named
+            // presets (e.g. it was typed in via "ອື່ນໆ" as a custom name), NONE of the <option>
+            // tags below get the `selected` attribute — and a <select> with no option marked
+            // selected silently defaults to showing its FIRST option (HAL Express / "ຮຸ່ງອາລຸນ").
+            // That's the exact bug reported: reopening the sheet visually shows "ຮຸ່ງອາລຸນ" stuck
+            // in the dropdown (and onCarrierPresetChange() then happily "confirms" that wrong
+            // pick), even though the real saved carrier was something else entirely. Explicitly
+            // selecting "ອື່ນໆ" in that case keeps the dropdown honest about what's actually saved.
+            const isKnownPreset = CARRIER_PRESETS.some(c => c.name.indexOf('ອື່ນໆ')!==0 && c.name===item.carrier_name);
+            return CARRIER_PRESETS.map(c=>{
+              const isOtherOpt = c.name.indexOf('ອື່ນໆ')===0;
+              const sel = isOtherOpt ? (item.carrier_name && !isKnownPreset ? 'selected' : '') : (item.carrier_name===c.name?'selected':'');
+              return `<option value="${c.name}" data-url="${c.url}" ${sel}>${c.name}</option>`;
+            }).join('');
+          })()}
         </select>
       </div>
       <div class="row2" style="margin-top:8px;">
@@ -1258,7 +1273,15 @@ async function openShipmentSheet(itemId){
 // Auto-fills the tracking-link field with the picked courier's own site so the seller doesn't have
 // to go find it themselves, and shows/hides the free-text carrier name field depending on whether
 // "ອື່ນໆ" (other) is selected.
-function onCarrierPresetChange(){
+// p_userChanged distinguishes the two times this runs:
+//  - sheet just opened (called with no arg): only fill the URL if it's still EMPTY, so a tracking
+//    link the seller already saved for this shipment isn't silently wiped on reopen.
+//  - the seller actually picked a different carrier from the dropdown (onchange, called with
+//    true): always overwrite the URL with that carrier's link. Without this distinction the field
+//    got pre-filled once (e.g. with the first option, HAL Express / ຮຸ່ງອາລຸນ) the moment the sheet
+//    opened, and since it was then never "empty" again, switching to any other carrier afterward
+//    could never replace it — the link stayed stuck on whichever carrier filled it first.
+function onCarrierPresetChange(p_userChanged){
   const sel = document.getElementById('shipCarrierSelect');
   if(!sel) return;
   const opt = sel.options[sel.selectedIndex];
@@ -1269,7 +1292,7 @@ function onCarrierPresetChange(){
   if(customWrap) customWrap.style.display = isOther ? '' : 'none';
   if(!isOther){
     if(nameField) nameField.value = opt.value;
-    if(urlField && !urlField.value) urlField.value = opt.getAttribute('data-url') || '';
+    if(urlField && (p_userChanged || !urlField.value)) urlField.value = opt.getAttribute('data-url') || '';
   }
 }
 async function uploadShipStep(itemId, step){
