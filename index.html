@@ -3640,6 +3640,19 @@ function showTopupForm(){
     <div class="hint" style="margin-top:8px;">ສະແກນຈ່າຍແລ້ວຍອດຈະເຂົ້າກະເປົາໃຫ້ທັນທີ ບໍ່ຕ້ອງລໍຖ້າແອດມິນ — QR ນີ້ໃຊ້ໄດ້ພາຍໃນ 10 ນາທີ</div>
     <div id="topupQrBox"></div>`;
 }
+// Some Lao banks (BCEL One / LDB) require the customer to type a "reference number" into the
+// transfer note for the deposit to be traceable — a few accounts need TWO of these (ref 1 + 2),
+// most need none. Renders ref_number_1 alone if that's all the bank has, both if ref_number_2 is
+// also set, or nothing at all if neither is set. Tap-to-copy since this is filled in on mobile.
+function bankReferenceNumbersHtml(bank){
+  if(!bank || !bank.ref_number_1) return '';
+  const row = (label, val) => `
+    <div class="hint" style="display:flex; align-items:center; justify-content:center; gap:6px; margin-top:4px;">
+      <span>${label}: <b style="color:var(--ink);">${val}</b></span>
+      <button type="button" style="border:none; background:none; color:var(--maroon); font-size:12px; cursor:pointer;" onclick="navigator.clipboard?.writeText('${val}'); showToast('ກ໋ອບປີ້ເລກອ້າງອີງແລ້ວ')">📋 ກ໋ອບປີ້</button>
+    </div>`;
+  return row('ເລກອ້າງອີງ 1', bank.ref_number_1) + (bank.ref_number_2 ? row('ເລກອ້າງອີງ 2', bank.ref_number_2) : '');
+}
 // Manual/admin-verified path — all active bank accounts are eligible here (not just the PhaJay
 // ones), since this is exactly the fallback for accounts that can't do the automatic scan.
 function showTopupFormManual(tabsHtml){
@@ -3662,6 +3675,7 @@ function showTopupFormManual(tabsHtml){
       ${bank.qr_url ? `<img src="${bank.qr_url}" style="width:170px; height:170px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">` : ''}
       <div class="hint" style="margin-top:10px; font-weight:700; color:var(--maroon);">${bank.account_name||''}</div>
       <div class="hint">${bank.bank_name||''}${bank.account_number?' • '+bank.account_number:''}</div>
+      ${bankReferenceNumbersHtml(bank)}
       <div class="hint" style="margin-top:6px;">ເປີດແອັບທະນາຄານແລ້ວສະແກນ QR ນີ້ໂດຍກົງ (ບໍ່ຕ້ອງຜ່ານ PhaJay) ຈາກນັ້ນອັບໂຫລດສະລິບດ້ານລຸ່ມ</div>
     </div>` : ''}
     <div class="field"><label>📎 ອັບໂຫລດສະລິບການໂອນເງິນ</label><input type="file" accept="image/*" id="topupSlipFile" onchange="onTopupSlipChange()"></div>

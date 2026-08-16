@@ -1560,9 +1560,11 @@ async function submitWithdraw(balance){
 /* ---- Seller wallet top-up: seller transfers into a KhaiDee bank account and uploads the slip,
    admin reviews and approves same as before, then wallet_balance is credited. This is what lets
    a seller fund the 5% commission deposit required to publish/increase stock. ---- */
+let topupSheetBanks = [];
 async function openTopupSheet(){
   let banks = [];
   try{ banks = await sbSelect('bank_accounts', 'is_active=eq.true&order=sort_order.asc'); }catch(e){ banks = []; }
+  topupSheetBanks = banks;
   const qrUrl = STATE.settings.wallet_qr_url || '';
   const walletInfo = STATE.settings.wallet_instructions || '';
   const overlay = document.createElement('div'); overlay.className='overlay show center';
@@ -1572,8 +1574,9 @@ async function openTopupSheet(){
       ${qrUrl?`<div style="text-align:center; margin-bottom:12px;"><img src="${qrUrl}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);"></div>`:''}
       ${walletInfo?`<div class="hint" style="background:var(--gold-light); padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space:pre-wrap;">${walletInfo}</div>`:''}
       ${banks.length?`<div class="field"><label>ບັນຊີທະນາຄານ</label>
-        <select id="tpBank">${banks.map(b=>`<option value="${b.id}">${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
+        <select id="tpBank" onchange="renderTopupBankRefNumbers()">${banks.map(b=>`<option value="${b.id}">${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
       </div>`:''}
+      <div id="tpBankRefBox"></div>
       <div class="field"><label>ຈຳນວນທີ່ໂອນ</label><input type="number" id="tpAmount" placeholder="0"></div>
       <div class="field"><label>ຮູບສະລິບການໂອນ *</label><input type="file" id="tpSlipFile" accept="image/*"></div>
       <button class="btn btn-primary" id="tpSubmitBtn" onclick="submitTopup()">📤 ສົ່ງຄຳຂໍເຕີມເງິນ</button>
@@ -1581,6 +1584,24 @@ async function openTopupSheet(){
   document.body.appendChild(overlay);
   overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
   window._closeTopupSheet = ()=> overlay.remove();
+  renderTopupBankRefNumbers();
+}
+// Some Lao banks (BCEL One / LDB) need a "reference number" typed into the transfer note to
+// match the deposit — a few accounts have TWO of these (ref 1 + 2), most have none/one. Shows
+// ref_number_1 alone if that's all the selected bank has, both if ref_number_2 is also set, or
+// nothing if neither is set. Tap-to-copy since this gets filled in on a phone banking app.
+function renderTopupBankRefNumbers(){
+  const box = document.getElementById('tpBankRefBox');
+  if(!box) return;
+  const sel = document.getElementById('tpBank');
+  const bank = sel ? topupSheetBanks.find(b=>String(b.id)===sel.value) : topupSheetBanks[0];
+  if(!bank || !bank.ref_number_1){ box.innerHTML = ''; return; }
+  const row = (label, val) => `
+    <div class="hint" style="display:flex; align-items:center; gap:6px; margin:2px 0;">
+      <span>${label}: <b style="color:var(--ink);">${val}</b></span>
+      <button type="button" style="border:none; background:none; color:var(--maroon); font-size:12px; cursor:pointer;" onclick="navigator.clipboard?.writeText('${val}'); showToast('ກ໋ອບປີ້ເລກອ້າງອີງແລ້ວ')">📋 ກ໋ອບປີ້</button>
+    </div>`;
+  box.innerHTML = `<div style="background:var(--gold-light); padding:8px 12px; border-radius:10px; margin-bottom:10px;">${row('ເລກອ້າງອີງ 1', bank.ref_number_1)}${bank.ref_number_2 ? row('ເລກອ້າງອີງ 2', bank.ref_number_2) : ''}</div>`;
 }
 async function submitTopup(){
   const amount = Number(document.getElementById('tpAmount').value);

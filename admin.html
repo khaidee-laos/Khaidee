@@ -2210,7 +2210,7 @@ async function renderAdminBanks(){
     cells:[
       b.logo_url ? `<img class="dt-img" src="${b.logo_url}">` : `<div class="dt-img" style="display:flex; align-items:center; justify-content:center; font-size:18px;">${b.logo_emoji||'🏦'}</div>`,
       `<span class="dt-title">${b.bank_name_en||b.bank_name}</span><span class="dt-sub">${b.bank_name}</span>`,
-      `<span class="dt-sub">${b.account_number? (b.account_number+(b.account_name?' • '+b.account_name:'')) : '⚠️ ຍັງບໍ່ໄດ້ໃສ່ເລກບັນຊີ'}</span>`,
+      `<span class="dt-sub">${b.account_number? (b.account_number+(b.account_name?' • '+b.account_name:'')) : '⚠️ ຍັງບໍ່ໄດ້ໃສ່ເລກບັນຊີ'}${b.ref_number_1?` • ອ້າງອີງ: ${b.ref_number_1}${b.ref_number_2?'/'+b.ref_number_2:''}`:''}</span>`,
       b.is_active?'<span class="status-pill status-approved">ເປີດໃຊ້ງານ</span>':'<span class="status-pill status-cancelled">ປິດຢູ່</span>',
       `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteBank(${b.id})">✕</button>`
     ]
@@ -2235,6 +2235,8 @@ function adminEditBank(id){
     <div class="field"><label>ຊື່ຫຍໍ້ (EN)</label><input id="bkNameEn" value="${b.bank_name_en||''}"></div>
     <div class="field"><label>ຊື່ບັນຊີ</label><input id="bkAccName" value="${b.account_name||''}" placeholder="ຊື່ເຈົ້າຂອງບັນຊີ"></div>
     <div class="field"><label>ເລກບັນຊີ</label><input id="bkAccNum" value="${b.account_number||''}" placeholder="ເລກບັນຊີທະນາຄານ"></div>
+    <div class="field"><label>ເລກອ້າງອີງ 1 (ຖ້າມີ — ບາງທະນາຄານຕ້ອງໃສ່ຕອນໂອນ)</label><input id="bkRef1" value="${b.ref_number_1||''}" placeholder="ເລກອ້າງອີງ 1"></div>
+    <div class="field"><label>ເລກອ້າງອີງ 2 (ຖ້າມີ — ບາງບັນຊີມີ 2 ເລກ)</label><input id="bkRef2" value="${b.ref_number_2||''}" placeholder="ເລກອ້າງອີງ 2"></div>
     ${b.qr_url?`<img src="${b.qr_url}" style="width:100px; height:100px; object-fit:cover; border-radius:10px; margin:6px 0; border:1px solid var(--line);">`:''}
     <div class="field"><label>ອັບໂຫລດຮູບ QR (ຖ້າມີ)</label><input type="file" id="bkQrFile" accept="image/*"></div>
     <div class="field"><label>ລຳດັບການສະແດງ (ຕົວເລກນ້ອຍ = ຢູ່ເທິງສຸດ)</label><input type="number" id="bkSort" value="${b.sort_order??999}"></div>
@@ -2261,6 +2263,8 @@ function adminEditBank(id){
         bank_name_en:document.getElementById('bkNameEn').value,
         account_name:document.getElementById('bkAccName').value,
         account_number:document.getElementById('bkAccNum').value,
+        ref_number_1:document.getElementById('bkRef1').value,
+        ref_number_2:document.getElementById('bkRef2').value,
         logo_emoji:document.getElementById('bkIcon').value,
         logo_url:logoUrl,
         qr_url:qrUrl,
