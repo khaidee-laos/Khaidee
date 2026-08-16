@@ -3536,6 +3536,7 @@ function initQrForegroundRecheck(){
     if(id==='modalWallet'){
       if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer = null; }
       if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer = null; }
+      if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer = null; }
     }
     return origCloseModal.apply(this, arguments);
   };
@@ -3593,7 +3594,16 @@ async function showWallet(){
     // show it again immediately instead of making the customer tap "ເຕີມເງິນ" and generate a
     // brand new one — see savePendingTopup/loadPendingTopup above.
     const pending = loadPendingTopup();
-    if(pending) renderPendingTopupBox(pending);
+    if(pending){ renderPendingTopupBox(pending); return; }
+    // Same idea for a still-valid MANUAL (self-generated) QR — see saveManualTopupPending above.
+    const manualPending = loadManualTopupPending();
+    if(manualPending){
+      topupQrState.method = 'manual';
+      topupQrState.manualBankId = manualPending.bankId;
+      topupQrState.amount = manualPending.amount;
+      topupQrState.manualGenerated = manualPending;
+      showTopupForm();
+    }
   });
 }
 /* ---- Wallet top-up — two methods ----
@@ -3637,6 +3647,49 @@ function loadPendingTopup(){
   }catch(e){ return null; }
 }
 function clearPendingTopup(){ try{ localStorage.removeItem(pendingTopupKey()); }catch(e){} }
+/* ---- Persisted pending MANUAL top-up QR (self-generated, amount-embedded) ----
+   Same problem as the auto/PhaJay QR above but on the manual bank-transfer path: the generated
+   QR (topupQrState.manualGenerated) only ever lived in memory, so swiping the app away and coming
+   back — which fully reloads the page on mobile — wiped it and forced the customer to tap
+   "ສ້າງ QR" again even though the pending wallet_transactions row underneath was still fine. This
+   mirrors savePendingTopup/loadPendingTopup: persists the generated QR + a real 15-minute expiry
+   to localStorage the moment it's created, and showTopupForm() re-shows that exact QR (countdown
+   continuing from the real remaining time) instead of dropping it, until it expires or is paid. */
+const MANUAL_TOPUP_QR_EXPIRY_MS = 15*60*1000; // self-generated manual-transfer QR is only shown for 15 minutes
+let manualTopupCountdownTimer = null;
+function pendingManualTopupKey(){ return `kd_pending_manual_topup_${STATE.customer && STATE.customer.id}`; }
+function saveManualTopupPending(data){ try{ localStorage.setItem(pendingManualTopupKey(), JSON.stringify(data)); }catch(e){} }
+function loadManualTopupPending(){
+  try{
+    const raw = localStorage.getItem(pendingManualTopupKey());
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(!data || !data.expiresAtMs || data.expiresAtMs <= Date.now()){ clearManualTopupPending(); return null; }
+    return data;
+  }catch(e){ return null; }
+}
+function clearManualTopupPending(){ try{ localStorage.removeItem(pendingManualTopupKey()); }catch(e){} }
+// Countdown reaching 0 = the QR is treated as cancelled: drop the generated state/storage and
+// go back to a fresh "generate a QR" screen so a stale, unpaid amount can never be scanned again.
+function expireManualTopupQr(){
+  if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
+  clearManualTopupPending();
+  topupQrState.manualGenerated = null;
+  showTopupForm();
+  showToast('⏳ ໝົດເວລາ QR ເຕີມເງິນ (15 ນາທີ) — ລາຍການຖືກຍົກເລີກ, ກະລຸນາສ້າງ QR ໃໝ່');
+}
+function startManualTopupCountdown(expiresAtMs){
+  if(manualTopupCountdownTimer) clearInterval(manualTopupCountdownTimer);
+  manualTopupCountdownTimer = startQrCountdown('manualQrCountdown', expiresAtMs, expireManualTopupQr);
+}
+// Lets the customer deliberately drop a still-valid manual QR and start over (e.g. wrong
+// amount/bank) instead of waiting out the full 15 minutes.
+function cancelManualTopupQr(){
+  if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
+  clearManualTopupPending();
+  topupQrState.manualGenerated = null;
+  showTopupForm();
+}
 function setTopupMethod(m){ topupQrState.method = m; showTopupForm(); }
 function showTopupForm(){
   const pending = loadPendingTopup();
@@ -3646,7 +3699,20 @@ function showTopupForm(){
     <button onclick="setTopupMethod('auto')" style="flex:1; border:1.5px solid ${method==='auto'?'var(--maroon)':'var(--line)'}; background:${method==='auto'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='auto'?'800':'600'}; font-size:12.5px; color:var(--ink);">⚡ QR ອັດຕະໂນມັດ</button>
     <button onclick="setTopupMethod('manual')" style="flex:1; border:1.5px solid ${method==='manual'?'var(--maroon)':'var(--line)'}; background:${method==='manual'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='manual'?'800':'600'}; font-size:12.5px; color:var(--ink);">🏦 ໂອນທະນາຄານ (ແອດມິນຢືນຢັນ)</button>
   </div>`;
-  if(method==='manual'){ showTopupFormManual(tabsHtml); return; }
+  if(method==='manual'){
+    // Restore a still-valid self-generated QR from a previous session before rendering, so a
+    // swipe-away-and-back within the 15-minute window shows the same QR instead of a blank form.
+    if(!topupQrState.manualGenerated){
+      const manualPending = loadManualTopupPending();
+      if(manualPending){
+        topupQrState.manualBankId = manualPending.bankId;
+        topupQrState.amount = manualPending.amount;
+        topupQrState.manualGenerated = manualPending;
+      }
+    }
+    showTopupFormManual(tabsHtml);
+    return;
+  }
   const banks = (STATE.bankAccounts||[]).filter(b=>b.is_active && QR_BANKS.includes(b.bank_name_en));
   if(topupQrState.bankAccountId==null && banks.length) topupQrState.bankAccountId = banks[0].id;
   const selectedId = topupQrState.bankAccountId;
@@ -3747,7 +3813,9 @@ function showTopupFormManual(tabsHtml){
       ${generated && generated.imgUrl
         ? `<img id="manualQrImg" src="${generated.imgUrl}" style="width:190px; height:190px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">
            <div class="hint" style="margin-top:8px; font-weight:700; color:var(--maroon);">ຍອດເງິນຝັງໃນ QR: ${fmtMoney(generated.amount)}</div>
-           <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="saveManualQrImage()">💾 ບັນທຶກຮູບ QR</button>`
+           <div id="manualQrCountdown" class="hint" style="margin-top:4px; font-weight:600;"></div>
+           <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="saveManualQrImage()">💾 ບັນທຶກຮູບ QR</button>
+           <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px; margin-left:6px;" onclick="cancelManualTopupQr()">✕ ຍົກເລີກ ແລະ ສ້າງ QR ໃໝ່</button>`
         : (hasDynamicQr
             ? `${bank.qr_url ? `<img src="${bank.qr_url}" style="width:150px; height:150px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line); opacity:.55;">` : ''}
                <div class="hint" style="margin-top:10px;">ໃສ່ຈຳນວນເງິນດ້ານເທິງແລ້ວກົດປຸ່ມລຸ່ມນີ້ ເພື່ອສ້າງ QR ທີ່ຝັງຍອດເງິນໄວ້ໃຫ້ອັດຕະໂນມັດ</div>
@@ -3763,15 +3831,26 @@ function showTopupFormManual(tabsHtml){
     <div id="topupSlipPreview"></div>
     <button class="btn btn-primary" id="topupManualSubmitBtn" disabled onclick="submitManualTopup()">📤 ສົ່ງສະລິບ ລໍຖ້າແອດມິນຢືນຢັນ</button>
     <div class="hint" style="margin-top:8px;">ແອດມິນຈະກວດສະລິບ ແລະ ເພີ່ມຍອດເງິນເຂົ້າກະເປົາໃຫ້ຫຼັງຈາກນັ້ນ — ຈະໄດ້ຮັບການແຈ້ງເຕືອນທັນທີທີ່ອະນຸມັດ</div>`;
+  // Resume (or start) the 15-minute countdown now that #manualQrCountdown exists in the DOM.
+  if(generated && generated.imgUrl && generated.expiresAtMs){
+    startManualTopupCountdown(generated.expiresAtMs);
+  } else if(manualTopupCountdownTimer){
+    clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer = null;
+  }
 }
-function selectTopupManualBank(id){ topupQrState.manualBankId = id; topupQrState.manualGenerated = null; showTopupForm(); }
+function selectTopupManualBank(id){ topupQrState.manualBankId = id; topupQrState.manualGenerated = null; clearManualTopupPending(); if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; } showTopupForm(); }
 // If the amount changes after a QR was already generated, the embedded amount is now stale —
 // drop the generated QR (and its not-yet-used pending row/topup_number) so the customer has to
 // hit "generate" again with the new amount rather than silently paying the old amount.
 function onManualAmountChange(){
   const val = document.getElementById('topupAmount').value;
   topupQrState.amount = Number(val)||'';
-  if(topupQrState.manualGenerated) showTopupForm();
+  if(topupQrState.manualGenerated){
+    topupQrState.manualGenerated = null;
+    clearManualTopupPending();
+    if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
+    showTopupForm();
+  }
 }
 async function generateManualQr(){
   const amount = Number(document.getElementById('topupAmount').value);
@@ -3786,11 +3865,14 @@ async function generateManualQr(){
       // and the eventual slip land on the same row — mirrors submitTopup()'s use of
       // wallet_topup_request for the auto/PhaJay path above.
       const res = await sbRPC('wallet_topup_request', {p_customer_id: STATE.customer.id, p_amount: amount, p_slip_url: null});
+      const expiresAtMs = Date.now() + MANUAL_TOPUP_QR_EXPIRY_MS;
       topupQrState.manualGenerated = {
         payload, amount, bankId: bank.id,
         imgUrl: manualQrImageUrl(payload),
-        topupNumber: res.topup_number, txnId: res.id
+        topupNumber: res.topup_number, txnId: res.id,
+        expiresAtMs
       };
+      saveManualTopupPending(topupQrState.manualGenerated);
       showTopupForm();
     }catch(e){ playErrorSound(); showToast('ສ້າງ QR ບໍ່ສຳເລັດ: ' + e.message); }
   });
@@ -3846,6 +3928,8 @@ async function submitManualTopup(){
       }
       playSuccessSound();
       showToast('ສົ່ງສະລິບແລ້ວ — ລໍຖ້າແອດມິນກວດສອບ ແລະ ຢືນຢັນ');
+      clearManualTopupPending();
+      if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
       topupQrState = {method:'manual'}; topupSlipFile = null;
       showWallet();
     }catch(e){

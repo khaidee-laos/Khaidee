@@ -1624,17 +1624,59 @@ function buildDynamicQrPayload(staticPayload, amount){
   return withCrcTag + crc16Ccitt(withCrcTag);
 }
 function manualQrImageUrl(payload){ return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payload)}`; }
-let sellerTopupGenerated = null; // {payload, imgUrl, amount, bankId, id}
-
+let sellerTopupGenerated = null; // {payload, imgUrl, amount, bankId, id, expiresAtMs}
+// Minimal countdown ticker (mirrors index.html's startQrCountdown) — 1s tick into #countdownElId
+// until expiresAtMs, then fires onExpire() once and stops itself.
+function startQrCountdown(countdownElId, expiresAtMs, onExpire){
+  const tick = ()=>{
+    const remain = expiresAtMs - Date.now();
+    const el = document.getElementById(countdownElId);
+    if(remain<=0){ clearInterval(timerId); onExpire(); return; }
+    const totalSec = Math.max(0, Math.floor(remain/1000));
+    const m = String(Math.floor(totalSec/60)).padStart(2,'0');
+    const s = String(totalSec%60).padStart(2,'0');
+    if(el) el.textContent = `⏱️ ໝົດອາຍຸໃນ ${m}:${s}`;
+  };
+  const timerId = setInterval(tick, 1000);
+  tick();
+  return timerId;
+}
 /* ---- Seller wallet top-up: seller transfers into a KhaiDee bank account and uploads the slip,
    admin reviews and approves same as before, then wallet_balance is credited. This is what lets
-   a seller fund the 5% commission deposit required to publish/increase stock. ---- */
+   a seller fund the 5% commission deposit required to publish/increase stock. ----
+   The self-generated (amount-embedded) QR is only valid for 15 minutes and is persisted to
+   localStorage the moment it's created, so closing/re-opening this sheet within that window
+   (even after the app was fully swiped away and reloaded) shows the exact same QR with the
+   countdown continuing from the real remaining time, instead of forcing a brand new one. */
+const SELLER_TOPUP_QR_EXPIRY_MS = 15*60*1000;
+let sellerTopupCountdownTimer = null;
+function pendingSellerTopupKey(){ return `kd_pending_seller_topup_${STATE.seller && STATE.seller.id}`; }
+function saveSellerTopupPending(data){ try{ localStorage.setItem(pendingSellerTopupKey(), JSON.stringify(data)); }catch(e){} }
+function loadSellerTopupPending(){
+  try{
+    const raw = localStorage.getItem(pendingSellerTopupKey());
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(!data || !data.expiresAtMs || data.expiresAtMs <= Date.now()){ clearSellerTopupPending(); return null; }
+    return data;
+  }catch(e){ return null; }
+}
+function clearSellerTopupPending(){ try{ localStorage.removeItem(pendingSellerTopupKey()); }catch(e){} }
+function expireSellerTopupQr(){
+  if(sellerTopupCountdownTimer){ clearInterval(sellerTopupCountdownTimer); sellerTopupCountdownTimer=null; }
+  clearSellerTopupPending();
+  sellerTopupGenerated = null;
+  renderSellerGeneratedQrBox();
+  showToast('⏳ ໝົດເວລາ QR ເຕີມເງິນ (15 ນາທີ) — ລາຍການຖືກຍົກເລີກ, ກະລຸນາສ້າງ QR ໃໝ່');
+}
 let topupSheetBanks = [];
 async function openTopupSheet(){
   let banks = [];
   try{ banks = await sbSelect('bank_accounts', 'is_active=eq.true&order=sort_order.asc'); }catch(e){ banks = []; }
   topupSheetBanks = banks;
-  sellerTopupGenerated = null;
+  // Restore a still-valid self-generated QR from an earlier session instead of unconditionally
+  // wiping it — this is what previously forced the seller to regenerate every time they reopened.
+  sellerTopupGenerated = loadSellerTopupPending();
   const qrUrl = STATE.settings.wallet_qr_url || '';
   const walletInfo = STATE.settings.wallet_instructions || '';
   const overlay = document.createElement('div'); overlay.className='overlay show center';
@@ -1644,23 +1686,33 @@ async function openTopupSheet(){
       ${qrUrl?`<div style="text-align:center; margin-bottom:12px;"><img src="${qrUrl}" style="width:180px; height:180px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);"></div>`:''}
       ${walletInfo?`<div class="hint" style="background:var(--gold-light); padding:10px 12px; border-radius:10px; margin-bottom:12px; white-space:pre-wrap;">${walletInfo}</div>`:''}
       ${banks.length?`<div class="field"><label>ບັນຊີທະນາຄານ</label>
-        <select id="tpBank" onchange="renderTopupBankRefNumbers(); resetSellerGeneratedQr();">${banks.map(b=>`<option value="${b.id}">${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
+        <select id="tpBank" onchange="renderTopupBankRefNumbers(); resetSellerGeneratedQr();">${banks.map(b=>`<option value="${b.id}" ${sellerTopupGenerated && sellerTopupGenerated.bankId===b.id?'selected':''}>${b.logo_emoji||'🏦'} ${b.bank_name} — ${b.account_name} ${b.account_number}</option>`).join('')}</select>
       </div>`:''}
       <div id="tpBankRefBox"></div>
-      <div class="field"><label>ຈຳນວນທີ່ໂອນ</label><input type="number" id="tpAmount" placeholder="0" oninput="resetSellerGeneratedQr()"></div>
+      <div class="field"><label>ຈຳນວນທີ່ໂອນ</label><input type="number" id="tpAmount" placeholder="0" value="${sellerTopupGenerated?sellerTopupGenerated.amount:''}" oninput="resetSellerGeneratedQr()"></div>
       <div id="tpGeneratedQrBox"></div>
       <div class="field"><label>ຮູບສະລິບການໂອນ *</label><input type="file" id="tpSlipFile" accept="image/*"></div>
       <button class="btn btn-primary" id="tpSubmitBtn" onclick="submitTopup()">📤 ສົ່ງຄຳຂໍເຕີມເງິນ</button>
     </div></div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('[data-close]').onclick = ()=>overlay.remove();
+  overlay.querySelector('[data-close]').onclick = ()=>{
+    // Stop the ticking countdown while the sheet is closed (it resumes correctly next time
+    // openTopupSheet() runs, from the real remaining time) — the pending row itself stays valid.
+    if(sellerTopupCountdownTimer){ clearInterval(sellerTopupCountdownTimer); sellerTopupCountdownTimer=null; }
+    overlay.remove();
+  };
   window._closeTopupSheet = ()=> overlay.remove();
   renderTopupBankRefNumbers();
   renderSellerGeneratedQrBox();
 }
 // Amount or bank changed after a QR was already generated -> the embedded amount/account is now
 // stale, so drop it and require the seller to tap "generate" again (same reasoning as index.html).
-function resetSellerGeneratedQr(){ sellerTopupGenerated = null; renderSellerGeneratedQrBox(); }
+function resetSellerGeneratedQr(){
+  sellerTopupGenerated = null;
+  clearSellerTopupPending();
+  if(sellerTopupCountdownTimer){ clearInterval(sellerTopupCountdownTimer); sellerTopupCountdownTimer=null; }
+  renderSellerGeneratedQrBox();
+}
 function currentTopupBank(){
   const sel = document.getElementById('tpBank');
   return sel ? topupSheetBanks.find(b=>String(b.id)===sel.value) : topupSheetBanks[0];
@@ -1673,12 +1725,18 @@ function renderSellerGeneratedQrBox(){
     box.innerHTML = `<div style="background:var(--cream); border-radius:12px; padding:14px; margin:10px 0; text-align:center;">
       <img src="${sellerTopupGenerated.imgUrl}" style="width:190px; height:190px; object-fit:cover; border-radius:12px; border:1.5px solid var(--line);">
       <div class="hint" style="margin-top:8px; font-weight:700; color:var(--maroon);">ຍອດເງິນຝັງໃນ QR: ${fmtMoney(sellerTopupGenerated.amount)}</div>
+      <div id="sellerQrCountdown" class="hint" style="margin-top:4px; font-weight:600;"></div>
       <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="saveSellerQrImage()">💾 ບັນທຶກຮູບ QR</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px; margin-left:6px;" onclick="resetSellerGeneratedQr()">✕ ຍົກເລີກ ແລະ ສ້າງ QR ໃໝ່</button>
     </div>`;
+    if(sellerTopupGenerated.expiresAtMs){
+      if(sellerTopupCountdownTimer) clearInterval(sellerTopupCountdownTimer);
+      sellerTopupCountdownTimer = startQrCountdown('sellerQrCountdown', sellerTopupGenerated.expiresAtMs, expireSellerTopupQr);
+    }
   } else if(bank && bank.qr_payload){
     box.innerHTML = `<div style="text-align:center; margin:8px 0;">
       <button type="button" class="btn btn-primary btn-sm" onclick="generateSellerQr()">🔲 ສ້າງ QR ດ້ວຍຍອດນີ້</button>
-      <div class="hint" style="margin-top:6px;">ໃສ່ຈຳນວນເງິນດ້ານເທິງກ່ອນ ແລ້ວກົດເພື່ອສ້າງ QR ທີ່ຝັງຍອດເງິນໄວ້ໃຫ້ອັດຕະໂນມັດ</div>
+      <div class="hint" style="margin-top:6px;">ໃສ່ຈຳນວນເງິນດ້ານເທິງກ່ອນ ແລ້ວກົດເພື່ອສ້າງ QR ທີ່ຝັງຍອດເງິນໄວ້ໃຫ້ອັດຕະໂນມັດ (QR ໃຊ້ໄດ້ 15 ນາທີ)</div>
     </div>`;
   } else {
     box.innerHTML = '';
@@ -1694,7 +1752,9 @@ async function generateSellerQr(){
     // Opens a 'pending' seller_wallet_transactions row up front (no slip yet) so the download
     // count and the eventual slip land on the same row for the admin to see together.
     const res = await sbRPC('seller_request_topup', {p_seller_id: STATE.seller.id, p_amount: amount, p_slip_url: null, p_bank_account_id: bank.id});
-    sellerTopupGenerated = { payload, amount, bankId: bank.id, imgUrl: manualQrImageUrl(payload), id: res.id };
+    const expiresAtMs = Date.now() + SELLER_TOPUP_QR_EXPIRY_MS;
+    sellerTopupGenerated = { payload, amount, bankId: bank.id, imgUrl: manualQrImageUrl(payload), id: res.id, expiresAtMs };
+    saveSellerTopupPending(sellerTopupGenerated);
     renderSellerGeneratedQrBox();
   }catch(e){ showToast('ສ້າງ QR ບໍ່ສຳເລັດ: ' + e.message); }
 }
@@ -1748,6 +1808,8 @@ async function submitTopup(){
     } else {
       await sbRPC('seller_request_topup', {p_seller_id: STATE.seller.id, p_amount: amount, p_slip_url: slipUrl, p_bank_account_id: bankSel?Number(bankSel.value):null});
     }
+    clearSellerTopupPending();
+    if(sellerTopupCountdownTimer){ clearInterval(sellerTopupCountdownTimer); sellerTopupCountdownTimer=null; }
     if(window._closeTopupSheet) window._closeTopupSheet();
     showToast('ສົ່ງຄຳຂໍເຕີມເງິນແລ້ວ ລໍຖ້າແອດມິນກວດສອບ');
     renderWallet();
