@@ -1662,8 +1662,29 @@ function loadSellerTopupPending(){
   }catch(e){ return null; }
 }
 function clearSellerTopupPending(){ try{ localStorage.removeItem(pendingSellerTopupKey()); }catch(e){} }
+/* ---- Server-side close-out for a dead pending seller top-up ----
+   generateSellerQr() opens a real 'pending' seller_wallet_transactions row up front (via
+   seller_request_topup), before any slip exists. Letting the countdown run out or tapping
+   "cancel & start over" used to only clear the client's copy — the row stayed stuck on 'pending'
+   in Supabase forever. This closes it out for real, mirroring cancelWalletTopupServerSide in
+   index.html. Best-effort/silent on failure — the client-side reset already protects the seller
+   from scanning a stale QR, so a missing/failed RPC never blocks the UI.
+   Needs this RPC on the Supabase side:
+     create or replace function seller_topup_cancel(p_seller_id uuid, p_id bigint)
+     returns void language sql security definer as $$
+       update seller_wallet_transactions
+       set status = 'expired'
+       where id = p_id and seller_id = p_seller_id and status = 'pending';
+     $$;
+   Guarded to status='pending' so it can never overwrite a row admin already approved/rejected. */
+async function cancelSellerTopupServerSide(id){
+  if(!id || !STATE.seller) return;
+  try{ await sbRPC('seller_topup_cancel', {p_seller_id: STATE.seller.id, p_id: id}); }
+  catch(e){ /* RPC not deployed yet, or row already resolved server-side — either way, no-op */ }
+}
 function expireSellerTopupQr(){
   if(sellerTopupCountdownTimer){ clearInterval(sellerTopupCountdownTimer); sellerTopupCountdownTimer=null; }
+  cancelSellerTopupServerSide(sellerTopupGenerated && sellerTopupGenerated.id);
   clearSellerTopupPending();
   sellerTopupGenerated = null;
   renderSellerGeneratedQrBox();
@@ -1708,6 +1729,7 @@ async function openTopupSheet(){
 // Amount or bank changed after a QR was already generated -> the embedded amount/account is now
 // stale, so drop it and require the seller to tap "generate" again (same reasoning as index.html).
 function resetSellerGeneratedQr(){
+  cancelSellerTopupServerSide(sellerTopupGenerated && sellerTopupGenerated.id);
   sellerTopupGenerated = null;
   clearSellerTopupPending();
   if(sellerTopupCountdownTimer){ clearInterval(sellerTopupCountdownTimer); sellerTopupCountdownTimer=null; }

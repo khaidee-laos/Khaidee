@@ -3669,10 +3669,35 @@ function loadManualTopupPending(){
   }catch(e){ return null; }
 }
 function clearManualTopupPending(){ try{ localStorage.removeItem(pendingManualTopupKey()); }catch(e){} }
+/* ---- Server-side close-out for a dead pending top-up ----
+   Both the "auto" QR (requestTopupQrAndShow) and the "manual" QR (generateManualQr) open a real
+   'pending' wallet_transactions row up front via wallet_topup_request, before any slip exists.
+   Until now, letting the countdown run out or tapping "cancel & start over" only cleared the
+   CLIENT's copy (localStorage + in-memory state) — the row itself stayed stuck on 'pending' in
+   Supabase forever, even though the QR is dead and can never be paid/matched again. This closes
+   that row out for real. Best-effort and silent on failure: the client-side reset already
+   happened and is what actually protects the customer from scanning a stale QR, so a missing/
+   failed RPC should never block or error out the UI — it just leaves that one row as a harmless
+   orphaned 'pending' until the RPC below is deployed.
+   Needs this RPC on the Supabase side:
+     create or replace function wallet_topup_cancel(p_customer_id uuid, p_txn_id bigint)
+     returns void language sql security definer as $$
+       update wallet_transactions
+       set status = 'expired'
+       where id = p_txn_id and customer_id = p_customer_id and status = 'pending';
+     $$;
+   Guarded to status='pending' so it can never overwrite a row admin already approved/rejected
+   (e.g. a late slip that got matched right as the countdown hit zero). */
+async function cancelWalletTopupServerSide(txnId){
+  if(!txnId || !STATE.customer) return;
+  try{ await sbRPC('wallet_topup_cancel', {p_customer_id: STATE.customer.id, p_txn_id: txnId}); }
+  catch(e){ /* RPC not deployed yet, or row already resolved server-side — either way, no-op */ }
+}
 // Countdown reaching 0 = the QR is treated as cancelled: drop the generated state/storage and
 // go back to a fresh "generate a QR" screen so a stale, unpaid amount can never be scanned again.
 function expireManualTopupQr(){
   if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
+  cancelWalletTopupServerSide(topupQrState.manualGenerated && topupQrState.manualGenerated.txnId);
   clearManualTopupPending();
   topupQrState.manualGenerated = null;
   showTopupForm();
@@ -3686,6 +3711,7 @@ function startManualTopupCountdown(expiresAtMs){
 // amount/bank) instead of waiting out the full 15 minutes.
 function cancelManualTopupQr(){
   if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
+  cancelWalletTopupServerSide(topupQrState.manualGenerated && topupQrState.manualGenerated.txnId);
   clearManualTopupPending();
   topupQrState.manualGenerated = null;
   showTopupForm();
@@ -3838,7 +3864,7 @@ function showTopupFormManual(tabsHtml){
     clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer = null;
   }
 }
-function selectTopupManualBank(id){ topupQrState.manualBankId = id; topupQrState.manualGenerated = null; clearManualTopupPending(); if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; } showTopupForm(); }
+function selectTopupManualBank(id){ topupQrState.manualBankId = id; cancelWalletTopupServerSide(topupQrState.manualGenerated && topupQrState.manualGenerated.txnId); topupQrState.manualGenerated = null; clearManualTopupPending(); if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; } showTopupForm(); }
 // If the amount changes after a QR was already generated, the embedded amount is now stale —
 // drop the generated QR (and its not-yet-used pending row/topup_number) so the customer has to
 // hit "generate" again with the new amount rather than silently paying the old amount.
@@ -3846,6 +3872,7 @@ function onManualAmountChange(){
   const val = document.getElementById('topupAmount').value;
   topupQrState.amount = Number(val)||'';
   if(topupQrState.manualGenerated){
+    cancelWalletTopupServerSide(topupQrState.manualGenerated.txnId);
     topupQrState.manualGenerated = null;
     clearManualTopupPending();
     if(manualTopupCountdownTimer){ clearInterval(manualTopupCountdownTimer); manualTopupCountdownTimer=null; }
@@ -3988,6 +4015,7 @@ async function requestTopupQrAndShow(txnId, topupNumber, amount){
     startTopupPolling(txnId);
     topupCountdownTimer = startQrCountdown('topupQrCountdown', expiresAtMs, ()=>{
       if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
+      cancelWalletTopupServerSide(txnId);
       clearPendingTopup();
       renderQrExpiredBox(box);
     });
@@ -4017,6 +4045,7 @@ function renderPendingTopupBox(pending){
   if(topupCountdownTimer) clearInterval(topupCountdownTimer);
   topupCountdownTimer = startQrCountdown('topupQrCountdown', pending.expiresAtMs, ()=>{
     if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
+    cancelWalletTopupServerSide(pending.txnId);
     clearPendingTopup();
     renderQrExpiredBox(wrap);
   });
@@ -4024,6 +4053,8 @@ function renderPendingTopupBox(pending){
 // Lets the customer deliberately drop a still-valid pending QR and start a new one (e.g. wrong
 // amount/bank picked) instead of being stuck waiting out the full 10 minutes for it to expire.
 function cancelPendingTopupAndRestart(){
+  const pending = loadPendingTopup();
+  cancelWalletTopupServerSide(pending && pending.txnId);
   clearPendingTopup();
   if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
   if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer=null; }
