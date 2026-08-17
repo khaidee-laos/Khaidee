@@ -797,6 +797,12 @@ function showToast(message, type){
 }
 
 const SUPABASE_URL = 'https://fzxetdumhymqkfisefnq.supabase.co';
+// Single on/off switch for the PhaJay-powered "instant QR" payment path (checkout QR + wallet
+// auto-topup). PhaJay charges a setup fee + a monthly fee on top of its 1.6%/txn, on top of
+// which the store is not yet using — so this is OFF for now, keeping only the 0%-fee paths
+// (COD + manual bank-transfer/slip) live for customers. All the PhaJay code/UI below is left
+// fully intact — flip this back to true the moment it's worth paying for, no rebuild needed.
+const PHAJAY_ENABLED = false;
 // Using the project's anon key. This key is DESIGNED to be public/client-side —
 // it only grants what your Row Level Security policies + RPC functions allow.
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6eGV0ZHVtaHltcWtmaXNlZm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjA4OTUsImV4cCI6MjEwMTY5Njg5NX0.07r-mPOPD93_chRlmxIX7LfKU6U51TV0CUjCv2eZFhc';
@@ -2432,7 +2438,8 @@ function renderCheckout(){
     </div>
     <div class="field">
       <label>💳 ວິທີຊຳລະເງິນ</label>
-      <select id="paymentMethod"><option value="qr">📱 ສະແກນ QR ຈ່າຍເງິນ (ຢືນຢັນທັນທີ)</option><option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
+      <select id="paymentMethod">${PHAJAY_ENABLED?'<option value="qr">📱 ສະແກນ QR ຈ່າຍເງິນ (ຢືນຢັນທັນທີ)</option>':''}<option value="wallet">ກະເປົາເງິນ KhaiDee</option><option value="cod">ເກັບເງິນປາຍທາງ</option></select>
+      ${!PHAJAY_ENABLED?'<div class="hint" style="margin-top:4px;">📱 ຊຳລະຜ່ານ QR ອັດຕະໂນມັດ ປິດປັບປຸງຊົ່ວຄາວ — ກະລຸນາໃຊ້ກະເປົາເງິນ KhaiDee ຫຼື ເກັບເງິນປາຍທາງແທນ</div>':''}
     </div>
     <div class="sumrow"><span>ລວມສິນຄ້າ</span><span>${fmtMoney(subtotal)}</span></div>
     ${shipRows}
@@ -3618,7 +3625,7 @@ async function showWallet(){
       re-uses wallet_topup_request's p_slip_url param, which already existed for exactly this but
       had no UI wired up to it. No polling here — admin_approve_topup fires a notification once
       it's checked, and the wallet balance/history simply reflect it next time this sheet opens. */
-let topupQrState = {method:'auto'};
+let topupQrState = {method: PHAJAY_ENABLED ? 'auto' : 'manual'};
 let topupPollTimer = null;
 let topupCountdownTimer = null;
 let topupSlipFile = null;
@@ -3720,8 +3727,11 @@ function setTopupMethod(m){ topupQrState.method = m; showTopupForm(); }
 function showTopupForm(){
   const pending = loadPendingTopup();
   if(pending){ renderPendingTopupBox(pending); return; }
-  const method = topupQrState.method || 'auto';
-  const tabsHtml = `<div style="display:flex; gap:6px; margin-bottom:12px;">
+  // PhaJay is currently switched off (see PHAJAY_ENABLED above) — force manual bank-transfer
+  // even if some stale in-memory/localStorage state still says 'auto' from before it was disabled.
+  if(!PHAJAY_ENABLED && topupQrState.method==='auto') topupQrState.method = 'manual';
+  const method = PHAJAY_ENABLED ? (topupQrState.method || 'auto') : 'manual';
+  const tabsHtml = !PHAJAY_ENABLED ? `<div class="hint" style="margin-bottom:10px;">⚡ ເຕີມເງິນຜ່ານ QR ອັດຕະໂນມັດ ປິດປັບປຸງຊົ່ວຄາວ — ໃຊ້ໂອນທະນາຄານດ້ານລຸ່ມນີ້ແທນ (ແອດມິນຢືນຢັນສະໄໝໄວ)</div>` : `<div style="display:flex; gap:6px; margin-bottom:12px;">
     <button onclick="setTopupMethod('auto')" style="flex:1; border:1.5px solid ${method==='auto'?'var(--maroon)':'var(--line)'}; background:${method==='auto'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='auto'?'800':'600'}; font-size:12.5px; color:var(--ink);">⚡ QR ອັດຕະໂນມັດ</button>
     <button onclick="setTopupMethod('manual')" style="flex:1; border:1.5px solid ${method==='manual'?'var(--maroon)':'var(--line)'}; background:${method==='manual'?'var(--gold-light)':'#fff'}; border-radius:12px; padding:9px 6px; font-weight:${method==='manual'?'800':'600'}; font-size:12.5px; color:var(--ink);">🏦 ໂອນທະນາຄານ (ແອດມິນຢືນຢັນ)</button>
   </div>`;
@@ -4058,7 +4068,7 @@ function cancelPendingTopupAndRestart(){
   clearPendingTopup();
   if(topupPollTimer){ clearInterval(topupPollTimer); topupPollTimer=null; }
   if(topupCountdownTimer){ clearInterval(topupCountdownTimer); topupCountdownTimer=null; }
-  topupQrState = {method:'auto'};
+  topupQrState = {method: PHAJAY_ENABLED ? 'auto' : 'manual'};
   showTopupForm();
 }
 function startTopupPolling(txnId){
