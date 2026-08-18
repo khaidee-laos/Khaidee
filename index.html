@@ -4248,7 +4248,7 @@ function renderAccount(){
       <button class="btn btn-ghost btn-sm" onclick="showMyCoupons()">ໃຊ້ຫຼຽນ/ຄູປອງ</button>
     </div>
     <div class="coinchip" style="background:linear-gradient(120deg,var(--gold-light),#fff 70%); border:1px solid var(--gold); cursor:pointer;" onclick="openLuckyWheel()">
-      <div style="flex:1;"><div class="hint">🎡 ວົງລໍ້ໂຊກດີ</div><div class="n" style="font-size:13px;">ໝູນ 1 ຄັ້ງ ລຸ້ນຄູປອງ/ເງິນລາງວັນ</div></div>
+      <div style="flex:1;"><div class="hint">🎡 ວົງລໍ້ໂຊກດີ</div><div class="n" style="font-size:13px;">ໝູນໄດ້ວັນລະ 1 ຄັ້ງ ລຸ້ນຄູປອງ/ເງິນລາງວັນ</div></div>
       <span class="arrow">›</span>
     </div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px;">
@@ -4280,7 +4280,7 @@ async function openLuckyWheel(){
         sbRPC('wheel_spin_status', {p_customer_id: STATE.customer.id})
       ]);
       wheelState.prizes = prizes||[];
-      if(status && status.spun){ renderWheelAlreadySpun(status); return; }
+      if(status && status.spun_today){ renderWheelAlreadySpun(status); return; }
       renderWheelSpinScreen();
     }catch(e){
       body.innerHTML = `<div class="empty">ໂຫລດວົງລໍ້ບໍ່ສຳເລັດ: ${e.message}</div>`;
@@ -4289,21 +4289,38 @@ async function openLuckyWheel(){
 }
 function renderWheelAlreadySpun(status){
   const body = document.getElementById('wheelBody');
+  let countdownHtml = '';
+  if(status.next_spin_at){
+    countdownHtml = `<p style="font-size:11.5px; color:var(--ink-soft); margin-top:10px;" id="wheelCountdown"></p>`;
+  }
   body.innerHTML = `
     <div style="padding:20px 10px;">
       <div style="font-size:46px; margin-bottom:8px;">🎁</div>
-      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 4px;">ທ່ານໝູນວົງລໍ້ໄປແລ້ວ ໄດ້ຮັບ</p>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 4px;">ມື້ນີ້ທ່ານໝູນໄປແລ້ວ ໄດ້ຮັບ</p>
       <p style="font-size:19px; font-weight:800; color:var(--maroon-dark); margin:0 0 6px;">${status.label}</p>
       ${status.coupon_code ? `<div style="background:var(--gold-light); border:1px dashed var(--gold); border-radius:10px; padding:10px; font-size:13px; margin:10px 0;">ລະຫັດຄູປອງ: <b>${status.coupon_code}</b><br><span style="font-size:11.5px; color:var(--ink-soft);">ເບິ່ງ ແລະ ໃຊ້ໄດ້ໃນໜ້າ "ບັດສ່ວນຫຼຸດຂອງຂ້ອຍ"</span></div>` : ''}
-      <p style="font-size:11.5px; color:var(--ink-soft); margin-top:10px;">ວົງລໍ້ນີ້ໝູນໄດ້ພຽງ 1 ຄັ້ງຕໍ່ບັນຊີ</p>
+      ${countdownHtml}
     </div>`;
+  if(status.next_spin_at){
+    const target = new Date(status.next_spin_at).getTime();
+    const tick = ()=>{
+      const el = document.getElementById('wheelCountdown');
+      if(!el) return;
+      const diff = target - Date.now();
+      if(diff <= 0){ el.textContent = 'ໝູນໄດ້ໃໝ່ແລ້ວ — ປິດແລ້ວເປີດໃໝ່ໜ້ານີ້'; return; }
+      const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000);
+      el.textContent = `ໝູນຄັ້ງຕໍ່ໄປໄດ້ໃນອີກ ${h} ຊົ່ວໂມງ ${m} ນາທີ`;
+      setTimeout(tick, 30000);
+    };
+    tick();
+  }
 }
 function renderWheelSpinScreen(){
   const body = document.getElementById('wheelBody');
   const n = wheelState.prizes.length;
   if(!n){ body.innerHTML = '<div class="empty">ຍັງບໍ່ມີລາງວັນຕັ້ງຄ່າໄວ້</div>'; return; }
   body.innerHTML = `
-    <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;">ໝູນວົງລໍ້ ລຸ້ນຮັບຄູປອງ ຫຼື ເງິນລາງວັນ — ໝູນໄດ້ 1 ຄັ້ງເທົ່ານັ້ນ</p>
+    <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;">ໝູນວົງລໍ້ ລຸ້ນຮັບຄູປອງ ຫຼື ເງິນລາງວັນ — ໝູນໄດ້ວັນລະ 1 ຄັ້ງ</p>
     <div style="position:relative; width:260px; height:260px; margin:0 auto 18px;">
       <div style="position:absolute; top:-6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:13px solid transparent; border-right:13px solid transparent; border-top:20px solid var(--maroon-dark); z-index:5;"></div>
       <svg id="luckyWheelSvg" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg" style="width:260px; height:260px; border-radius:50%; border:5px solid var(--gold); box-shadow:0 0 0 3px var(--maroon-dark); transition:transform 4.5s cubic-bezier(.17,.67,.13,1.01); transform:rotate(0deg);"></svg>

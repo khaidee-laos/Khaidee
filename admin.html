@@ -2431,7 +2431,7 @@ async function renderAdminWheel(){
   });
   const statsHtml = stats ? `<div class="hint" style="margin:-6px 0 14px;">ໝູນໄປແລ້ວທັງໝົດ <b>${stats.total_spins}</b> ຄັ້ງ${stats.breakdown&&stats.breakdown.length?' — ' + stats.breakdown.map(b=>`${b.result_label} ×${b.cnt}`).join(', '):''}</div>` : '';
   body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:14px;" onclick="adminEditWheelPrize()">➕ ເພີ່ມລາງວັນ</button>
-    <div class="hint" style="margin:-6px 0 14px;">ແຕ່ລະລູກຄ້າໝູນໄດ້ 1 ຄັ້ງເທົ່ານັ້ນຕະຫຼອດໄປ — "ນ້ຳໜັກ" ຄວບຄຸມໂອກາດ (ຫຼາຍ = ອອກງ່າຍ). ຄູປອງ/ເງິນ/ຫຼຽນທີ່ອອກ ຈະເຂົ້າບັນຊີລູກຄ້າອັດຕະໂນມັດທັນທີ</div>
+    <div class="hint" style="margin:-6px 0 14px;">ແຕ່ລະລູກຄ້າໝູນໄດ້ວັນລະ 1 ຄັ້ງ (ນັບຕາມມື້ເວລາລາວ) — "ນ້ຳໜັກ" ຄວບຄຸມໂອກາດ (ຫຼາຍ = ອອກງ່າຍ). ຄູປອງ/ເງິນ/ຫຼຽນທີ່ອອກ ຈະເຂົ້າບັນຊີລູກຄ້າອັດຕະໂນມັດທັນທີ</div>
     ${statsHtml}` +
     dtable(['','ລາງວັນ','ອັດຕາ',' ',''], rows, 'ຍັງບໍ່ມີລາງວັນ — ເພີ່ມລາງວັນທຳອິດ');
 }
