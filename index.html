@@ -738,6 +738,14 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="myCouponsBody"></div>
 </div></div>
 
+<!-- Coupon picker for checkout — shows only coupons the customer owns that are actually usable
+     with what's currently in the cart, tap to apply (no typing a code). -->
+<div class="overlay" id="modalCouponPicker"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>🎟️ ເລືອກຄູປອງ</h3><button class="closex" onclick="closeModal('modalCouponPicker')">✕</button></div>
+  <div class="sheet-body" id="couponPickerBody"></div>
+</div></div>
+
 <!-- Notifications (chat-style order & promo alerts) -->
 <div class="overlay" id="modalNotifications"><div class="sheet">
   <div class="sheet-handle"></div>
@@ -2429,16 +2437,17 @@ function renderCheckout(){
         </div>`).join('')}
     </div>
     <div class="field">
-      <label>🎟️ ລະຫັດຄູປອງ (ຖ້າມີ)</label>
+      <label>🎟️ ບັດສ່ວນຫຼຸດ</label>
       ${checkoutState.coupon ? `
       <div class="optcard selected" style="cursor:default;">
         <div class="ico">🎟️</div>
         <div class="t">${checkoutState.coupon}${checkoutState.couponAuto?' <span class="hint">— ນຳໃຊ້ອັດຕະໂນມັດຈາກສິນຄ້າໃນກະຕ່າ</span>':''}</div>
         <button class="btn-sm btn-ghost" style="width:auto; padding:4px 10px;" onclick="removeCoupon()">✕ ລຶບ</button>
       </div>` : `
-      <div style="display:flex; gap:8px;">
-        <input id="couponCode" placeholder="ໃສ່ລະຫັດ" style="flex:1; padding:11px 12px; border:1.5px solid var(--line); border-radius:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="applyCoupon()">ໃຊ້</button>
+      <div class="optcard" style="cursor:pointer;" onclick="openCouponPicker()">
+        <div class="ico">🎟️</div>
+        <div class="t">ເລືອກຄູປອງທີ່ໃຊ້ໄດ້</div>
+        <div class="arrow">›</div>
       </div>`}
       <div id="couponMsg"></div>
     </div>
@@ -2473,27 +2482,61 @@ function couponErrorMessage(e){
   const key = Object.keys(COUPON_ERROR_MESSAGES).find(k => (e.message||'').includes(k));
   return key ? COUPON_ERROR_MESSAGES[key] : 'ລະຫັດຄູປອງບໍ່ຖືກຕ້ອງ ຫຼື ໝົດອາຍຸ';
 }
-async function applyCoupon(){
+// Replaces the old "type a code" flow: shows only the coupons the customer already owns that are
+// actually usable with what's in the cart right now (right store, product still in cart, min spend
+// met, not expired/used/sold out) — needs coupon_list_eligible_for_cart RPC (see migration notes).
+async function openCouponPicker(){
   onGuard('coupon', async ()=>{
-    const code = document.getElementById('couponCode').value.trim();
-    if(!code) return;
+    if(!STATE.customer){ return; }
+    openModal('modalCouponPicker');
+    const wrap = document.getElementById('couponPickerBody');
+    wrap.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
     const cart = activeCart();
     const subtotal = cart.reduce((s,i)=>s+i.price*i.qty,0);
+    const sellerIds = [...new Set(cart.map(i=>i.seller_id).filter(Boolean))];
     try{
-      const res = await sbRPC('coupon_validate', {
-        p_code:code, p_subtotal:subtotal,
-        p_customer_id: STATE.customer ? STATE.customer.id : null,
-        p_cart_product_ids: cart.map(i=>i.product_id)
+      const list = await sbRPC('coupon_list_eligible_for_cart', {
+        p_customer_id: STATE.customer.id, p_subtotal: subtotal,
+        p_cart_product_ids: cart.map(i=>i.product_id), p_seller_ids: sellerIds
       });
-      checkoutState.coupon = code;
-      checkoutState.freeShipping = !!res.free_shipping;
-      checkoutState.discount = Number(res.discount||0);
-      checkoutState.couponSellerId = res.seller_id || null; // seller-issued coupon → only discounts/frees shipping for that seller's items
-      checkoutState.couponAuto = false; // customer typed this one themselves
-      playSuccessSound();
-      renderCheckout();
-    }catch(e){ playErrorSound(); document.getElementById('couponMsg').innerHTML = `<div class="err">${couponErrorMessage(e)}</div>`; }
+      if(!list || !list.length){
+        wrap.innerHTML = '<div class="empty">ບໍ່ມີຄູປອງທີ່ໃຊ້ໄດ້ກັບສິນຄ້າໃນກະຕ່າຕອນນີ້ 🎟️</div>';
+        return;
+      }
+      wrap.innerHTML = list.map(c=>{
+        const desc = c.free_shipping ? '🚚 ຟຣີຄ່າຂົນສົ່ງ' : (c.discount_type==='percent' ? `ຫຼຸດ ${c.discount_value}%` : `ຫຼຸດ ${fmtMoney(c.discount_value)}`);
+        return `<div class="optcard" style="cursor:pointer; align-items:flex-start;" onclick='selectCouponFromPicker(${JSON.stringify(c.code)})'>
+          <div class="ico">🎟️</div>
+          <div class="t">
+            <div style="font-weight:800; color:var(--maroon);">${desc}${c.free_shipping?'':` <span class="hint" style="font-weight:400;">(-${fmtMoney(c.preview_discount)})</span>`}</div>
+            <div class="hint" style="margin-top:2px;">${c.seller_name?`🏪 ${c.seller_name}`:'ໃຊ້ໄດ້ທຸກຮ້ານ'}${c.min_spend?` • ຊື້ຂັ້ນຕ່ຳ ${fmtMoney(c.min_spend)}`:''}</div>
+          </div>
+          <div class="arrow">›</div>
+        </div>`;
+      }).join('');
+    }catch(e){ wrap.innerHTML = '<div class="empty">ໂຫລດຄູປອງບໍ່ສຳເລັດ</div>'; }
   });
+}
+async function selectCouponFromPicker(code){
+  const cart = activeCart();
+  const subtotal = cart.reduce((s,i)=>s+i.price*i.qty,0);
+  try{
+    // Re-validate at the moment of selection (not just trust the list) in case something changed
+    // between opening the picker and tapping — e.g. another tab just used up the last redemption.
+    const res = await sbRPC('coupon_validate', {
+      p_code: code, p_subtotal: subtotal,
+      p_customer_id: STATE.customer ? STATE.customer.id : null,
+      p_cart_product_ids: cart.map(i=>i.product_id)
+    });
+    checkoutState.coupon = code;
+    checkoutState.freeShipping = !!res.free_shipping;
+    checkoutState.discount = Number(res.discount||0);
+    checkoutState.couponSellerId = res.seller_id || null;
+    checkoutState.couponAuto = false;
+    playSuccessSound();
+    closeModal('modalCouponPicker');
+    renderCheckout();
+  }catch(e){ playErrorSound(); showToast(couponErrorMessage(e)); }
 }
 /* ---- Step 1 → Step 2 dispatcher ----
    "ໂອນຜ່ານທະນາຄານ" needs proof of payment before the order is placed — same idea as the wallet
