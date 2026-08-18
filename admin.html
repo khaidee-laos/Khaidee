@@ -396,6 +396,7 @@ table.dtable .dt-dot{display:inline-block; width:8px; height:8px; border-radius:
     <button data-tab="carriers">🚚 ຂົນສົ່ງ</button>
     <button data-tab="banks">🏦 ທະນາຄານ</button>
     <button data-tab="coupons">🎟️ ຄູປອງ</button>
+    <button data-tab="wheel">🎡 ວົງລໍ້ໂຊກດີ</button>
     <button data-tab="ads">🖼️ ໂຄສະນາ</button>
     <button data-tab="returns">🔄 ການສົ່ງຄືນ</button>
     <button data-tab="theme">🎨 ຮູບແບບ/ສີ</button>
@@ -718,7 +719,7 @@ function switchAdminTab(tab){
   const renderers = {dashboard:renderAdminDashboard, orders:renderAdminOrders, products:renderAdminProducts,
     categories:renderAdminCategories, customers:renderAdminCustomers, sellers:renderAdminSellers, topups:renderAdminTopups, seller_topups:renderAdminSellerTopups,
     payouts:renderAdminPayouts, finance:renderAdminFinance, carriers:renderAdminCarriers, banks:renderAdminBanks, coupons:renderAdminCoupons,
-    ads:renderAdminAds, returns:renderAdminReturns, theme:renderAdminTheme, settings:renderAdminSettings, ai_slip:renderAdminAiSlip};
+    ads:renderAdminAds, returns:renderAdminReturns, theme:renderAdminTheme, settings:renderAdminSettings, ai_slip:renderAdminAiSlip, wheel:renderAdminWheel};
   (renderers[tab]||function(){})();
 }
 document.getElementById('adminPassInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryAdminLogin(); });
@@ -2396,6 +2397,104 @@ function adminEditCoupon(id){
 async function adminDeleteCoupon(id){
   if(!confirm('ລຶບຄູປອງນີ້?')) return;
   try{ await sbRPC('admin_delete_coupon', {p_password:STATE.adminPassword, p_coupon_id:id}); renderAdminCoupons(); }
+  catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
+}
+/* ============================================================ LUCKY WHEEL ============================================================ */
+const WHEEL_PRIZE_TYPE_LABELS = {
+  coupon_percent:'🎟️ ຄູປອງສ່ວນຫຼຸດ %', coupon_fixed:'🎟️ ຄູປອງສ່ວນຫຼຸດ (ຄົງທີ່)',
+  free_shipping:'🚚 ຄູປອງສົ່ງຟຣີ', wallet_cash:'💰 ເງິນເຂົ້າ Wallet', coin:'🪙 ຫຼຽນສະສົມ', none:'😅 ລອງໃໝ່ (ບໍ່ໄດ້ລາງວັນ)'
+};
+async function renderAdminWheel(){
+  const body = document.getElementById('adminBody');
+  body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+  let list = [], stats = null;
+  try{
+    [list, stats] = await Promise.all([
+      sbRPC('admin_list_wheel_prizes', {p_password: STATE.adminPassword}),
+      sbRPC('admin_wheel_spin_stats', {p_password: STATE.adminPassword}).catch(()=>null)
+    ]);
+  }catch(e){ body.innerHTML = `<div class="empty">ໂຫລດບໍ່ສຳເລັດ: ${e.message}</div>`; return; }
+  STATE.adminWheelCache = list;
+  const totalWeight = list.filter(p=>p.is_active).reduce((s,p)=>s+Number(p.weight||0),0);
+  const rows = list.map(p=>{
+    const oddsPct = (p.is_active && totalWeight>0) ? ((Number(p.weight)/totalWeight)*100).toFixed(1)+'%' : '-';
+    return {
+      onClick:`adminEditWheelPrize(${p.id})`,
+      cells:[
+        `<span style="font-size:20px;">${p.emoji}</span>`,
+        `<span class="dt-title">${p.label}</span><span class="dt-sub">${WHEEL_PRIZE_TYPE_LABELS[p.prize_type]||p.prize_type}</span>`,
+        `<span class="dt-sub">ນ້ຳໜັກ ${p.weight} • ໂອກາດ ${oddsPct}</span>`,
+        p.is_active?'<span class="status-pill status-approved">ໃຊ້ງານ</span>':'<span class="status-pill status-cancelled">ປິດ</span>',
+        `<button class="dt-del" title="ລຶບ" onclick="event.stopPropagation(); adminDeleteWheelPrize(${p.id})">✕</button>`
+      ]
+    };
+  });
+  const statsHtml = stats ? `<div class="hint" style="margin:-6px 0 14px;">ໝູນໄປແລ້ວທັງໝົດ <b>${stats.total_spins}</b> ຄັ້ງ${stats.breakdown&&stats.breakdown.length?' — ' + stats.breakdown.map(b=>`${b.result_label} ×${b.cnt}`).join(', '):''}</div>` : '';
+  body.innerHTML = `<button class="btn btn-gold" style="margin-bottom:14px;" onclick="adminEditWheelPrize()">➕ ເພີ່ມລາງວັນ</button>
+    <div class="hint" style="margin:-6px 0 14px;">ແຕ່ລະລູກຄ້າໝູນໄດ້ 1 ຄັ້ງເທົ່ານັ້ນຕະຫຼອດໄປ — "ນ້ຳໜັກ" ຄວບຄຸມໂອກາດ (ຫຼາຍ = ອອກງ່າຍ). ຄູປອງ/ເງິນ/ຫຼຽນທີ່ອອກ ຈະເຂົ້າບັນຊີລູກຄ້າອັດຕະໂນມັດທັນທີ</div>
+    ${statsHtml}` +
+    dtable(['','ລາງວັນ','ອັດຕາ',' ',''], rows, 'ຍັງບໍ່ມີລາງວັນ — ເພີ່ມລາງວັນທຳອິດ');
+}
+function adminEditWheelPrize(id){
+  const p = id ? (STATE.adminWheelCache||[]).find(x=>x.id===id) : null;
+  const overlay = document.createElement('div'); overlay.className='overlay show center';
+  overlay.innerHTML = `<div class="sheet"><div class="sheet-header"><h3>🎡 ${id?'ແກ້ໄຂ':'ເພີ່ມ'}ລາງວັນ</h3><button class="closex" data-close>✕</button></div>
+  <div class="sheet-body">
+    <div class="field"><label>ຊື່ລາງວັນ (ສະແດງໃຫ້ລູກຄ້າເຫັນ)</label><input id="wpLabel" value="${p?.label||''}" placeholder="ເຊັ່ນ: ສ່ວນຫຼຸດ 10%"></div>
+    <div class="field"><label>ອີໂມຈິ</label><input id="wpEmoji" value="${p?.emoji||'🎁'}" maxlength="4" style="width:80px;"></div>
+    <div class="field">
+      <label>ສີພື້ນຫຼັງ</label><input type="color" id="wpColor" value="${p?.color||'#F1DFAE'}" style="width:60px; height:38px; padding:2px;">
+      <label style="margin-top:8px;">ສີໂຕໜັງສື</label><input type="color" id="wpTextColor" value="${p?.text_color||'#2B1B14'}" style="width:60px; height:38px; padding:2px;">
+    </div>
+    <div class="field"><label>ປະເພດລາງວັນ</label>
+      <select id="wpType" onchange="wpRepaintFields()">
+        ${Object.entries(WHEEL_PRIZE_TYPE_LABELS).map(([k,v])=>`<option value="${k}" ${p?.prize_type===k?'selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field" id="wpValueField"><label id="wpValueLabel">ຄ່າ</label><input type="number" id="wpValue" value="${p?.prize_value??0}"></div>
+    <div id="wpCouponFields">
+      <div class="field"><label>ຍອດຊື້ຂັ້ນຕ່ຳ (ກີບ, ສຳລັບຄູປອງ)</label><input type="number" id="wpMinOrder" value="${p?.coupon_min_order??0}"></div>
+      <div class="field"><label>ອາຍຸຄູປອງ (ວັນ, 0 = ບໍ່ໝົດອາຍຸ)</label><input type="number" id="wpValidDays" value="${p?.coupon_valid_days??7}"></div>
+    </div>
+    <div class="field"><label>ນ້ຳໜັກ (ໂອກາດອອກ — ຍິ່ງສູງຍິ່ງອອກງ່າຍ)</label><input type="number" id="wpWeight" value="${p?.weight??10}" min="0"></div>
+    <div class="field"><label>ລຳດັບໃນວົງລໍ້</label><input type="number" id="wpSort" value="${p?.sort_order??0}"></div>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;"><input type="checkbox" id="wpActive" ${!p||p.is_active?'checked':''}> ເປີດໃຊ້ງານ</label>
+    <button class="btn btn-primary" id="wpSave">ບັນທຶກ</button>
+  </div></div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
+  window.wpRepaintFields = ()=>{
+    const t = document.getElementById('wpType').value;
+    const labels = {coupon_percent:'ສ່ວນຫຼຸດ (%)', coupon_fixed:'ສ່ວນຫຼຸດ (ກີບ)', wallet_cash:'ຈຳນວນເງິນ (ກີບ)', coin:'ຈຳນວນຫຼຽນ', free_shipping:'', none:''};
+    document.getElementById('wpValueLabel').textContent = labels[t]||'ຄ່າ';
+    document.getElementById('wpValueField').style.display = (t==='free_shipping'||t==='none') ? 'none' : 'block';
+    document.getElementById('wpCouponFields').style.display = (t==='coupon_percent'||t==='coupon_fixed'||t==='free_shipping') ? 'block' : 'none';
+  };
+  wpRepaintFields();
+  overlay.querySelector('#wpSave').onclick = async ()=>{
+    const btn = overlay.querySelector('#wpSave'); btn.disabled = true; btn.textContent = 'ກຳລັງບັນທຶກ...';
+    const label = document.getElementById('wpLabel').value.trim();
+    if(!label){ showToast('ກະລຸນາໃສ່ຊື່ລາງວັນ'); btn.disabled=false; btn.textContent='ບັນທຶກ'; return; }
+    try{
+      await sbRPC('admin_upsert_wheel_prize', {p_password:STATE.adminPassword, p_prize:{
+        id: id||undefined,
+        label, emoji: document.getElementById('wpEmoji').value.trim()||'🎁',
+        color: document.getElementById('wpColor').value, text_color: document.getElementById('wpTextColor').value,
+        prize_type: document.getElementById('wpType').value,
+        prize_value: Number(document.getElementById('wpValue').value)||0,
+        coupon_min_order: Number(document.getElementById('wpMinOrder').value)||0,
+        coupon_valid_days: Number(document.getElementById('wpValidDays').value)||0,
+        weight: Number(document.getElementById('wpWeight').value)||0,
+        sort_order: Number(document.getElementById('wpSort').value)||0,
+        is_active: document.getElementById('wpActive').checked
+      }});
+      overlay.remove(); renderAdminWheel();
+    }catch(e){ showToast('ບັນທຶກບໍ່ສຳເລັດ: ' + e.message); btn.disabled=false; btn.textContent='ບັນທຶກ'; }
+  };
+}
+async function adminDeleteWheelPrize(id){
+  if(!confirm('ລຶບລາງວັນນີ້?')) return;
+  try{ await sbRPC('admin_delete_wheel_prize', {p_password:STATE.adminPassword, p_id:id}); renderAdminWheel(); }
   catch(e){ showToast('ລຶບບໍ່ສຳເລັດ: ' + e.message); }
 }
 async function renderAdminAds(){

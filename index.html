@@ -691,13 +691,19 @@ nav.bottom .icon{font-size:19px;}
   <div class="sheet-body" id="checkoutBody"></div>
 </div></div>
 
-<!-- Login/Register -->
 <div class="overlay" id="modalAuth"><div class="sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-header"><h3 id="authTitle">ເຂົ້າສູ່ລະບົບ</h3><button class="closex" onclick="closeModal('modalAuth')">✕</button></div>
   <div class="sheet-body" id="authBody"></div>
 </div></div>
 
+<div class="overlay" id="modalWheel"><div class="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header"><h3>🎡 ວົງລໍ້ໂຊກດີ</h3><button class="closex" onclick="closeModal('modalWheel')">✕</button></div>
+  <div class="sheet-body" id="wheelBody" style="text-align:center;"></div>
+</div></div>
+
+<!-- Login/Register -->
 <!-- Wallet / Address detail sheets (contextual actions, stay as sheets) -->
 <div class="overlay" id="modalWallet"><div class="sheet">
   <div class="sheet-handle"></div>
@@ -4241,6 +4247,10 @@ function renderAccount(){
       <div style="flex:1;"><div class="hint">🪙 ຫຼຽນສະສົມ (ຈາກການລີວິວສິນຄ້າ)</div><div class="n">${Number(STATE.customer.coin_balance||0)} ຫຼຽນ</div></div>
       <button class="btn btn-ghost btn-sm" onclick="showMyCoupons()">ໃຊ້ຫຼຽນ/ຄູປອງ</button>
     </div>
+    <div class="coinchip" style="background:linear-gradient(120deg,var(--gold-light),#fff 70%); border:1px solid var(--gold); cursor:pointer;" onclick="openLuckyWheel()">
+      <div style="flex:1;"><div class="hint">🎡 ວົງລໍ້ໂຊກດີ</div><div class="n" style="font-size:13px;">ໝູນ 1 ຄັ້ງ ລຸ້ນຄູປອງ/ເງິນລາງວັນ</div></div>
+      <span class="arrow">›</span>
+    </div>
     <div style="background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 14px 20px;">
       <div class="listrow" onclick="showOrders()"><span class="ico">📦</span><span class="t">ຄຳສັ່ງຊື້ຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="showMyCoupons()"><span class="ico">🎟️</span><span class="t">ບັດສ່ວນຫຼຸດຂອງຂ້ອຍ</span><span class="arrow">›</span></div>
@@ -4252,6 +4262,116 @@ function renderAccount(){
       <div class="listrow" id="gearRow" onclick="tapGear()"><span class="ico">⚙️</span><span class="t">ຕັ້ງຄ່າ</span><span class="arrow">›</span></div>
       <div class="listrow" onclick="logout()"><span class="ico">🚪</span><span class="t" style="color:var(--danger);">ອອກຈາກລະບົບ</span></div>
     </div>`;
+}
+/* ============================================================ LUCKY WHEEL ============================================================
+   One spin per customer, ever — enforced by a unique(customer_id) constraint on wheel_spins
+   server-side (see wheel_spin RPC), not just by hiding the button after a local flag. The wheel
+   segments and the weighted random draw both come from wheel_prizes/wheel_spin on the server, so
+   nothing about the odds or the outcome is readable/fakeable from the browser. */
+let wheelState = {prizes: [], spinning: false};
+async function openLuckyWheel(){
+  requireLogin(async ()=>{
+    openModal('modalWheel');
+    const body = document.getElementById('wheelBody');
+    body.innerHTML = '<div class="loader">ກຳລັງໂຫລດ...</div>';
+    try{
+      const [prizes, status] = await Promise.all([
+        sbRPC('wheel_prizes_list', {}),
+        sbRPC('wheel_spin_status', {p_customer_id: STATE.customer.id})
+      ]);
+      wheelState.prizes = prizes||[];
+      if(status && status.spun){ renderWheelAlreadySpun(status); return; }
+      renderWheelSpinScreen();
+    }catch(e){
+      body.innerHTML = `<div class="empty">ໂຫລດວົງລໍ້ບໍ່ສຳເລັດ: ${e.message}</div>`;
+    }
+  });
+}
+function renderWheelAlreadySpun(status){
+  const body = document.getElementById('wheelBody');
+  body.innerHTML = `
+    <div style="padding:20px 10px;">
+      <div style="font-size:46px; margin-bottom:8px;">🎁</div>
+      <p style="font-size:13px; color:var(--ink-soft); margin:0 0 4px;">ທ່ານໝູນວົງລໍ້ໄປແລ້ວ ໄດ້ຮັບ</p>
+      <p style="font-size:19px; font-weight:800; color:var(--maroon-dark); margin:0 0 6px;">${status.label}</p>
+      ${status.coupon_code ? `<div style="background:var(--gold-light); border:1px dashed var(--gold); border-radius:10px; padding:10px; font-size:13px; margin:10px 0;">ລະຫັດຄູປອງ: <b>${status.coupon_code}</b><br><span style="font-size:11.5px; color:var(--ink-soft);">ເບິ່ງ ແລະ ໃຊ້ໄດ້ໃນໜ້າ "ບັດສ່ວນຫຼຸດຂອງຂ້ອຍ"</span></div>` : ''}
+      <p style="font-size:11.5px; color:var(--ink-soft); margin-top:10px;">ວົງລໍ້ນີ້ໝູນໄດ້ພຽງ 1 ຄັ້ງຕໍ່ບັນຊີ</p>
+    </div>`;
+}
+function renderWheelSpinScreen(){
+  const body = document.getElementById('wheelBody');
+  const n = wheelState.prizes.length;
+  if(!n){ body.innerHTML = '<div class="empty">ຍັງບໍ່ມີລາງວັນຕັ້ງຄ່າໄວ້</div>'; return; }
+  body.innerHTML = `
+    <p style="font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;">ໝູນວົງລໍ້ ລຸ້ນຮັບຄູປອງ ຫຼື ເງິນລາງວັນ — ໝູນໄດ້ 1 ຄັ້ງເທົ່ານັ້ນ</p>
+    <div style="position:relative; width:260px; height:260px; margin:0 auto 18px;">
+      <div style="position:absolute; top:-6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:13px solid transparent; border-right:13px solid transparent; border-top:20px solid var(--maroon-dark); z-index:5;"></div>
+      <svg id="luckyWheelSvg" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg" style="width:260px; height:260px; border-radius:50%; border:5px solid var(--gold); box-shadow:0 0 0 3px var(--maroon-dark); transition:transform 4.5s cubic-bezier(.17,.67,.13,1.01); transform:rotate(0deg);"></svg>
+      <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:46px; height:46px; border-radius:50%; background:var(--gold); border:3px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center; font-size:20px;">🎁</div>
+    </div>
+    <button class="btn btn-primary" id="wheelSpinBtn" onclick="doWheelSpin()">✨ ໝູນເລີຍ</button>`;
+  buildLuckyWheelSvg();
+}
+function buildLuckyWheelSvg(){
+  const cx=130, cy=130, r=124;
+  const prizes = wheelState.prizes;
+  const segAngle = 360 / prizes.length;
+  const polar = (angleDeg, radius)=>{
+    const a = (angleDeg-90) * Math.PI/180;
+    return [cx + radius*Math.cos(a), cy + radius*Math.sin(a)];
+  };
+  let html = '';
+  prizes.forEach((p,i)=>{
+    const start = i*segAngle, end = start+segAngle;
+    const [x1,y1] = polar(start, r), [x2,y2] = polar(end, r);
+    const large = segAngle > 180 ? 1 : 0;
+    html += `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${p.color}" stroke="#fff" stroke-width="2"/>`;
+    const mid = start + segAngle/2;
+    const [tx,ty] = polar(mid, r*0.62);
+    html += `<text x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" fill="${p.text_color}" font-size="10" font-weight="700" text-anchor="middle" transform="rotate(${mid},${tx.toFixed(2)},${ty.toFixed(2)})">
+      <tspan x="${tx.toFixed(2)}" dy="-5" font-size="14">${p.emoji}</tspan>
+      <tspan x="${tx.toFixed(2)}" dy="14">${p.label}</tspan>
+    </text>`;
+  });
+  document.getElementById('luckyWheelSvg').innerHTML = html;
+}
+async function doWheelSpin(){
+  if(wheelState.spinning) return;
+  const btn = document.getElementById('wheelSpinBtn');
+  btn.disabled = true; btn.textContent = 'ກຳລັງໝູນ...';
+  let result;
+  try{
+    result = await sbRPC('wheel_spin', {p_customer_id: STATE.customer.id});
+  }catch(e){
+    if(/already_spun/.test(e.message)){ renderWheelAlreadySpun({spun:true, label:'', coupon_code:null}); return; }
+    showToast('ໝູນບໍ່ສຳເລັດ: ' + e.message);
+    btn.disabled = false; btn.textContent = '✨ ໝູນເລີຍ';
+    return;
+  }
+  wheelState.spinning = true;
+  const winIndex = wheelState.prizes.findIndex(p=>p.id===result.prize_id);
+  const idx = winIndex >= 0 ? winIndex : 0;
+  const segAngle = 360 / wheelState.prizes.length;
+  const targetMid = idx*segAngle + segAngle/2;
+  const fullSpins = 5 + Math.floor(Math.random()*3);
+  const finalAngle = fullSpins*360 + (360 - targetMid);
+  const svg = document.getElementById('luckyWheelSvg');
+  svg.style.transform = `rotate(${finalAngle}deg)`;
+  setTimeout(()=>{
+    wheelState.spinning = false;
+    if(result.coupon_code){
+      // Coupon prizes are auto-claimed into customer_coupons by the RPC already — mirror the
+      // change locally so "My coupons" reflects it without needing a refetch.
+    }
+    if(result.prize_type==='wallet_cash'){
+      STATE.customer.wallet_balance = Number(STATE.customer.wallet_balance||0) + Number(result.prize_value||0);
+      saveCustomer();
+    }else if(result.prize_type==='coin'){
+      STATE.customer.coin_balance = Number(STATE.customer.coin_balance||0) + Number(result.prize_value||0);
+      saveCustomer();
+    }
+    renderWheelAlreadySpun({spun:true, label: result.label, coupon_code: result.coupon_code});
+  }, 4600);
 }
 // friendly, searchable customer ID derived from the numeric row id — no schema change needed
 function customerCode(id){ return 'KD-' + String(id).padStart(6,'0'); }
