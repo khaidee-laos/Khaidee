@@ -4269,6 +4269,16 @@ function renderAccount(){
    segments and the weighted random draw both come from wheel_prizes/wheel_spin on the server, so
    nothing about the odds or the outcome is readable/fakeable from the browser. */
 let wheelState = {prizes: [], spinning: false};
+// Called once per app boot (see init() below) — silently checks whether today's spin is still
+// available and, if so, pops the wheel open unprompted. Never interrupts app boot on error/no
+// login, and never nags: if they've already spun today it does nothing at all, no popup, no toast.
+async function autoOpenWheelIfEligible(){
+  if(!STATE.customer) return;
+  try{
+    const status = await sbRPC('wheel_spin_status', {p_customer_id: STATE.customer.id});
+    if(status && !status.spun_today) openLuckyWheel();
+  }catch(e){ /* silent — a failed eligibility check should never surface an error on app boot */ }
+}
 async function openLuckyWheel(){
   requireLogin(async ()=>{
     openModal('modalWheel');
@@ -4546,6 +4556,12 @@ function hideSplash(){
     setTimeout(()=>{ if(STATE.products.find(x=>x.id===sharedProductId)) openProduct(sharedProductId); }, splashDelay + 250);
   }else if(sharedShopId){
     setTimeout(()=>openShop(sharedShopId), splashDelay + 250);
+  }else{
+    // First app-open of the day (no shared product/shop link taking priority): pop the lucky
+    // wheel up automatically instead of making the customer dig into the account page to find
+    // it. autoOpenWheelIfEligible() silently checks wheel_spin_status first and does nothing at
+    // all if they've already spun today — so this never nags on every single app open.
+    setTimeout(autoOpenWheelIfEligible, splashDelay + 400);
   }
 })();
 
